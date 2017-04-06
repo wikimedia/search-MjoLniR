@@ -1,0 +1,7 @@
+__name__ = "MjoLniR"
+__version__ = "0.0.1"
+__author__ = "Wikimedia Search Team"
+__author_email__ = "discovery@lists.wikimedia.org"
+__description__ = "A plumbing library for Machine Learned Ranking at Wikimedia"
+__url__ = "???"
+__license__ = "MIT"
