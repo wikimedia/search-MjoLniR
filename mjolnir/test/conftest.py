@@ -1,10 +1,10 @@
 import findspark
-findspark.init()
+findspark.init()  # must happen before importing pyspark
 
-import pytest
-import logging
-from pyspark import SparkContext, SparkConf
-from pyspark.sql import HiveContext
+import pytest  # noqa: E402
+import logging  # noqa: E402
+from pyspark import SparkContext, SparkConf  # noqa: E402
+from pyspark.sql import HiveContext  # noqa: E402
 
 
 def quiet_log4j():
