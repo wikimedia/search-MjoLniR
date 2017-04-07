@@ -9,3 +9,7 @@ to transform the source click logs into machine ML models for ranking.
 
 Targets pyspark 1.6.0 running on python 2.7
 
+== Other
+
+Documentation follows the numpy documentation guidelines:
+    https://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt
