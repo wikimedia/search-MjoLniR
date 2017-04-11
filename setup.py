@@ -3,8 +3,11 @@ from setuptools import find_packages, setup
 
 
 requirements = [
+    # mjolnir requirements
     'clickmodels',
+    # pyspark requirements
     'py4j',
+    'numpy',
 ]
 
 test_requirements = [
