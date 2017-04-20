@@ -5,6 +5,7 @@ __pycache__/
 
 # Distribution / packaging
 venv/
+build/
 *.egg-info/
 *.egg
 *.log

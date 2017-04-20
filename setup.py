@@ -5,15 +5,16 @@ from setuptools import find_packages, setup
 requirements = [
     # mjolnir requirements
     'clickmodels',
+    'requests',
     # pyspark requirements
     'py4j',
     'numpy',
 ]
 
 test_requirements = [
-    'pytest',
     'findspark',
     'flake8',
+    'pytest',
     'tox',
 ]
 
