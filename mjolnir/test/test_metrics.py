@@ -19,7 +19,7 @@ def test_ndcg_doesnt_completely_fail(spark_context, hive_context):
     # Top 4 are slightly out. This value was checked by also
     # calculating by hand.
     ndcg_at_4 = mjolnir.metrics.ndcg(df, 4, query_cols=['query'])
-    assert 0.9788 == pytest.approx(ndcg_at_4, 0.0001)
+    assert 0.9788 == pytest.approx(ndcg_at_4, abs=0.0001)
 
 
 def test_query_can_be_multiple_columns(spark_context, hive_context):

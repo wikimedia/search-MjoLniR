@@ -1,6 +1,7 @@
 import mjolnir.spark
 import pyspark.sql
 from pyspark.sql import functions as F
+import tempfile
 
 # Example Command line:
 # PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf ~/spark-2.1.0-bin-hadoop2.6/bin/pyspark \
@@ -230,7 +231,7 @@ class XGBoostModel(object):
         j_df = self._j_xgb_model.transform(df_test._jdf)
         return pyspark.sql.DataFrame(j_df, df_test.sql_ctx)
 
-    def dump(self, featureMap=None, withStats=False, format="json"):
+    def dump(self, feature_map=None, with_stats=False, format="json"):
         """Dumps the xgboost model
 
         Parameters
@@ -249,8 +250,17 @@ class XGBoostModel(object):
         str
             valid json string containing all trees
         """
-        # returns an Array[String] from scala
-        j_dump = self._j_xgb_model.booster().getModelDump(featureMap, withStats, format)
+        # Annoyingly the xgboost api doesn't take the feature map as a string, but
+        # instead as a filename. Write the feature map out to a file if necessary.
+        if feature_map is None:
+            fmap_path = None
+        else:
+            fmap_f = tempfile.NamedTemporaryFile()
+            fmap_f.write(feature_map)
+            fmap_path = fmap_f.name
+        # returns an Array[String] from scala, where each element of the array
+        # is a json string representing a single tree.
+        j_dump = self._j_xgb_model.booster().getModelDump(fmap_path, with_stats, format)
         return '[' + ','.join(list(j_dump)) + ']'
 
     def eval(self, df_test, j_groups=None, feature_col='features', label_col='label'):

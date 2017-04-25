@@ -48,8 +48,7 @@ def test_prep_training_no_params(df_prep_training):
 def test_prep_training_w_num_workers(df_prep_training):
     num_workers = 1
     df_grouped, j_groups = mjolnir.training.xgboost.prep_training(
-        df_prep_training, num_partitions=num_workers)
-
+        df_prep_training, num_workers)
     expected = [[1, 1, 1, 2]]
     assert num_workers == df_grouped.rdd.getNumPartitions()
     assert len(expected) == num_workers
@@ -82,7 +81,7 @@ def test_train_minimum_params(df_train):
     # What else can we practically assert?
     df_transformed = model.transform(df_train)
     assert 'prediction' in df_transformed.columns
-    assert 0.74 == pytest.approx(model.eval(df_train), 0.01)
+    assert 0.74 == pytest.approx(model.eval(df_train), abs=0.01)
 
     # make sure train didn't clobber the incoming params
     assert params['num_rounds'] == 1
@@ -97,7 +96,7 @@ def test_train_pre_prepped(df_train):
     params = {'num_rounds': 1}
 
     df_grouped, j_groups = mjolnir.training.xgboost.prep_training(
-        df_train, num_partitions=num_workers)
+        df_train, num_workers)
     params['groupData'] = j_groups
 
     # TODO: This is probably not how we should make sure it isn't called..
@@ -105,6 +104,6 @@ def test_train_pre_prepped(df_train):
     try:
         mjolnir.training.xgboost.prep_training = _always_raise
         model = mjolnir.training.xgboost.train(df_grouped, params)
-        assert 0.74 == pytest.approx(model.eval(df_grouped, j_groups), 0.01)
+        assert 0.74 == pytest.approx(model.eval(df_grouped, j_groups), abs=0.01)
     finally:
         mjolnir.training.xgboost.prep_training = orig_prep_training

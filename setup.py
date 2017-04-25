@@ -9,6 +9,7 @@ requirements = [
     # pyspark requirements
     'py4j',
     'numpy',
+    'hyperopt',
 ]
 
 test_requirements = [

@@ -110,8 +110,13 @@ def main(sc, sqlContext):
     # uses query and NOT norm_query. Merge those back into the source hits.
     df_features = mjolnir.features.collect(
         df_hits,
+        # TODO: Should be a CLI option of some sort
         url_list=['http://elastic%d.codfw.wmnet:9200/_msearch' % (i) for i in range(2001, 2035)],
         indices={wiki: '%s_content' % (wiki) for wiki in wikis},
+        # TODO: If we are going to do multiple wikis, this probably needs different features
+        # per wiki? At a minimum trying to include useful templates as features will need
+        # to vary per-wiki. Varied features per wiki would also mean they can't be trained
+        # together, which is perhaps a good thing anyways.
         feature_definitions=mjolnir.features.enwiki_features())
     df_hits_with_features = (
         df_hits

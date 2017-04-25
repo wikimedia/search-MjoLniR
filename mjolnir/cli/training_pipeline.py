@@ -9,7 +9,11 @@ To run:
         path/to/training_pipeline.py
 """
 
-import mjolnir.training
+import hyperopt
+import mjolnir.dbn
+import mjolnir.sampling
+import mjolnir.features
+import mjolnir.training.tuning
 import mjolnir.training.xgboost
 from pyspark import SparkContext
 from pyspark.sql import HiveContext
@@ -20,32 +24,42 @@ def main(sc, sqlContext):
     in_path = 'hdfs://analytics-hadoop/user/ebernhardson/mjolnir/hits_with_features'
     df_hits_with_features = sqlContext.read.parquet(in_path)
 
-    # Doesn't have to be done ahead of time, but if the data is used multiple times
-    # (eg train and eval) then it should to save work.
+    # Explore a hyperparameter space
+    best_params, trials = mjolnir.training.tuning.hyperopt(
+        df_hits_with_features,
+        mjolnir.training.xgboost.train,
+        {
+            # Generate 5 folds and run them all in parallel
+            'num_folds': 5,
+            'num_cv_jobs': 5,
+            # Use lambdarank and eval with ndcg@10
+            'objective': 'rank:ndcg',
+            'eval_metric': 'ndcg@10',
+            # gbtree options
+            'eta': 0.3,
+            'num_rounds': 100,
+            'max_depth': hyperopt.hp.quniform('max_depth', 3, 10, 2),
+            'min_child_weight': hyperopt.hp.quniform('min_child_weight', 100, 2000, 100),
+        })
+
+    # Train a model over all data with best params
     df_grouped, j_groups = mjolnir.training.xgboost.prep_training(
         df_hits_with_features, 10)
-
-    # Train a model
-    # Note that this might be best done in a separate spark context, with different options.
-    # All of the above code will use 1 cpu per task, but xgboost can use multiple cores per task.
-    # To take advantage of multiple cores you should use spark.task.cpus=n in the spark config.
-    model = mjolnir.training.xgboost.train(df_grouped, {
-        'num_rounds': 100,
-        'num_workers': 10,
-        'objective': 'rank:ndcg',
-        'eval_metric': 'ndcg@10',
-        'eta': 0.3,
-        'max_depth': 6,
-        'groupData': j_groups,
-    })
+    best_params['groupData'] = j_groups
+    # TODO: Maybe these don't belong in the params, and should instead have been kwargs?
+    del best_params['num_folds']
+    del best_params['num_cv_jobs']
+    model = mjolnir.training.xgboost.train(df_grouped, best_params)
 
     print 'train-ndcg@10: %.3f' % (model.eval(df_grouped, j_groups))
 
-    # dumped is now a list of strings each containing json of one
-    # tree in the ensemble.
-    dumped = model.dump()
-    with open('/home/ebernahrdson/xgboost_model.json', 'wb') as f:
-        f.writelines(dumped)
+    # Generate a featuremap so xgboost can include feature names in the dump.
+    # The final `q` indicates all features are quantitative values (floats).
+    features = df_hits_with_features.schema['features'].metadata['features']
+    feat_map = ["%d %s q" % (i, fname) for i, fname in enumerate(features)]
+    # TODO: this should be CLI argument as well
+    with open('/home/ebernhardson/xgboost_model.json', 'wb') as f:
+        f.write(model.dump("\n".join(feat_map)))
 
 
 if __name__ == "__main__":
