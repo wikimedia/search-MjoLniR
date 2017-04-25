@@ -2,11 +2,25 @@
 
 set -e
 
+# Need backports for openjdk-8
+echo "deb http://ftp.debian.org/debian jessie-backports main contrib" > /etc/apt/sources.list.d/backports.list
+
 apt-get update
 apt-get install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
-    openjdk-7-jre-headless \
-    python-virtualenv
+    openjdk-8-jre-headless \
+    openjdk-8-jdk \
+    ca-certificates-java='20161107~bpo8+1'
+    python-virtualenv \
+    git-core \
+    build-essential \
+    maven
 
+
+# While we only asked for java 8, 7 was installed as well. switch over the
+# alternative. TODO: Do we need anything else?
+update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
+
+# Grab spark 2.1.0 and put it in /opt
 cd /opt
 wget -qO - http://d4kbcqa49mib13.cloudfront.net/spark-2.1.0-bin-hadoop2.6.tgz | tar -zxvf
 ln -s /opt/spark-2.1.0-bin-hadoop2.6/bin/pyspark /usr/local/bin
@@ -16,7 +30,8 @@ SPARK_HOME=/opt/spark-2.1.0-bin-hadoop2.6
 export SPARK_HOME
 EOD
 
-# pyspark wants to put a metastore_db directory in /vagrant, put it somewhere else
+# pyspark wants to put a metastore_db directory in your cwd, put it somewhere
+# else
 cat >/opt/spark-2.1.0-bin-hadoop2.6/conf/hive-site.xml <<EOD
 <configuration>
    <property>
@@ -31,7 +46,7 @@ cat >/opt/spark-2.1.0-bin-hadoop2.6/conf/hive-site.xml <<EOD
 </configuration>
 EOD
 
-# pyspark wants to put a derby.log in /vagrant as well, put it elsewhere
+# pyspark wants to put a derby.log in cwd as well, put it elsewhere
 cat >> /opt/spark-2.1.0-bin-hadoop2.6/conf/spark-defaults.conf <<EOD
 spark.driver.extraJavaOptions=-Dderby.stream.error.file=/tmp/derby.log
 EOD
@@ -42,3 +57,22 @@ if [ ! -d /vagrant/venv ]; then
     virtualenv -p /usr/bin/python2.7 venv
     venv/bin/pip install tox
 fi
+
+# Grab and compile xgboost. install it into local maven repository
+# as they don't publish to maven central yet.
+git clone https://github.com/dmlc/xgboost.git /srv/xgboost
+cd /srv/xgboost
+# We need d3b866e, da58f34 and ccccf8a0 from master which don't cherry-pick
+# cleanly back to the last released tag (v0.60), so use a hardcoded version of
+# master branch that we think works.
+git checkout ccccf8a0
+git submodule update --init --recursive
+cd jvm-packages
+# The test suite requires 4 cores or it gets stuck. Not ideal but skip them for
+# now. It also needs a bit more than the default heap allocation.
+MAVEN_OPTS="-Xmx1024M" mvn -DskipTests -Dmaven.test.skip=true install
+
+# Build the mjolnir jar which depends on xgboost4j-spark
+cd /vagrant/jvm
+mvn package
+

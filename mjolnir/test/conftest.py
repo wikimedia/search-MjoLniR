@@ -22,11 +22,16 @@ def spark_context(request):
     Returns:
         SparkContext for tests
     """
+
+    # TODO: This is much too specialized to the vagrant test environment
+    extraClassPath = '/vagrant/jvm/target/mjolnir-0.1-jar-with-dependencies.jar'
     quiet_log4j()
     conf = (
         SparkConf()
         .setMaster("local[2]")
-        .setAppName("pytest-pyspark-local-testing"))
+        .setAppName("pytest-pyspark-local-testing")
+        .set('spark.driver.extraClassPath', extraClassPath)
+        .set('spark.executor.extraClassPath', extraClassPath))
     sc = SparkContext(conf=conf)
     yield sc
     sc.stop()

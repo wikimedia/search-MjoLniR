@@ -9,9 +9,8 @@ models for ranking in elasticsearch.
 Requirements
 ============
 
-Targets pyspark from cdh5.10.0. This is mostly pyspark 1.6.0, but has various
-backports integrated. Requires python 2.7, as some dependencies (clickmodels)
-do not support python 3 yet.
+Targets pyspark 2.1.0 and xgboost 0.7.  Requires python 2.7, as some
+dependencies (clickmodels) do not support python 3 yet.
 
 Running tests
 =============
@@ -39,3 +38,9 @@ Other
 
 Documentation follows the numpy documentation guidelines:
     https://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt
+
+XGBoost version used is v0.7, with a few additional patches cherry picked in:
+* https://github.com/dmlc/xgboost/pull/2234 - support json dumps in xgboost4j
+* https://github.com/dmlc/xgboost/pull/2241 - store metrics with serialized learner
+* https://github.com/dmlc/xgboost/pull/2247 - expose json dumps to scala
+* https://github.com/dmlc/xgboost/pull/2244 - accept groupData in spark model eval

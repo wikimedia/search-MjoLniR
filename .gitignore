@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *~
+/jvm/target
 
 # Distribution / packaging
 venv/
@@ -24,6 +25,7 @@ coverage.xml
 
 # Editor temporary files
 .*.sw[po]
+/jvm/.idea
 
 # Vagrant, and cdh stuff in vagrant
 .vagrant

@@ -3,6 +3,7 @@ Integration for collecting feature vectors from elasticsearch
 """
 
 import json
+import math
 import mjolnir.spark
 from pyspark.ml.linalg import Vectors
 from pyspark.sql import functions as F
@@ -333,7 +334,10 @@ def collect(df, url_list, feature_definitions, indices=None, session_factory=req
                 bulk_query = _create_bulk_query(row, indices, feature_definitions)
                 url, response = _make_request(session, url, url_list, bulk_query)
                 for hit_page_id, features in _handle_response(response, num_features, row.hit_page_ids):
-                    yield ([row.wikiid, row.query, hit_page_id, Vectors.dense(features)])
+                    # nan features mean some sort of failure, drop the row.
+                    # TODO: Add some accumulator to count and report dropped rows?
+                    if not any(map(math.isnan, features)):
+                        yield [row.wikiid, row.query, hit_page_id, Vectors.dense(features)]
 
     return (
         df
