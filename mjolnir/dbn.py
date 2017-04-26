@@ -188,7 +188,7 @@ def train(df, dbn_config, num_partitions=200):
         # of grouping into python, but that could just as well end up worse?
         .repartition(num_partitions, 'wikiid', 'norm_query')
         # Run each partition through the DBN to generate relevance scores.
-        .mapPartitions(train_partition)
+        .rdd.mapPartitions(train_partition)
         # Convert the rdd of tuples back into a DataFrame so the fields all
         # have a name.
         .toDF(['wikiid', 'norm_query', 'hit_page_id', 'relevance']))

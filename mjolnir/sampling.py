@@ -9,7 +9,6 @@ in a single dataframe, but it works well enough for our data sizes.
 
 import bisect
 import mjolnir.spark
-from mjolnir.spark.ml import QuantileDiscretizer
 import pyspark
 from pyspark.sql import functions as F
 from pyspark.sql.column import Column, _to_java_column
@@ -49,7 +48,7 @@ def _array_contains(array, value):
 def _calc_splits(df, num_buckets=100):
     """Calculate the right edge of num_session buckets
 
-    Utilizes QuantileDiscretizer to bucketize the source. Due to the available
+    Utilizes approxQuantile to bucketize the source. Due to the available
     implementation this has to be done per-wiki, so is perhaps slower than
     necessary. For current dataset sizes that isn't an issue.
 
@@ -72,13 +71,15 @@ def _calc_splits(df, num_buckets=100):
         of queries per bucket.
     """
 
-    qdf = QuantileDiscretizer(numBuckets=num_buckets,
-                              inputCol='num_sessions',
-                              outputCol='bucket')
-    # QuantileDiscretizer.getSplits actually outputs num_buckets, plus -inf
-    # at the beginning and +inf at the end. We will bucketize with the
-    # bisect library so chop off the -inf as we only need inf on one end.
-    return qdf.fit(df).getSplits()[1:]
+    percentiles = [x/float(num_buckets) for x in range(1, num_buckets)]
+    # With 100 buckets, there will be buckets at .01, .02, etc. This specifies
+    # percentils .01 must be the value between .009 and .011
+    relative_error = 1. / (num_buckets * 10)
+    splits = df.approxQuantile('num_sessions', percentiles, relative_error)
+
+    # range(1, num_buckets) returned num_buckets-1 values. This final inf captures
+    # everything from the last bucket to the end.
+    return splits + [float('inf')]
 
 
 def _sample_queries(df, wikis, num_buckets=100, samples_desired=10000, seed=None):
@@ -152,7 +153,7 @@ def _sample_queries(df, wikis, num_buckets=100, samples_desired=10000, seed=None
         return ((row.wikiid, split), (row.wikiid, row.norm_query))
 
     return (
-        df
+        df.rdd
         # To use sampleByKey we need to convert to a PairRDD which has keys matching
         # those used in wiki_fractions.
         .map(to_pair_rdd)
@@ -231,7 +232,7 @@ def sample(df, wikis, seed=None, queries_per_wiki=10000,
         # Spark will eventually throw this away in an LRU fashion.
         .cache())
 
-    df_queries_sampled = _sample_queries(df_queries_unique, wikis, samples_desired=queries_per_wiki)
+    df_queries_sampled = _sample_queries(df_queries_unique, wikis, samples_desired=queries_per_wiki, seed=seed)
 
     # Select the rows chosen by sampling from the filtered df
     return df_filtered.join(df_queries_sampled, how='inner', on=['wikiid', 'norm_query'])
