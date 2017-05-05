@@ -81,6 +81,23 @@ def test_hyperopt(df_train):
     assert len(trails.trials) == 5
 
 
+def test_gridsearch(df_train):
+    space = {
+        'num_rounds': 50,
+        'max_depth': hyperopt.hp.choice('max_depth', [10, 20, 30]),
+    }
+
+    best_params, trials = mjolnir.training.tuning.grid_search(
+        df_train, MockModel, space, num_folds=2,
+        num_fold_partitions=1, num_cv_jobs=1, num_workers=1)
+    assert isinstance(best_params, dict)
+    assert 'num_rounds' in best_params
+    # num rounds should be unchanged
+    assert best_params['num_rounds'] == 50
+    # should have 3 iterations for the 3 max depth's
+    assert len(trials.trials) == 3
+
+
 class MockModel(object):
     def __init__(self, df, params, num_workers):
         # Params that were passed to hyperopt

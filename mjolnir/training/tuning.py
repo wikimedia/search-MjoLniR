@@ -4,9 +4,12 @@ Support for making test/train or k-fold splits
 
 from collections import defaultdict
 import hyperopt as _hyperopt
+import hyperopt.pyll.base as _hyperopt_pyll_base
+import itertools
+import math
 import mjolnir.spark
-import numpy as np
 from multiprocessing.dummy import Pool
+import numpy as np
 import py4j.protocol
 from pyspark.sql import functions as F
 
@@ -266,10 +269,45 @@ def cross_validate(df, train_func, params, num_folds=5, num_fold_partitions=100,
                            num_workers=num_workers)
 
 
+class _GridSearchAlgo(object):
+    def __init__(self, space):
+        foo = {}
+        for k, v in space.items():
+            if not isinstance(v, _hyperopt_pyll_base.Apply):
+                continue
+            literals = v.pos_args[1:]
+            if not all([isinstance(l, _hyperopt_pyll_base.Literal) for l in literals]):
+                raise ValueError('GridSearch only works with hp.choice')
+            foo[k] = range(len(literals))
+        self.grid_keys = foo.keys()
+        self.grids = list(itertools.product(*foo.values()))
+        self.max_evals = len(self.grids)
+
+    def __call__(self, new_ids, domain, trials, seed):
+        rval = []
+        for ii, new_id in enumerate(new_ids):
+            vals = dict(zip(self.grid_keys, [[v] for v in self.grids.pop()]))
+            new_result = domain.new_result()
+            new_misc = dict(tid=new_id, cmd=domain.cmd, workdir=domain.workdir,
+                            idxs=zip(self.grid_keys, [[new_id]] * len(vals)),
+                            vals=vals)
+            rval.extend(trials.new_trial_docs([new_id],
+                        [None], [new_result], [new_misc]))
+        import pprint
+        pprint.pprint(rval)
+        return rval
+
+
+def grid_search(df, train_func, space, num_folds=5, num_fold_partitions=100,
+                num_cv_jobs=5, num_workers=5):
+    algo = _GridSearchAlgo(space)
+    return hyperopt(df, train_func, space, algo.max_evals, algo, num_folds,
+                    num_fold_partitions, num_cv_jobs, num_workers)
+
+
 def hyperopt(df, train_func, space, max_evals=50, algo=_hyperopt.tpe.suggest,
-             num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
-             cache=True, unpersist=True):
-    """Perform hyperparameter optimisation of train_func over space
+             num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5):
+    """Perform cross validated hyperparameter optimization of train_func
 
     Parameters
     ----------
@@ -313,6 +351,15 @@ def hyperopt(df, train_func, space, max_evals=50, algo=_hyperopt.tpe.suggest,
         # so return the negative NDCG
         loss = [-s['test'] for s in scores]
         true_loss = [s['train'] - s['test'] for s in scores]
+        num_failures = sum([math.isnan(s) for s in loss])
+        if num_failures > 1:
+            return {
+                'status': _hyperopt.STATUS_FAIL,
+                'failure': 'Too many failures: %d' % (num_failures)
+            }
+        else:
+            loss = [s for s in loss if not math.isnan(s)]
+            true_loss = [s for s in true_loss if not math.isnan(s)]
         return {
             'status': _hyperopt.STATUS_OK,
             'loss': sum(loss) / float(len(loss)),
@@ -324,19 +371,17 @@ def hyperopt(df, train_func, space, max_evals=50, algo=_hyperopt.tpe.suggest,
     folds = _make_folds(df, num_folds=num_folds, num_workers=num_workers,
                         num_fold_partitions=num_fold_partitions, num_cv_jobs=num_cv_jobs)
 
-    if cache:
-        for fold in folds:
-            fold['train'].cache()
-            fold['test'].cache()
+    for fold in folds:
+        fold['train'].cache()
+        fold['test'].cache()
 
     try:
         trials = _hyperopt.Trials()
         best = _hyperopt.fmin(objective, space, algo=algo, max_evals=max_evals, trials=trials)
     finally:
-        if unpersist:
-            for fold in folds:
-                fold['train'].unpersist()
-                fold['test'].unpersist()
+        for fold in folds:
+            fold['train'].unpersist()
+            fold['test'].unpersist()
 
     # hyperopt only returns the non-constant parameters in best. It seems
     # more convenient to return all of them.

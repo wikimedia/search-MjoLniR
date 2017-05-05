@@ -1,7 +1,12 @@
+import hyperopt
 import mjolnir.spark
+import mjolnir.training.tuning
+import numpy as np
+import pprint
 import pyspark.sql
 from pyspark.sql import functions as F
 import tempfile
+import scipy.sparse
 
 # Example Command line:
 # PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf ~/spark-2.1.0-bin-hadoop2.6/bin/pyspark \
@@ -299,3 +304,233 @@ class XGBoostModel(object):
             df_grouped._jdf, feature_col, label_col)
         score = self._j_xgb_model.eval(j_rdd, 'test', None, 0, False, j_groups)
         return float(score.split('=')[1].strip())
+
+
+# from https://gist.github.com/hernamesbarbara/7238736
+def _loess_predict(X, y_tr, X_pred, bandwidth):
+    X_tr = np.column_stack((np.ones_like(X), X))
+    X_te = np.column_stack((np.ones_like(X_pred), X_pred))
+    y_te = []
+    for x in X_te:
+        ws = np.exp(-np.sum((X_tr - x)**2, axis=1) / (2 * bandwidth**2))
+        W = scipy.sparse.dia_matrix((ws, 0), shape=(X_tr.shape[0],) * 2)
+        theta = np.linalg.pinv(X_tr.T.dot(W.dot(X_tr))).dot(X_tr.T.dot(W.dot(y_tr)))
+        y_te.append(np.dot(x, theta))
+    return np.array(y_te)
+
+
+def _estimate_best_eta(trials, length=1e4):
+    """Estimate the best eta from a small sample of trials
+
+    The final stage of training can take quite some time, at 10 to 15 minutes
+    or more per model evaluated. The relationship between eta and ndcg@10 along
+    with eta and true loss is fairly stable, so instead of searching the whole space
+    evaluate a few evenly spaced points and then try to fit a line to determine
+    the best eta.
+
+    Best eta is chosen by finding where the derivative of ndcg@10 vs true loss first
+    transitions from >1 to <=1
+
+    Parameters
+    ----------
+    trials : hyperopt.Trials
+        Trials object that was used to tune only eta
+    length : int
+        Number of eta points to estimate
+
+    Returns
+    -------
+    float
+        Estimated best ETA
+    """
+
+    ndcg10 = np.asarray([-l for l in trials.losses()])
+    true_loss = np.asarray([r.get('true_loss') for r in trials.results])
+    eta = np.asarray(trials.vals['eta'])
+
+    # Range of predictions we want to make
+    eta_pred = np.arange(np.min(eta), np.max(eta), (np.max(eta) - np.min(eta)) / length)
+    # Predicted ndcg@10 values for eta_pred
+    # TODO: Can 0.02 not be magic? Was chosen by hand on one sample
+    ndcg10_pred = _loess_predict(eta, ndcg10, eta_pred, 0.02)
+    # Predicted true loss for eta_pred
+    # TODO: Can 0.03 not be magic? Was chosen by hand on one sample
+    true_loss_pred = _loess_predict(eta, true_loss, eta_pred, 0.03)
+
+    # Find the first point where derivative transitions from > 1 to <= 1.
+    # TODO: What if the sample is from too narrow a range, and doesn't capture this?
+    derivative = np.diff(ndcg10_pred) / np.diff(true_loss_pred)
+    idx = (np.abs(derivative-1)).argmin()
+
+    # eta for point closest to transition of derivative from >1 to <=1>
+    return eta_pred[idx]
+
+
+def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
+         target_node_evaluations=5000):
+    """Find appropriate hyperparameters for training df
+
+    This is far from perfect, hyperparameter tuning is a bit of a black art
+    and could probably benefit from human interaction at each stage. Various
+    parameters depend a good bit on the number of samples in df, and how
+    that data is shaped.
+
+    Below is tuned for a dataframe with approximatly 10k normalized queries,
+    110k total queries, and 2.2M samples. This is actually a relatively small
+    dataset, we should rework the values used with larger data sets if they
+    are promising. It may also be that the current feature space can't take
+    advantage of more samples.
+
+    Note that hyperopt uses the first 20 iterations to initialize, during those
+    first 20 this is a strictly random search.
+
+    Parameters
+    ----------
+    df : pyspark.sql.DataFrame
+    num_folds : int, optional
+        The number of cross validation folds to use while tuning. (Default: 5)
+    num_fold_partitions : int, optional
+        The number of partitions to use when calculating folds. For small
+        datasets this needs to be a reasonably small number. For medium to
+        large the default is reasonable. (Default: 100)
+    num_cv_jobs : int, optional
+        The number of cross validation folds to train in parallel. (Default: 5)
+    num_workers : int, optional
+        The number of spark executors to use per fold for training. The total
+        number of executors used will be (num_cv_jobs * num_workers). Generally
+        prefer executors with more cpu's over a higher number of workers where
+        possible. (Default: 5)
+    target_node_evaluations : int, optional
+        The approximate number of node evaluations per prediction that the
+        final result will require. This controls the number of trees used in
+        the final result. The number of trees will be (target_node_evaluations
+        / optimal_max_depth). This is by far the most expensive part to tune,
+        setting to None skips this and uses a constant 100 trees.
+        (Default: 5000)
+
+    Returns
+    -------
+    dict
+        Dict with two keys, trials and params. params is the optimal set of
+        parameters. trials contains a dict of individual optimization steps
+        performed, each containing a hyperopt.Trials object recording what
+        happened.
+    """
+    def eval_space(space, max_evals):
+        """Eval a space using standard hyperopt"""
+        best, trials = mjolnir.training.tuning.hyperopt(
+            df, train, space, max_evals=max_evals,
+            num_folds=num_folds, num_fold_partitions=num_fold_partitions,
+            num_cv_jobs=num_cv_jobs, num_workers=num_workers)
+        for k, v in space.items():
+            if not np.isscalar(v):
+                print 'best %s: %f' % (k, best[k])
+        return best, trials
+
+    def eval_space_grid(space):
+        """Eval all points in the space via a grid search"""
+        best, trials = mjolnir.training.tuning.grid_search(
+            df, train, space, num_folds=num_folds, num_fold_partitions=num_fold_partitions,
+            num_cv_jobs=num_cv_jobs, num_workers=num_workers)
+        for k, v in space.items():
+            if not np.isscalar(v):
+                print 'best %s: %f' % (k, best[k])
+        return best, trials
+
+    # Baseline parameters to start with. Roughly tuned by what has
+    # worked in the past.
+    space = {
+        'objective': 'rank:ndcg',
+        'eval_metric': 'ndcg@10',
+        'num_rounds': 100,
+        'min_child_weight': 400,
+        'max_depth': 6,
+        'gamma': 0,
+        'subsample': 1.0,
+        'colsample_bytree': 0.8,
+    }
+
+    # Find an eta that gives good results with only 100 trees. This is done
+    # so most of the tuning is relatively quick. A final step will re-tune
+    # eta with more trees.
+    space['eta'] = hyperopt.hp.choice('eta', np.linspace(0.3, 0.7, 15))
+    best_eta, trials_eta = eval_space_grid(space)
+    space['eta'] = _estimate_best_eta(trials_eta)
+    pprint.pprint(space)
+
+    # Determines the size of each tree. Larger trees increase model complexity
+    # and make it more likely to overfit the training data. Larger trees also
+    # do a better job at capturing interactions between features. Larger training
+    # sets support deeper trees. Not all trees will be this depth, min_child_weight
+    # gamma, and regularization all push back on this.
+    space['max_depth'] = hyperopt.hp.quniform('max_depth', 4, 10, 1)
+    # The minimum number of samples that must be in each leaf node. This pushes
+    # back against tree depth, preventing the tree from growing if a potential
+    # split applies to too few samples. ndcg@10 on the test set increases linearly
+    # with smaller min_child_weight, but true_loss also increases.
+    space['min_child_weight'] = hyperopt.hp.qloguniform('min_child_weight', np.log(10), np.log(2000), 10)
+
+    # TODO: Somewhat similar to eta, as min_child_weight decreases the
+    # true_loss increases. Need to figure out how to choose the max_depth that
+    # provides best ndcg@10 without losing generalizability.
+    best_complexity, trials_complexity = eval_space(space, 50)
+    space['max_depth'] = int(best_complexity['max_depth'])
+    space['min_child_weight'] = int(best_complexity['min_child_weight'])
+    pprint.pprint(space)
+
+    # Gamma also controls complexity, but in a less brute force manner than min_child_weight.
+    # Essentially each newly generated split has a gain value calculated indicating how
+    # good the split is. gamma is the minimum gain a split must achieve to be considered
+    # a good split. Gamma has a mostly linear relationship with true_loss. The relationship
+    # to ndcg@10 is less clear, although documentation suggests with enough data points
+    # gamma vs loss should draw a U shaped graph (inverted in case of ndcg@10)
+    # TODO: Should we even tune this? The results are all over the place, suggesting we may simply
+    # be finding some gamma that matches the CV folds best and not something generalizable.
+    space['gamma'] = hyperopt.hp.quniform('gamma', 0, 3, 0.01)
+    best_gamma, trials_gamma = eval_space(space, 50)
+    space['gamma'] = best_gamma['gamma']
+    pprint.pprint(space)
+
+    # subsample helps make the model more robust to noisy data. For each update to
+    # a tree only this % of samples are considered.
+    space['subsample'] = hyperopt.hp.quniform('subsample', 0.8, 1, .01)
+    # colsample also helps make the model more robust to noise. For each update
+    # to a tree only this % of features are considered.
+    space['colsample_bytree'] = hyperopt.hp.quniform('colsample_bytree', 0.8, 1, .01)
+
+    # With a high min_child_weight subsampling of any kind gives a linear decrease
+    # in quality. But with a relatively low min_child_weight it can give some benefits,
+    # pushing back against over fitting due to small amounts of data per leaf.
+    # colsample is less clear, with 0.8 and 1.0 having similar results.
+    best_noise, trials_noise = eval_space(space, 50)
+    space['subsample'] = best_noise['subsample']
+    space['colsample_bytree'] = best_noise['colsample_bytree']
+    pprint.pprint(space)
+
+    # Finally increase the number of trees to our target, which is mostly based
+    # on how computationally expensive it is to generate predictions with the final
+    # model. Find the optimal eta for this new # of trees. This step can take as
+    # much time as all previous steps combined, and then some, so it can be disabled
+    # with target_node_evalations of None.
+    if target_node_evaluations is None:
+        trials_final = None
+    else:
+        space['num_rounds'] = target_node_evaluations / space['max_depth']
+        # TODO: Is 15 steps right amount? too many? too few? This generally
+        # uses a large number of trees which takes 10 to 20 minutes per evaluation.
+        # That means evaluating 15 points is 2.5 to 5 hours.
+        space['eta'] = hyperopt.hp.choice('eta', np.linspace(0.01, 0.3, 15))
+        best_final, trials_final = eval_space_grid(space)
+        space['eta'] = _estimate_best_eta(trials_final)
+        pprint.pprint(space)
+
+    return {
+        'trials': {
+            'initial': trials_eta,
+            'complexity': trials_complexity,
+            'gamma': trials_gamma,
+            'noise': trials_noise,
+            'final': trials_final,
+        },
+        'params': space,
+    }
