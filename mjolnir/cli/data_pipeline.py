@@ -11,8 +11,9 @@ To run:
 """
 
 import mjolnir.dbn
-import mjolnir.sampling
+import mjolnir.metrics
 import mjolnir.features
+import mjolnir.sampling
 from pyspark import SparkContext
 from pyspark.sql import HiveContext
 from pyspark.sql import functions as F
@@ -54,9 +55,8 @@ def main(sc, sqlContext):
         .drop('hit_page_ids')
         # Mark all hits that were clicked by a user
         .withColumn('clicked', F.expr('array_contains(click_page_ids, hit_page_id)'))
-        .drop('click_page_ids'))
-
-    df_sampled.cache()
+        .drop('click_page_ids')
+        .cache())
 
     # Learn relevances
     df_rel = (
@@ -72,15 +72,39 @@ def main(sc, sqlContext):
         # naive conversion of relevance % into a label
         .withColumn('label', (F.col('relevance') * 10).cast('int')))
 
-    df_hits = (
+    df_all_hits = (
         df_sampled
+        .select('wikiid', 'query', 'norm_query', 'hit_page_id', 'session_id', 'hit_position')
+        .join(df_rel, how='inner', on=['wikiid', 'norm_query', 'hit_page_id'])
+        .cache())
+
+    # materialize df_all_hits and drop df_sampled
+    df_all_hits.count()
+    df_sampled.unpersist()
+
+    # TODO: Training is per-wiki, should this be as well?
+    weightedNdcgAt10 = mjolnir.metrics.ndcg(df_all_hits, 10, query_cols=['wikiid', 'query', 'session_id'])
+    print 'weighted ndcg@10: %.4f' % (weightedNdcgAt10)
+
+    df_hits = (
+        df_all_hits
         .groupBy('wikiid', 'query', 'norm_query', 'hit_page_id')
         # weight is now the number of times a hit was displayed to a user
-        .agg(F.count(F.lit(1)).alias('weight'))
-        # Join in the relevance labels
-        .join(df_rel, how='inner', on=['wikiid', 'norm_query', 'hit_page_id']))
+        .agg(F.count(F.lit(1)).alias('weight'),
+             F.mean('hit_position').alias('hit_position'),
+             # These should be the same per group, but to keep things easy
+             # take first rather than grouping
+             F.first('label').alias('label'),
+             F.first('relevance').alias('relevance'))
+        .cache())
 
-    df_hits.cache()
+    # materialize df_hits and drop df_all_hits
+    df_hits.count()
+    df_all_hits.unpersist()
+
+    # TODO: Training is per-wiki, should this be as well?
+    ndcgAt10 = mjolnir.metrics.ndcg(df_hits, 10, query_cols=['wikiid', 'query'])
+    print 'unweighted ndcg@10: %.4f' % (ndcgAt10)
 
     # Collect features for all known queries. Note that this intentionally
     # uses query and NOT norm_query. Merge those back into the source hits.
@@ -89,7 +113,13 @@ def main(sc, sqlContext):
         url_list=['http://elastic%d.codfw.wmnet:9200/_msearch' % (i) for i in range(2001, 2035)],
         indices={wiki: '%s_content' % (wiki) for wiki in wikis},
         feature_definitions=mjolnir.features.enwiki_features())
-    df_hits_with_features = df_hits.join(df_features, how='inner', on=['wikiid', 'query', 'hit_page_id'])
+    df_hits_with_features = (
+        df_hits
+        .join(df_features, how='inner', on=['wikiid', 'query', 'hit_page_id'])
+        .withColumn('labels', mjolnir.spark.add_meta(sc, F.col('labels'), {
+            'weightedNdcgAt10': weightedNdcgAt10,
+            'ndcgAt10': ndcgAt10,
+        })))
 
     df_hits_with_features.write.parquet('hdfs://analytics-hadoop/user/ebernhardson/mjolnir/hits_with_features')
 
