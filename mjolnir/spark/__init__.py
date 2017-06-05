@@ -2,7 +2,9 @@
 Helper functions for dealing with pyspark
 """
 import json
-from pyspark.sql import Column
+from pyspark import SparkContext
+from pyspark.sql import Column, functions as F
+from pyspark.sql.column import _to_java_column, _to_seq
 
 
 def assert_columns(df, columns):
@@ -40,3 +42,15 @@ def add_meta(sc, col, metadata):
     meta = sc._jvm.org.apache.spark.sql.types \
         .Metadata.fromJson(json.dumps(metadata))
     return Column(getattr(col._jc, 'as')('', meta))
+
+
+def at_least_n_distinct(col, limit):
+    """Count distinct that works with windows
+
+    The standard distinct count in spark sql can't be applied in
+    a window. This implementation allows that to work
+    """
+    sc = SparkContext._active_spark_context
+    j_cols = _to_seq(sc, [_to_java_column(col), _to_java_column(F.lit(limit))])
+    jc = sc._jvm.org.wikimedia.search.mjolnir.AtLeastNDistinct().apply(j_cols)
+    return Column(jc)

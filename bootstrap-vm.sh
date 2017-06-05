@@ -59,7 +59,6 @@ EOD
 
 if [ ! -d /vagrant/venv ]; then
     cd /vagrant
-    mkdir venv
     virtualenv -p /usr/bin/python2.7 venv
     venv/bin/pip install tox
 fi

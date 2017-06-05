@@ -2,6 +2,7 @@ import findspark
 findspark.init()  # must happen before importing pyspark
 
 import hashlib  # noqa: E402
+import json  # noqa: E402
 import logging  # noqa: E402
 import os  # noqa: E402
 from pyspark import SparkContext, SparkConf  # noqa: E402
@@ -14,6 +15,12 @@ import sqlite3  # noqa: E402
 def quiet_log4j():
     logger = logging.getLogger('py4j')
     logger.setLevel(logging.WARN)
+
+
+@pytest.fixture
+def fixtures_dir():
+    cur_dir = os.path.dirname(os.path.realpath(__file__))
+    return os.path.join(cur_dir, 'fixtures')
 
 
 @pytest.fixture(scope="session")
@@ -35,7 +42,11 @@ def spark_context(request):
         .setMaster("local[2]")
         .setAppName("pytest-pyspark-local-testing")
         .set('spark.driver.extraClassPath', extraClassPath)
-        .set('spark.executor.extraClassPath', extraClassPath))
+        .set('spark.executor.extraClassPath', extraClassPath)
+        # By default spark will shuffle to 200 partitions, which is
+        # way too many for our small test cases. This cuts execution
+        # time of the tests in half.
+        .set('spark.sql.shuffle.partitions', 4))
     sc = SparkContext(conf=conf)
     yield sc
     sc.stop()
@@ -55,8 +66,10 @@ def hive_context(spark_context):
 
 
 @pytest.fixture()
-def make_requests_session():
+def make_requests_session(fixtures_dir):
     def f(path):
+        if path[0] != '/':
+            path = os.path.join(fixtures_dir, path)
         return MockSession(path)
     return f
 
@@ -64,9 +77,6 @@ def make_requests_session():
 class MockSession(object):
     def __init__(self, fixture_file):
         self._session = None
-        if fixture_file[0] != '/':
-            dir_path = os.path.dirname(os.path.realpath(__file__))
-            fixture_file = os.path.join(dir_path, fixture_file)
         # Use sqlite for storage so we don't have to figure out how
         # multiple pyspark executors write to the same file
         self.sqlite = sqlite3.connect(fixture_file)
@@ -105,3 +115,6 @@ class MockResponse(object):
     def __init__(self, status_code, text):
         self.status_code = status_code
         self.text = text
+
+    def json(self):
+        return json.loads(self.text)

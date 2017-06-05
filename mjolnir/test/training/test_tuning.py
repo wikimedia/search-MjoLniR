@@ -14,7 +14,7 @@ def test_split(spark_context, hive_context):
         # sufficiently large number of queries, or the split wont have
         # enough data for partitions to even out.
         .select(F.lit('foowiki').alias('wikiid'),
-                (F.col('id')/100).cast('int').alias('norm_query')))
+                (F.col('id')/100).cast('int').alias('norm_query_id')))
 
     with_folds = mjolnir.training.tuning.split(df, (0.8, 0.2), num_partitions=4).collect()
 
@@ -27,8 +27,8 @@ def test_split(spark_context, hive_context):
     assert 0.2 == pytest.approx(len(fold_1) / total_len, abs=0.015)
 
     # Check each norm query is only found on one side of the split
-    queries_in_0 = set([row.norm_query for row in fold_0])
-    queries_in_1 = set([row.norm_query for row in fold_1])
+    queries_in_0 = set([row.norm_query_id for row in fold_0])
+    queries_in_1 = set([row.norm_query_id for row in fold_1])
     assert len(queries_in_0.intersection(queries_in_1)) == 0
 
 
@@ -44,7 +44,7 @@ def df_train(spark_context, hive_context):
     return spark_context.parallelize(
         _make_q('abc') + _make_q('def') + _make_q('ghi') + _make_q('jkl')
         + _make_q('mno') + _make_q('pqr') + _make_q('stu')
-    ).toDF(['wikiid', 'norm_query', 'query', 'label', 'features'])
+    ).toDF(['wikiid', 'norm_query_id', 'query', 'label', 'features'])
 
 
 def test_cross_validate_plain_df(df_train):

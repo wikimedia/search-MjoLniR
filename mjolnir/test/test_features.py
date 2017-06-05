@@ -4,7 +4,7 @@ import pyspark.sql
 
 def test_collect(spark_context, hive_context, make_requests_session):
     def session_factory():
-        return make_requests_session('fixtures/requests/test_features.sqlite3')
+        return make_requests_session('requests/test_features.sqlite3')
 
     r = pyspark.sql.Row('wikiid', 'query', 'hit_page_id')
     source_data = {

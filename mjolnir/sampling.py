@@ -83,7 +83,7 @@ def _calc_splits(df, num_buckets=100):
 
 
 def _sample_queries(df, wikis, num_buckets=100, samples_desired=10000, seed=None):
-    """Sample down a unique list of (wiki, norm_query, num_sessions)
+    """Sample down a unique list of (wiki, norm_query_id, num_sessions)
 
     Given a dataset of unique queries, sample it down to samples_desired per wiki
     maintaining the distribution of queries with many sessions and queries with
@@ -98,7 +98,7 @@ def _sample_queries(df, wikis, num_buckets=100, samples_desired=10000, seed=None
     Parameters
     ----------
     df : pyspark.sql.DataFrame
-        Input dataframe containing (wiki, norm_query, num_sessions) fields.
+        Input dataframe containing (wiki, norm_query_id, num_sessions) fields.
     wikis : list of strings
         List of wikis to generate samples for.
     num_buckets : int, optional
@@ -113,7 +113,7 @@ def _sample_queries(df, wikis, num_buckets=100, samples_desired=10000, seed=None
     Returns
     -------
     pyspark.sql.DataFrame
-        The set of sampled (wikiid, norm_query) rows desired with approximately
+        The set of sampled (wikiid, norm_query_id) rows desired with approximately
         samples_desired rows per wikiid.
     """
 
@@ -150,7 +150,7 @@ def _sample_queries(df, wikis, num_buckets=100, samples_desired=10000, seed=None
         if idx == len(splits):
             raise ValueError
         split = splits[idx]
-        return ((row.wikiid, split), (row.wikiid, row.norm_query))
+        return ((row.wikiid, split), (row.wikiid, row.norm_query_id))
 
     return (
         df.rdd
@@ -160,7 +160,7 @@ def _sample_queries(df, wikis, num_buckets=100, samples_desired=10000, seed=None
         .sampleByKey(withReplacement=False, fractions=wiki_fractions, seed=seed)
         # Convert the PairRDD back into a dataframe.
         .map(lambda (key, row): row)
-        .toDF(['wikiid', 'norm_query']))
+        .toDF(['wikiid', 'norm_query_id']))
 
 
 def sample(df, wikis, seed=None, queries_per_wiki=10000,
@@ -199,15 +199,15 @@ def sample(df, wikis, seed=None, queries_per_wiki=10000,
         The input DataFrame with all columns it origionally had sampled down
         based on the provided constraints.
     """
-    mjolnir.spark.assert_columns(df, ['wikiid', 'norm_query', 'session_id', 'q_by_ip_day'])
+    mjolnir.spark.assert_columns(df, ['wikiid', 'norm_query_id', 'session_id', 'q_by_ip_day'])
 
-    # Aggregate down into a unique set of (wikiid, norm_query) and add in a
+    # Aggregate down into a unique set of (wikiid, norm_query_id) and add in a
     # count of the number of unique sessions per pair. Filter on the number
     # of sessions as we need some minimum number of sessions per query to train
     # the DBN
     df_queries_unique = (
         df
-        .groupBy('wikiid', 'norm_query')
+        .groupBy('wikiid', 'norm_query_id')
         .agg(F.countDistinct('session_id').alias('num_sessions'))
         # This rdd will be used multiple times through strata generation and
         # sampling. Cache to not duplicate the filtering and aggregation work.
@@ -217,4 +217,4 @@ def sample(df, wikis, seed=None, queries_per_wiki=10000,
     df_queries_sampled = _sample_queries(df_queries_unique, wikis, samples_desired=queries_per_wiki, seed=seed)
 
     # Select the rows chosen by sampling from the filtered df
-    return df.join(df_queries_sampled, how='inner', on=['wikiid', 'norm_query'])
+    return df.join(df_queries_sampled, how='inner', on=['wikiid', 'norm_query_id'])

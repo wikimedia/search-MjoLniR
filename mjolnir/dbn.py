@@ -62,7 +62,7 @@ def _gen_dbn_input(iterator):
     ----------
     iterator : ???
         iterator over pyspark.sql.Row. Each row must have a wikiid,
-        norm_query, and list of hits each containing hit_position,
+        norm_query_id, and list of hits each containing hit_position,
         hit_page_id and clicked.
 
     Yields
@@ -81,7 +81,7 @@ def _gen_dbn_input(iterator):
             clicks.append(hit.clicked)
         yield '\t'.join([
             '0',  # unused identifier
-            row.norm_query,  # group the session belongs to
+            str(row.norm_query_id),  # group the session belongs to
             row.wikiid,  # region
             '0',  # intent weight
             json.dumps(results),  # hits displayed in session
@@ -104,18 +104,21 @@ def _extract_labels_from_dbn(model, reader):
     Returns
     -------
     list of tuples
-        List of four value tuples each containing wikiid, norm_query,
+        List of four value tuples each containing wikiid, norm_query_id,
         hit_page_id and relevance.
     """
     # reader converted all the page ids into an internal id, flip the map so we
     # can change them back. Not the most memory efficient, but it will do.
     uid_to_url = {uid: url for url, uid in reader.url_to_id.iteritems()}
     rows = []
-    for (norm_query, wikiid), qid in reader.query_to_id.iteritems():
+    for (norm_query_id, wikiid), qid in reader.query_to_id.iteritems():
+        # clickmodels required the group key to be a string, convert back
+        # to an int to match input data
+        norm_query_id = int(norm_query_id)
         for uid, data in model.urlRelevances[False][qid].iteritems():
             relevance = data['a'] * data['s']
             hit_page_id = int(uid_to_url[uid])
-            rows.append((wikiid, norm_query, hit_page_id, relevance))
+            rows.append((wikiid, norm_query_id, hit_page_id, relevance))
     return rows
 
 
@@ -123,13 +126,13 @@ def train(df, dbn_config, num_partitions=200):
     """Generate relevance labels for the provided dataframe.
 
     Process the provided data frame to generate relevance scores for
-    all provided pairs of (wikiid, norm_query, hit_page_id). The input
+    all provided pairs of (wikiid, norm_query_id, hit_page_id). The input
     DataFrame must have a row per hit_page_id that was seen by a session.
 
     Parameters
     ----------
     df : pyspark.sql.DataFrame
-        User click logs with columns wikiid, norm_query, session_id,
+        User click logs with columns wikiid, norm_query_id, session_id,
         hit_page_id, hit_position, clicked.
     dbn_config : dict
         Configuration needed by the DBN. See clickmodels documentation for more
@@ -143,9 +146,9 @@ def train(df, dbn_config, num_partitions=200):
     Returns
     -------
     spark.sql.DataFrame
-        DataFrame with columns wikiid, norm_query, hit_page_id, relevance.
+        DataFrame with columns wikiid, norm_query_id, hit_page_id, relevance.
     """
-    mjolnir.spark.assert_columns(df, ['wikiid', 'norm_query', 'session_id',
+    mjolnir.spark.assert_columns(df, ['wikiid', 'norm_query_id', 'session_id',
                                       'hit_page_id', 'hit_position', 'clicked'])
 
     def train_partition(iterator):
@@ -161,7 +164,7 @@ def train(df, dbn_config, num_partitions=200):
         Returns
         -------
         list of tuples
-            List of (wikiid, norm_query, hit_page_id, relevance) tuples.
+            List of (wikiid, norm_query_id, hit_page_id, relevance) tuples.
         """
         reader = InputReader(dbn_config['MIN_DOCS_PER_QUERY'],
                              dbn_config['MAX_DOCS_PER_QUERY'],
@@ -177,18 +180,18 @@ def train(df, dbn_config, num_partitions=200):
 
     return (
         df
-        # group and collect up the hits for individual (wikiid, norm_query,
+        # group and collect up the hits for individual (wikiid, norm_query_id,
         # session_id) tuples to match how the dbn expects to receive data.
-        .groupby('wikiid', 'norm_query', 'session_id')
+        .groupby('wikiid', 'norm_query_id', 'session_id')
         .agg(F.collect_list(F.struct('hit_position', 'hit_page_id', 'clicked')).alias('hits'))
         # Partition into small batches ensuring that all matching (wikiid,
-        # norm_query) rows end up on the same partition.
+        # norm_query_id) rows end up on the same partition.
         # TODO: The above groupby and this repartition both cause a shuffle, is
         # it possible to make that a single shuffle? Could push the final level
         # of grouping into python, but that could just as well end up worse?
-        .repartition(num_partitions, 'wikiid', 'norm_query')
+        .repartition(num_partitions, 'wikiid', 'norm_query_id')
         # Run each partition through the DBN to generate relevance scores.
         .rdd.mapPartitions(train_partition)
         # Convert the rdd of tuples back into a DataFrame so the fields all
         # have a name.
-        .toDF(['wikiid', 'norm_query', 'hit_page_id', 'relevance']))
+        .toDF(['wikiid', 'norm_query_id', 'hit_page_id', 'relevance']))

@@ -1,33 +1,33 @@
-{"wikiid": "foowiki", "norm_query": "test", "session_id": "abc", "hit_page_id": 1111, "hit_position": 1, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "test", "session_id": "abc", "hit_page_id": 2222, "hit_position": 2, "clicked": true}
-{"wikiid": "foowiki", "norm_query": "test", "session_id": "abc", "hit_page_id": 3333, "hit_position": 3, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "test", "session_id": "abc", "hit_page_id": 4444, "hit_position": 4, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 12345, "session_id": "abc", "hit_page_id": 1111, "hit_position": 1, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 12345, "session_id": "abc", "hit_page_id": 2222, "hit_position": 2, "clicked": true}
+{"wikiid": "foowiki", "norm_query_id": 12345, "session_id": "abc", "hit_page_id": 3333, "hit_position": 3, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 12345, "session_id": "abc", "hit_page_id": 4444, "hit_position": 4, "clicked": false}
 
-{"wikiid": "foowiki", "norm_query": "test", "session_id": "def", "hit_page_id": 1111, "hit_position": 1, "clicked": true}
-{"wikiid": "foowiki", "norm_query": "test", "session_id": "def", "hit_page_id": 2222, "hit_position": 2, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "test", "session_id": "def", "hit_page_id": 3333, "hit_position": 3, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "test", "session_id": "def", "hit_page_id": 4444, "hit_position": 4, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 12345, "session_id": "def", "hit_page_id": 1111, "hit_position": 1, "clicked": true}
+{"wikiid": "foowiki", "norm_query_id": 12345, "session_id": "def", "hit_page_id": 2222, "hit_position": 2, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 12345, "session_id": "def", "hit_page_id": 3333, "hit_position": 3, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 12345, "session_id": "def", "hit_page_id": 4444, "hit_position": 4, "clicked": false}
 
-{"wikiid": "foowiki", "norm_query": "test", "session_id": "ghi", "hit_page_id": 1111, "hit_position": 1, "clicked": true}
-{"wikiid": "foowiki", "norm_query": "test", "session_id": "ghi", "hit_page_id": 2222, "hit_position": 2, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "test", "session_id": "ghi", "hit_page_id": 3333, "hit_position": 3, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "test", "session_id": "ghi", "hit_page_id": 4444, "hit_position": 4, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 12345, "session_id": "ghi", "hit_page_id": 1111, "hit_position": 1, "clicked": true}
+{"wikiid": "foowiki", "norm_query_id": 12345, "session_id": "ghi", "hit_page_id": 2222, "hit_position": 2, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 12345, "session_id": "ghi", "hit_page_id": 3333, "hit_position": 3, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 12345, "session_id": "ghi", "hit_page_id": 4444, "hit_position": 4, "clicked": false}
 
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "abc", "hit_page_id": 1111, "hit_position": 1, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "abc", "hit_page_id": 2222, "hit_position": 2, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "abc", "hit_page_id": 3333, "hit_position": 3, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "abc", "hit_page_id": 4444, "hit_position": 4, "clicked": true}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "abc", "hit_page_id": 1111, "hit_position": 1, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "abc", "hit_page_id": 2222, "hit_position": 2, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "abc", "hit_page_id": 3333, "hit_position": 3, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "abc", "hit_page_id": 4444, "hit_position": 4, "clicked": true}
 
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "def", "hit_page_id": 1111, "hit_position": 1, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "def", "hit_page_id": 2222, "hit_position": 2, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "def", "hit_page_id": 3333, "hit_position": 3, "clicked": true}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "def", "hit_page_id": 4444, "hit_position": 4, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "def", "hit_page_id": 1111, "hit_position": 1, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "def", "hit_page_id": 2222, "hit_position": 2, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "def", "hit_page_id": 3333, "hit_position": 3, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "def", "hit_page_id": 4444, "hit_position": 4, "clicked": true}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "def", "hit_page_id": 1111, "hit_position": 1, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "def", "hit_page_id": 2222, "hit_position": 2, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "def", "hit_page_id": 3333, "hit_position": 3, "clicked": true}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "def", "hit_page_id": 4444, "hit_position": 4, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "def", "hit_page_id": 1111, "hit_position": 1, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "def", "hit_page_id": 2222, "hit_position": 2, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "def", "hit_page_id": 3333, "hit_position": 3, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "def", "hit_page_id": 4444, "hit_position": 4, "clicked": true}
 
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "ghi", "hit_page_id": 1111, "hit_position": 1, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "ghi", "hit_page_id": 2222, "hit_position": 2, "clicked": true}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "ghi", "hit_page_id": 3333, "hit_position": 3, "clicked": false}
-{"wikiid": "foowiki", "norm_query": "zomg", "session_id": "ghi", "hit_page_id": 4444, "hit_position": 4, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "ghi", "hit_page_id": 1111, "hit_position": 1, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "ghi", "hit_page_id": 2222, "hit_position": 2, "clicked": true}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "ghi", "hit_page_id": 3333, "hit_position": 3, "clicked": false}
+{"wikiid": "foowiki", "norm_query_id": 23456, "session_id": "ghi", "hit_page_id": 4444, "hit_position": 4, "clicked": false}

@@ -1,0 +1,99 @@
+"""
+Collect hit page ids for queries from elasticsearch
+"""
+
+import json
+import mjolnir.cirrus
+import mjolnir.spark
+import random
+import requests
+
+
+def _make_es_query(row, top_n):
+    return {
+        "_source": False,
+        "stats": [
+            "mjolnir",
+        ],
+        "size": top_n,
+        "query": mjolnir.cirrus.full_text_query(row.query),
+        "rescore": [mjolnir.cirrus.rescore()],
+    }
+
+
+def _create_bulk_query(rows, indices, top_n):
+    bulk_query = []
+    for row in rows:
+        if row.wikiid in indices:
+            index = indices[row.wikiid]
+        else:
+            # Takes advantage of aliases for the wikiid typically used by
+            # CirrusSearch
+            index = row.wikiid
+        bulk_query.append('{"index": "%s"}' % (index))
+        bulk_query.append(json.dumps(_make_es_query(row, top_n)))
+    return "%s\n" % ('\n'.join(bulk_query))
+
+
+def _handle_response(response):
+    assert response.status_code == 200
+    parsed = response.json()
+    assert 'responses' in parsed, response.text
+    for one_response in parsed['responses']:
+        yield [int(hit['_id']) for hit in one_response['hits']['hits']]
+
+
+def _batch(iterable, n):
+    cur_batch = []
+    for x in iterable:
+        cur_batch.append(x)
+        if len(cur_batch) >= n:
+            yield cur_batch
+            cur_batch = []
+    if len(cur_batch) > 0:
+        yield cur_batch
+
+
+def transform(df, url_list, indices=None, batch_size=30, top_n=5, session_factory=requests.Session):
+    """Collect hit page ids for queries from elasticsearch
+
+    Parameters
+    ----------
+    df : pyspark.sql.DataFrame
+    url_list : list of str
+        List of urls for elasticsearch servers
+    indices : dict, optional
+        Map from wikiid to the elasticsearch index to query. If not provided the wikiid
+        will be used as the index name.
+    batch_size : int
+        Number of queries to issue in a single multi-search
+    top_n : int
+        Number of hits to collect per query
+    session_factory : object
+
+    Returns
+    -------
+    pyspark.sql.DataFrame
+    """
+    mjolnir.spark.assert_columns(df, ['wikiid', 'query', 'norm_query'])
+    if indices is None:
+        indices = {}
+
+    def collect_partition_hit_page_ids(rows):
+        random.shuffle(url_list)
+        url = url_list.pop()
+        with session_factory() as session:
+            for batch_rows in _batch(rows, batch_size):
+                bulk_query = _create_bulk_query(batch_rows, indices, top_n)
+                url, response = mjolnir.cirrus.make_request(session, url, url_list, bulk_query)
+                for row, hit_page_ids in zip(batch_rows, _handle_response(response)):
+                    # Extend the provided row with an extra field. Ideally we would
+                    # instead use a UDF, but that makes re-using a requests session
+                    # difficult. Explicit, rather than row + (hit_page_ids,) to ensure
+                    # ordering matches toDF([...]) call that names them
+                    yield (row.wikiid, row.query, row.norm_query, hit_page_ids)
+
+    return (
+        df
+        .rdd.mapPartitions(collect_partition_hit_page_ids)
+        .toDF(['wikiid', 'query', 'norm_query', 'hit_page_ids']))

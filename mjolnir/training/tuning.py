@@ -30,7 +30,7 @@ def split(df, splits, output_column='fold', num_partitions=100):
     Parameters
     ----------
     df : pyspark.sql.DataFrame
-        Input data frame containing (wikiid, norm_query) columns. If this is
+        Input data frame containing (wikiid, norm_query_id) columns. If this is
         expensive to compute it should be cached, as it will be used twice.
     splits: list
         List of percentages, summing to 1, to split the input dataframe
@@ -51,7 +51,7 @@ def split(df, splits, output_column='fold', num_partitions=100):
     # to normalize instead of fail, but this is good enough.
     assert abs(1 - sum(splits)) < 0.01
 
-    mjolnir.spark.assert_columns(df, ['wikiid', 'norm_query'])
+    mjolnir.spark.assert_columns(df, ['wikiid', 'norm_query_id'])
 
     def split_partition(rows):
         # Current number of items per split
@@ -65,26 +65,26 @@ def split(df, splits, output_column='fold', num_partitions=100):
             for i, percent in enumerate(splits):
                 if split_counts[row.wikiid][i] / processed[row.wikiid] < percent:
                     split_counts[row.wikiid][i] += row.weight
-                    yield (row.wikiid, row.norm_query, i)
+                    yield (row.wikiid, row.norm_query_id, i)
                     break
             # If no split found assign to first split
             else:
                 split_counts[row.wikiid][0] += row.weight
-                yield (row.wikiid, row.norm_query, 0)
+                yield (row.wikiid, row.norm_query_id, 0)
             processed[row.wikiid] += row.weight
 
     df_splits = (
         df
-        .groupBy('wikiid', 'norm_query')
+        .groupBy('wikiid', 'norm_query_id')
         .agg(F.count(F.lit(1)).alias('weight'))
         # Could we guess the correct number of partitions instead? I'm not
         # sure though how it should be decided, and would require taking
         # an extra pass over the data.
         .coalesce(num_partitions)
         .rdd.mapPartitions(split_partition)
-        .toDF(['wikiid', 'norm_query', output_column]))
+        .toDF(['wikiid', 'norm_query_id', output_column]))
 
-    return df.join(df_splits, how='inner', on=['wikiid', 'norm_query'])
+    return df.join(df_splits, how='inner', on=['wikiid', 'norm_query_id'])
 
 
 def group_k_fold(df, num_folds, num_partitions=100, output_column='fold'):

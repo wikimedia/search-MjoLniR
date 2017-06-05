@@ -17,7 +17,7 @@ def test_sampling_selects_all_if_less_than_queries_per_wiki(spark_context, hive_
         ('foo', 'c', 'ccc', 2),
         ('foo', 'd', 'ddd', 2),
         ('foo', 'e', 'eee', 2),
-    ]).toDF(['wikiid', 'norm_query', 'session_id', 'q_by_ip_day'])
+    ]).toDF(['wikiid', 'norm_query_id', 'session_id', 'q_by_ip_day'])
 
     sampled = mjolnir.sampling.sample(df, ['foo'], queries_per_wiki=100,
                                       min_sessions_per_query=1, seed=12345).collect()
@@ -51,7 +51,7 @@ def test_sampling_general_approach(spark_context, hive_context):
                 session_id = "%s_%s_%s" % (wiki, q, str(j))
                 rows.append((wiki, q, session_id, 1))
 
-    df = spark_context.parallelize(rows).toDF(['wikiid', 'norm_query', 'session_id', 'q_by_ip_day'])
+    df = spark_context.parallelize(rows).toDF(['wikiid', 'norm_query_id', 'session_id', 'q_by_ip_day'])
     queries_per_wiki = 100
     df_sampled = mjolnir.sampling.sample(df, [wiki for (wiki, _, _) in wikis],
                                          queries_per_wiki=queries_per_wiki,
@@ -72,11 +72,11 @@ def test_sampling_general_approach(spark_context, hive_context):
 
     # assert correlation between sessions per query
     orig_grouped = (
-        df.groupBy('wikiid', 'norm_query')
+        df.groupBy('wikiid', 'norm_query_id')
         .agg(F.countDistinct('session_id').alias('num_sessions'))
         .collect())
     sampled_grouped = (
-        df_sampled.groupBy('wikiid', 'norm_query')
+        df_sampled.groupBy('wikiid', 'norm_query_id')
         .agg(F.countDistinct('session_id').alias('num_sessions'))
         .collect())
 

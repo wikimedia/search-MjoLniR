@@ -13,6 +13,7 @@ To run:
 import argparse
 import mjolnir.dbn
 import mjolnir.metrics
+import mjolnir.norm_query
 import mjolnir.features
 import mjolnir.sampling
 from pyspark import SparkContext
@@ -45,14 +46,23 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
         .withColumn('hit_page_ids', F.col('hits.pageid'))
         .drop('hits')
         .withColumn('click_page_ids', F.col('clicks.pageid'))
-        .drop('clicks')
-        # Normalize queries using the lucene stemmer
-        .withColumn('norm_query', F.expr('stemmer(query, substring(wikiid, 1, 2))')))
+        .drop('clicks'))
+
+    # Normalize queries into groups of related queries. This helps to have a larger
+    # number of sessions per normalized query to train the DBN on.
+    # Note that df_norm comes back cached
+    df_norm = mjolnir.norm_query.transform(
+        df_clicks,
+        url_list=SEARCH_CLUSTERS[search_cluster],
+        # TODO: While this works for now, at some point we might want to handle
+        # things like multimedia search from commons, and non-main namespace searches.
+        indices={wiki: '%s_content' % (wiki) for wiki in wikis},
+        min_sessions_per_query=min_sessions_per_query)
 
     # Sample to some subset of queries per wiki
     df_sampled = (
         mjolnir.sampling.sample(
-            df_clicks,
+            df_norm,
             wikis=wikis,
             seed=54321,
             queries_per_wiki=queries_per_wiki,
@@ -64,6 +74,10 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
         .withColumn('clicked', F.expr('array_contains(click_page_ids, hit_page_id)'))
         .drop('click_page_ids')
         .cache())
+
+    # materialize df_sampled and unpersist df_norm
+    df_sampled.count()
+    df_norm.unpersist()
 
     # Learn relevances
     df_rel = (
@@ -81,11 +95,11 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
 
     df_all_hits = (
         df_sampled
-        .select('wikiid', 'query', 'norm_query', 'hit_page_id', 'session_id', 'hit_position')
-        .join(df_rel, how='inner', on=['wikiid', 'norm_query', 'hit_page_id'])
+        .select('wikiid', 'query', 'norm_query_id', 'hit_page_id', 'session_id', 'hit_position')
+        .join(df_rel, how='inner', on=['wikiid', 'norm_query_id', 'hit_page_id'])
         .cache())
 
-    # materialize df_all_hits and drop df_sampled
+    # materialize df_all_hits and drop df_sampled, df_norm
     df_all_hits.count()
     df_sampled.unpersist()
 
@@ -95,7 +109,7 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
 
     df_hits = (
         df_all_hits
-        .groupBy('wikiid', 'query', 'norm_query', 'hit_page_id')
+        .groupBy('wikiid', 'query', 'norm_query_id', 'hit_page_id')
         # weight is now the number of times a hit was displayed to a user
         .agg(F.count(F.lit(1)).alias('weight'),
              F.mean('hit_position').alias('hit_position'),
@@ -114,7 +128,7 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
     print 'unweighted ndcg@10: %.4f' % (ndcgAt10)
 
     # Collect features for all known queries. Note that this intentionally
-    # uses query and NOT norm_query. Merge those back into the source hits.
+    # uses query and NOT norm_query_id. Merge those back into the source hits.
     df_features = mjolnir.features.collect(
         df_hits,
         url_list=SEARCH_CLUSTERS[search_cluster],

@@ -4,6 +4,7 @@ Integration for collecting feature vectors from elasticsearch
 
 import json
 import math
+import mjolnir.cirrus
 import mjolnir.spark
 from pyspark.ml.linalg import Vectors
 from pyspark.sql import functions as F
@@ -214,21 +215,6 @@ def _create_bulk_query(row, indices, feature_definitions):
     return "%s\n" % ('\n'.join(bulk_query))
 
 
-def _make_request(session, url, url_list, bulk_query, num_retries=5):
-    failures = 0
-    while True:
-        try:
-            return url, session.get(url, data=bulk_query)
-        except requests.ConnectionError as e:
-            failures += 1
-            if failures >= num_retries or len(url_list) == 0:
-                raise e
-            # TODO: This is only desirable if url_list is a list of actual
-            # servers. If the url_list is a loadbalancer like LVS then we
-            # want to keep using the existing url.
-            url = url_list.pop()
-
-
 def _handle_response(response, num_features, hit_page_ids):
     """Parse an elasticsearch response from requests into a feature vector.
 
@@ -332,7 +318,7 @@ def collect(df, url_list, feature_definitions, indices=None, session_factory=req
         with session_factory() as session:
             for row in rows:
                 bulk_query = _create_bulk_query(row, indices, feature_definitions)
-                url, response = _make_request(session, url, url_list, bulk_query)
+                url, response = mjolnir.cirrus.make_request(session, url, url_list, bulk_query)
                 for hit_page_id, features in _handle_response(response, num_features, row.hit_page_ids):
                     # nan features mean some sort of failure, drop the row.
                     # TODO: Add some accumulator to count and report dropped rows?
