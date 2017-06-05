@@ -513,16 +513,22 @@ def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
     # much time as all previous steps combined, and then some, so it can be disabled
     # with target_node_evalations of None.
     if target_node_evaluations is None:
-        trials_final = None
+        trials_trees = None
+        trials_final = trials_noise
     else:
         space['num_rounds'] = target_node_evaluations / space['max_depth']
         # TODO: Is 15 steps right amount? too many? too few? This generally
         # uses a large number of trees which takes 10 to 20 minutes per evaluation.
         # That means evaluating 15 points is 2.5 to 5 hours.
         space['eta'] = hyperopt.hp.choice('eta', np.linspace(0.01, 0.3, 15))
-        best_final, trials_final = eval_space_grid(space)
-        space['eta'] = _estimate_best_eta(trials_final)
+        best_trees, trials_trees = eval_space_grid(space)
+        trials_final = trials_trees
+        space['eta'] = _estimate_best_eta(trials_trees)
         pprint.pprint(space)
+
+    best_trial = np.argmin(trials_final.losses())
+    loss = trials_final.losses()[best_trial]
+    true_loss = trials_final.results[best_trial].get('true_loss')
 
     return {
         'trials': {
@@ -530,7 +536,11 @@ def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
             'complexity': trials_complexity,
             'gamma': trials_gamma,
             'noise': trials_noise,
-            'final': trials_final,
+            'trees': trials_trees,
         },
         'params': space,
+        'metrics': {
+            'test': -loss,
+            'train': -loss + true_loss
+        }
     }

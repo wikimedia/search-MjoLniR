@@ -10,6 +10,7 @@ To run:
         mjolnir/cli/data_pipeline.py
 """
 
+import argparse
 import mjolnir.dbn
 import mjolnir.metrics
 import mjolnir.features
@@ -18,18 +19,21 @@ from pyspark import SparkContext
 from pyspark.sql import HiveContext
 from pyspark.sql import functions as F
 
+SEARCH_CLUSTERS = {
+    'eqiad': ['http://elastic%d.eqiad.wmnet:9200/_msearch' % (i) for i in range(1017, 1052)],
+    'codfw': ['http://elastic%d.codfw.wmnet:9200/_msearch' % (i) for i in range(2001, 2035)],
+}
 
-def main(sc, sqlContext):
+
+def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
+         min_sessions_per_query, search_cluster):
+    # TODO: Should this jar have to be provided on the command line instead?
     sqlContext.sql("ADD JAR /mnt/hdfs/wmf/refinery/current/artifacts/refinery-hive.jar")
     sqlContext.sql("CREATE TEMPORARY FUNCTION stemmer AS 'org.wikimedia.analytics.refinery.hive.StemmerUDF'")
 
-    # TODO: Should be CLI option
-    wikis = ['enwiki', 'dewiki', 'ruwiki', 'frwiki']
-
     # Load click data from HDFS
     df_clicks = (
-        sqlContext.read.parquet(
-            'hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*')
+        sqlContext.read.parquet(input_dir)
         # Limit to the wikis we are working against
         .where(mjolnir.sampling._array_contains(F.array(map(F.lit, wikis)), F.col('wikiid')))
         # Clicks and hits contains a bunch of useful debugging data, but we don't
@@ -48,8 +52,8 @@ def main(sc, sqlContext):
             df_clicks,
             wikis=wikis,
             seed=54321,
-            queries_per_wiki=20000,
-            min_sessions_per_query=10)
+            queries_per_wiki=queries_per_wiki,
+            min_sessions_per_query=min_sessions_per_query)
         # Explode source into a row per displayed hit
         .select('*', F.expr("posexplode(hit_page_ids)").alias('hit_position', 'hit_page_id'))
         .drop('hit_page_ids')
@@ -110,8 +114,9 @@ def main(sc, sqlContext):
     # uses query and NOT norm_query. Merge those back into the source hits.
     df_features = mjolnir.features.collect(
         df_hits,
-        # TODO: Should be a CLI option of some sort
-        url_list=['http://elastic%d.codfw.wmnet:9200/_msearch' % (i) for i in range(2001, 2035)],
+        url_list=SEARCH_CLUSTERS[search_cluster],
+        # TODO: While this works for now, at some point we might want to handle
+        # things like multimedia search from commons, and non-main namespace searches.
         indices={wiki: '%s_content' % (wiki) for wiki in wikis},
         # TODO: If we are going to do multiple wikis, this probably needs different features
         # per wiki? At a minimum trying to include useful templates as features will need
@@ -126,13 +131,40 @@ def main(sc, sqlContext):
             'ndcgAt10': ndcgAt10,
         })))
 
-    df_hits_with_features.write.parquet('hdfs://analytics-hadoop/user/ebernhardson/mjolnir/hits_with_features')
+    df_hits_with_features.write.parquet(output_dir)
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='...')
+    parser.add_argument(
+        '-i', '--input', dest='input_dir', type=str,
+        default='hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*',
+        help='Input path, prefixed with hdfs://, to query and click data')
+    parser.add_argument(
+        '-q', '--queries-per-wiki', dest='queries_per_wiki', type=int, default=20000,
+        help='The number of normalized queries, per wiki, to operate on')
+    parser.add_argument(
+        '-s', '--min-sessions', dest='min_sessions_per_query', type=int, default=10,
+        help='The minimum number of sessions per normalized query')
+    parser.add_argument(
+        '-c', '--search-cluster', dest='search_cluster', type=str, default='codfw',
+        choices=SEARCH_CLUSTERS.keys(), help='Search cluster to source features from')
+    parser.add_argument(
+        '-o', '--output-dir', dest='output_dir', type=str, required=True,
+        help='Output path, prefixed with hdfs://, to write resulting dataframe to')
+    parser.add_argument(
+        'wikis', metavar='wiki', type=str, nargs='+',
+        help='A wiki to generate features and labels for')
+
+    args = parser.parse_args()
+    return dict(vars(args))
 
 
 if __name__ == "__main__":
+    args = parse_arguments()
     sc = SparkContext(appName="MLR: data collection pipeline")
     # spark info logging is incredibly spammy. Use warn to have some hope of
     # human decipherable output
     sc.setLogLevel('WARN')
     sqlContext = HiveContext(sc)
-    main(sc, sqlContext)
+    main(sc, sqlContext, **args)
