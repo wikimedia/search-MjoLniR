@@ -305,6 +305,17 @@ class XGBoostModel(object):
         score = self._j_xgb_model.eval(j_rdd, 'test', None, 0, False, j_groups)
         return float(score.split('=')[1].strip())
 
+    def saveModelAsHadoopFile(self, sc, path):
+        j_sc = sc._jvm.org.apache.spark.api.java.JavaSparkContext.toSparkContext(sc._jsc)
+        self._j_xgb_model.saveModelAsHadoopFile(path, j_sc)
+
+    @staticmethod
+    def loadModelFromHadoopFile(sc, path):
+        j_sc = sc._jvm.org.apache.spark.api.java.JavaSparkContext.toSparkContext(sc._jsc)
+        j_xgb_model = sc._jvm.ml.dmlc.xgboost4j.scala.spark.XGBoost.loadModelFromHadoopFile(
+            path, j_sc)
+        return XGBoostModel(j_xgb_model)
+
 
 # from https://gist.github.com/hernamesbarbara/7238736
 def _loess_predict(X, y_tr, X_pred, bandwidth):
