@@ -1,4 +1,4 @@
-__name__ = "MjoLniR"
+__name__ = "mjolnir"
 __version__ = "0.0.1"
 __author__ = "Wikimedia Search Team"
 __author_email__ = "discovery@lists.wikimedia.org"
