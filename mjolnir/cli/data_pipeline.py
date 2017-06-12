@@ -36,6 +36,9 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
         sqlContext.read.parquet(input_dir)
         # Limit to the wikis we are working against
         .where(mjolnir.sampling._array_contains(F.array(map(F.lit, wikis)), F.col('wikiid')))
+        # Drop requests from 'too busy' IP's. These are plausibly bots, or maybe just proxys.
+        .where(F.col('q_by_ip_day') < 50)
+        .drop('q_by_ip_day')
         # Clicks and hits contains a bunch of useful debugging data, but we don't
         # need any of that here. Save a bunch of memory by only working with
         # lists of page ids

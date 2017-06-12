@@ -192,11 +192,6 @@ def sample(df, wikis, seed=None, queries_per_wiki=10000,
         Require each chosen query to have at least this many sessions per
         query. This is necessary To train the DBN later in the pipeline.
         (Default: 35)
-    max_queries_per_ip_day : int, optional
-        Requires each chosen query to have at most this many full text searches
-        issued from it's IP on the day the query was issued. This Filters out
-        high volume users which are quite possibly bots or other non-standard
-        sessions. (Default: 50)
 
     Returns
     -------
@@ -206,27 +201,14 @@ def sample(df, wikis, seed=None, queries_per_wiki=10000,
     """
     mjolnir.spark.assert_columns(df, ['wikiid', 'norm_query', 'session_id', 'q_by_ip_day'])
 
-    # Filter down the input into the wikis we care about and remove sessions
-    # from overly active users, which are presumably bots.
-    df_filtered = (
-        df
-        .where(_array_contains(F.array([F.lit(wiki) for wiki in wikis]),
-                               F.col('wikiid')))
-        .where(df.q_by_ip_day <= max_queries_per_ip_day)
-        .drop(df.q_by_ip_day))
-
     # Aggregate down into a unique set of (wikiid, norm_query) and add in a
     # count of the number of unique sessions per pair. Filter on the number
     # of sessions as we need some minimum number of sessions per query to train
     # the DBN
     df_queries_unique = (
-        df_filtered
+        df
         .groupBy('wikiid', 'norm_query')
-        # To make QuantileDiscretizer happy later on, we need
-        # to cast this to a double. Can be removed in 2.x which
-        # accepts anything numeric.
-        .agg(F.countDistinct('session_id').cast('double').alias('num_sessions'))
-        .where(F.col('num_sessions') >= min_sessions_per_query)
+        .agg(F.countDistinct('session_id').alias('num_sessions'))
         # This rdd will be used multiple times through strata generation and
         # sampling. Cache to not duplicate the filtering and aggregation work.
         # Spark will eventually throw this away in an LRU fashion.
@@ -235,4 +217,4 @@ def sample(df, wikis, seed=None, queries_per_wiki=10000,
     df_queries_sampled = _sample_queries(df_queries_unique, wikis, samples_desired=queries_per_wiki, seed=seed)
 
     # Select the rows chosen by sampling from the filtered df
-    return df_filtered.join(df_queries_sampled, how='inner', on=['wikiid', 'norm_query'])
+    return df.join(df_queries_sampled, how='inner', on=['wikiid', 'norm_query'])
