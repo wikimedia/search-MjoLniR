@@ -330,7 +330,7 @@ def _loess_predict(X, y_tr, X_pred, bandwidth):
     return np.array(y_te)
 
 
-def _estimate_best_eta(trials, length=1e4):
+def _estimate_best_eta(trials, source_etas, length=1e4):
     """Estimate the best eta from a small sample of trials
 
     The final stage of training can take quite some time, at 10 to 15 minutes
@@ -346,6 +346,10 @@ def _estimate_best_eta(trials, length=1e4):
     ----------
     trials : hyperopt.Trials
         Trials object that was used to tune only eta
+    source_etas : list of float
+        For some reason hyperopt.hp.choice doesn't include the actual value in
+        the trials object, only the index. The results as indexed into this
+        list to get the actual eta tested.
     length : int
         Number of eta points to estimate
 
@@ -357,7 +361,7 @@ def _estimate_best_eta(trials, length=1e4):
 
     ndcg10 = np.asarray([-l for l in trials.losses()])
     true_loss = np.asarray([r.get('true_loss') for r in trials.results])
-    eta = np.asarray(trials.vals['eta'])
+    eta = np.asarray([source_etas[v] for v in trials.vals['eta']])
 
     # Range of predictions we want to make
     eta_pred = np.arange(np.min(eta), np.max(eta), (np.max(eta) - np.min(eta)) / length)
@@ -448,13 +452,13 @@ def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
                 print 'best %s: %f' % (k, best[k])
         return best, trials
 
-    # Baseline parameters to start with. Roughly tuned by what has
-    # worked in the past.
+    # Baseline parameters to start with. Roughly tuned by what has worked in
+    # the past. These vary though depending on number of training samples
     space = {
         'objective': 'rank:ndcg',
         'eval_metric': 'ndcg@10',
         'num_rounds': 100,
-        'min_child_weight': 400,
+        'min_child_weight': 200,
         'max_depth': 6,
         'gamma': 0,
         'subsample': 1.0,
@@ -464,9 +468,10 @@ def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
     # Find an eta that gives good results with only 100 trees. This is done
     # so most of the tuning is relatively quick. A final step will re-tune
     # eta with more trees.
-    space['eta'] = hyperopt.hp.choice('eta', np.linspace(0.3, 0.7, 15))
+    etas = np.linspace(0.3, 0.7, 30)
+    space['eta'] = hyperopt.hp.choice('eta', etas)
     best_eta, trials_eta = eval_space_grid(space)
-    space['eta'] = _estimate_best_eta(trials_eta)
+    space['eta'] = _estimate_best_eta(trials_eta, etas)
     pprint.pprint(space)
 
     # Determines the size of each tree. Larger trees increase model complexity
@@ -528,13 +533,14 @@ def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
         trials_final = trials_noise
     else:
         space['num_rounds'] = target_node_evaluations / space['max_depth']
-        # TODO: Is 15 steps right amount? too many? too few? This generally
+        # TODO: Is 30 steps right amount? too many? too few? This generally
         # uses a large number of trees which takes 10 to 20 minutes per evaluation.
         # That means evaluating 15 points is 2.5 to 5 hours.
-        space['eta'] = hyperopt.hp.choice('eta', np.linspace(0.01, 0.3, 15))
+        etas = np.linspace(0.01, 0.3, 30)
+        space['eta'] = hyperopt.hp.choice('eta', etas)
         best_trees, trials_trees = eval_space_grid(space)
         trials_final = trials_trees
-        space['eta'] = _estimate_best_eta(trials_trees)
+        space['eta'] = _estimate_best_eta(trials_trees, etas)
         pprint.pprint(space)
 
     best_trial = np.argmin(trials_final.losses())

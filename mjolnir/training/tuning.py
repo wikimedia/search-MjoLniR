@@ -289,7 +289,7 @@ class _GridSearchAlgo(object):
             vals = dict(zip(self.grid_keys, [[v] for v in self.grids.pop()]))
             new_result = domain.new_result()
             new_misc = dict(tid=new_id, cmd=domain.cmd, workdir=domain.workdir,
-                            idxs=zip(self.grid_keys, [[new_id]] * len(vals)),
+                            idxs=dict(zip(self.grid_keys, [[new_id]] * len(vals))),
                             vals=vals)
             rval.extend(trials.new_trial_docs([new_id],
                         [None], [new_result], [new_misc]))
@@ -300,6 +300,9 @@ class _GridSearchAlgo(object):
 
 def grid_search(df, train_func, space, num_folds=5, num_fold_partitions=100,
                 num_cv_jobs=5, num_workers=5):
+    # TODO: While this tried to look simple, hyperopt is a bit odd to integrate
+    # with this directly. Perhaps implement naive gridsearch directly instead
+    # of through hyperopt.
     algo = _GridSearchAlgo(space)
     return hyperopt(df, train_func, space, algo.max_evals, algo, num_folds,
                     num_fold_partitions, num_cv_jobs, num_workers)
