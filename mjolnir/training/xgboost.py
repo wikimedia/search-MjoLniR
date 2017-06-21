@@ -309,11 +309,20 @@ class XGBoostModel(object):
         j_sc = sc._jvm.org.apache.spark.api.java.JavaSparkContext.toSparkContext(sc._jsc)
         self._j_xgb_model.saveModelAsHadoopFile(path, j_sc)
 
+    def saveModelAsLocalFile(self, path):
+        self._j_xgb_model.booster().saveModel(path)
+
     @staticmethod
     def loadModelFromHadoopFile(sc, path):
         j_sc = sc._jvm.org.apache.spark.api.java.JavaSparkContext.toSparkContext(sc._jsc)
         j_xgb_model = sc._jvm.ml.dmlc.xgboost4j.scala.spark.XGBoost.loadModelFromHadoopFile(
             path, j_sc)
+        return XGBoostModel(j_xgb_model)
+
+    @staticmethod
+    def loadModelFromLocalFile(sc, path):
+        j_xgb_booster = sc._jvm.ml.dmlc.xgboost4j.scala.XGBoost.loadModel(path)
+        j_xgb_model = sc._jvm.ml.dmlc.xgboost4j.scala.spark.XGBoostRegressionModel(j_xgb_booster)
         return XGBoostModel(j_xgb_model)
 
 
@@ -484,7 +493,7 @@ def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
     # back against tree depth, preventing the tree from growing if a potential
     # split applies to too few samples. ndcg@10 on the test set increases linearly
     # with smaller min_child_weight, but true_loss also increases.
-    space['min_child_weight'] = hyperopt.hp.qloguniform('min_child_weight', np.log(10), np.log(2000), 10)
+    space['min_child_weight'] = hyperopt.hp.qloguniform('min_child_weight', np.log(10), np.log(500), 10)
 
     # TODO: Somewhat similar to eta, as min_child_weight decreases the
     # true_loss increases. Need to figure out how to choose the max_depth that

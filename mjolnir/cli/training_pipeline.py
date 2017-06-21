@@ -71,10 +71,15 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, target_node_evaluations,
         # The final `q` indicates all features are quantitative values (floats).
         features = df_hits_with_features.schema['features'].metadata['features']
         feat_map = ["%d %s q" % (i, fname) for i, fname in enumerate(features)]
-        model_output = os.path.join(output_dir, 'model_%s.json' % (wiki))
-        with open(model_output, 'wb') as f:
+        json_model_output = os.path.join(output_dir, 'model_%s.json' % (wiki))
+        with open(json_model_output, 'wb') as f:
             f.write(model.dump("\n".join(feat_map)))
-            print 'Wrote xgboost json model to %s' % (model_output)
+            print 'Wrote xgboost json model to %s' % (json_model_output)
+        # Write out the xgboost binary format as well, so it can be re-loaded
+        # and evaluated
+        xgb_model_output = os.path.join(output_dir, 'model_%s.xgb' % (wiki))
+        model.saveModelAsLocalFile(xgb_model_output)
+        print 'Wrote xgboost binary model to %s' % (xgb_model_output)
         print ''
 
 

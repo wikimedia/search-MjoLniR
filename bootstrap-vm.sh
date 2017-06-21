@@ -69,11 +69,11 @@ if [ ! -d /srv/xgboost ]; then
     git clone https://github.com/dmlc/xgboost.git /srv/xgboost
 fi
 cd /srv/xgboost
-# We need d3b866e, da58f34 and ccccf8a0 from master which don't cherry-pick
+# We need d3b866e, da58f34, ccccf8a0 and 197a9eac from master which don't cherry-pick
 # cleanly back to the last released tag (v0.60), so use a hardcoded version of
 # master branch that we think works.
 if [ ! -f /srv/xgboost/jvm-packages/xgboost4j-spark/target/xgboost4j-spark-0.7.jar ]; then
-    git checkout ccccf8a0
+    git checkout 197a9eac
     git submodule update --init --recursive
     cd jvm-packages
     # The test suite requires 4 cores or it gets stuck. Not ideal but skip them for
