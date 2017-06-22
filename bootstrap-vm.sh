@@ -2,6 +2,12 @@
 
 set -e
 
+apt install -q -y software-properties-common
+# Confluent is needed for installing kafka, which requires zookeeper and some other stuff
+# This intentionally uses an older version to get kafka 0.9, to match production
+sudo add-apt-repository "deb [arch=amd64] http://packages.confluent.io/deb/2.0 stable main"
+wget -qO - https://packages.confluent.io/deb/2.0/archive.key | sudo apt-key add -
+
 # Need backports for openjdk-8
 echo "deb http://ftp.debian.org/debian jessie-backports main contrib" > /etc/apt/sources.list.d/backports.list
 
@@ -9,6 +15,7 @@ apt-get update
 apt-get install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
     openjdk-8-jre-headless \
     openjdk-8-jdk \
+    confluent-kafka-2.11.7 \
     ca-certificates-java='20161107~bpo8+1' \
     python-virtualenv \
     git-core \
@@ -23,6 +30,41 @@ apt-get install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="-
 # While we only asked for java 8, 7 was installed as well. switch over the
 # alternative. TODO: Do we need anything else?
 update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
+
+# Setup kafka and zookeeper to start on boot. For whatever reason
+# confluent doesn't set this up for us.
+echo > /lib/systemd/system/zookeeper.service <<EOD
+[Unit]
+Description="zookeeper"
+
+[Service]
+Environment="KAFKA_HEAP_OPTS=-Xmx256m -Xms256m"
+ExecStart=/usr/bin/zookeeper-server-start /etc/kafka/zookeeper.properties
+ExecStop=/usr/bin/zookeeper-server-stop
+
+[Install]
+WantedBy=multi-user.target
+EOD
+echo > /lib/systemd/system/kafka.service <<EOD
+[Unit]
+Description="kafka"
+After=zookeeper.service
+Wants=zookeeper.service
+
+[Service]
+Environment="KAFKA_HEAP_OPTS=-Xmx256m -Xms256m"
+ExecStart=/usr/bin/kafka-server-start /etc/kafka/server.properties
+ExecStop=/usr/bin/kafka-server-stop
+
+[Install]
+WantedBy=multi-user.target
+EOD
+
+systemctl daemon-reload
+systemctl enable zookeeper.service
+systemctl enable kafka.service
+systemctl start zookeeper.service
+systemctl start kafka.service
 
 # Grab spark 2.1.0 and put it in /opt
 cd /opt

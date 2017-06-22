@@ -140,6 +140,14 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <!-- While nothing here really depends on this, it's the easiest way to
+              ensure availability in the main package since spark doesn't ship with
+              kafka streaming -->
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-streaming-kafka-0-8_${scala.binary.version}</artifactId>
+            <version>${spark.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest_${scala.binary.version}</artifactId>
             <version>3.0.1</version>

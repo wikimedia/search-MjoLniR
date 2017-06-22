@@ -2,10 +2,14 @@
 Integration for collecting feature vectors from elasticsearch
 """
 
+import base64
+from collections import defaultdict, namedtuple
 import json
 import math
 import mjolnir.cirrus
+import mjolnir.kafka.client
 import mjolnir.spark
+import os
 from pyspark.ml.linalg import Vectors
 from pyspark.sql import functions as F
 import random
@@ -215,7 +219,7 @@ def _create_bulk_query(row, indices, feature_definitions):
     return "%s\n" % ('\n'.join(bulk_query))
 
 
-def _handle_response(response, num_features, hit_page_ids):
+def _handle_response(response, num_features):
     """Parse an elasticsearch response from requests into a feature vector.
 
     Returns
@@ -229,13 +233,16 @@ def _handle_response(response, num_features, hit_page_ids):
     parsed = json.loads(response.text)
     assert 'responses' in parsed, response.text
 
-    features = {hit_page_id: [float('nan')] * num_features for hit_page_id in hit_page_ids}
+    features = defaultdict(lambda: [float('nan')] * num_features)
     for i, response in enumerate(parsed['responses']):
-        # Again, retries? something else?
-        assert response['status'] == 200
+        # These should be retried when making the queries. If we get this far then
+        # no retry is possible anymore, and the default NaN value will signal to
+        # throw away the hit_page_id
+        if response['status'] != 200:
+            continue
         for hit in response['hits']['hits']:
-            page_id = int(hit['_id'])
-            features[page_id][i] = hit['_score']
+            hit_page_id = int(hit['_id'])
+            features[hit_page_id][i] = hit['_score']
     return features.items()
 
 
@@ -270,7 +277,69 @@ def enwiki_features():
     ]
 
 
-def collect(df, url_list, feature_definitions, indices=None, session_factory=requests.Session):
+def collect_kafka(df, brokers, feature_definitions, indices=None):
+    """Collect feature vectors from elasticsearch via kafka
+
+    Pushes queries into a kafka topic and retrieves results from a second kafka topic.
+    A daemon must be running on relforge to collect the queries and produce results.
+
+    Parameters
+    ----------
+    df : pyspark.sql.DataFrame
+        Source dataframe containing wikiid, query and hit_page_id fields
+        to collect feature vectors for.
+    brokers : list of str
+        List of kafka brokers used to bootstrap access into the kafka cluster.
+    feature_definitions : list
+        list of feature objects defining the features to collect.
+    indices : dict, optional
+        map from wikiid to elasticsearch index to query. If wikiid is
+        not present the wikiid will be used as index name. (Default: None)
+    """
+    mjolnir.spark.assert_columns(df, ['wikiid', 'query', 'hit_page_id'])
+    if indices is None:
+        indices = {}
+    num_features = len(feature_definitions)
+    Response = namedtuple('Response', ['status_code', 'text'])
+
+    def kafka_handle_response(record):
+        response = Response(record['status_code'], record['text'])
+        for hit_page_id, features in _handle_response(response, num_features):
+            # nan features mean some sort of failure, drop the row.
+            # TODO: Add some accumulator to count and report dropped rows?
+            if not any(map(math.isnan, features)):
+                yield [record['wikiid'], record['query'], hit_page_id, Vectors.dense(features)]
+
+    run_id = base64.b64encode(os.urandom(16))
+    offsets_start = mjolnir.kafka.client.get_offset_start(brokers)
+    print 'producing queries to kafka'
+    num_end_sigils = mjolnir.kafka.client.produce_queries(
+        df.groupBy('wikiid', 'query').agg(F.collect_set('hit_page_id').alias('hit_page_ids')),
+        brokers,
+        run_id,
+        lambda row: _create_bulk_query(row, indices, feature_definitions))
+    print 'waiting for end run sigils'
+    offsets_end = mjolnir.kafka.client.get_offset_end(brokers, run_id, num_end_sigils)
+    print 'reading results from:'
+    for p, (start, end) in enumerate(zip(offsets_start, offsets_end)):
+        print '%d : %d to %d' % (p, start, end)
+    return (
+        mjolnir.kafka.client.collect_results(
+            df._sc,
+            brokers,
+            kafka_handle_response,
+            offsets_start,
+            offsets_end,
+            run_id)
+        .toDF(['wikiid', 'query', 'hit_page_id', 'features'])
+        # We could have gotten duplicate data from kafka. Clean them up.
+        .drop_duplicates(['wikiid', 'query', 'hit_page_id'])
+        .withColumn('features', mjolnir.spark.add_meta(df._sc, F.col('features'), {
+            'features': [f.name for f in feature_definitions]
+        })))
+
+
+def collect_es(df, url_list, feature_definitions, indices=None, session_factory=requests.Session):
     """Collect feature vectors from elasticsearch
 
     Performs queries against a remote elasticsearch instance to collect feature
@@ -319,7 +388,7 @@ def collect(df, url_list, feature_definitions, indices=None, session_factory=req
             for row in rows:
                 bulk_query = _create_bulk_query(row, indices, feature_definitions)
                 url, response = mjolnir.cirrus.make_request(session, url, url_list, bulk_query)
-                for hit_page_id, features in _handle_response(response, num_features, row.hit_page_ids):
+                for hit_page_id, features in _handle_response(response, num_features):
                     # nan features mean some sort of failure, drop the row.
                     # TODO: Add some accumulator to count and report dropped rows?
                     if not any(map(math.isnan, features)):

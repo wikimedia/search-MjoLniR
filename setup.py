@@ -6,6 +6,7 @@ requirements = [
     # mjolnir requirements
     'clickmodels',
     'requests',
+    'kafka',
     # pyspark requirements
     'py4j',
     'numpy',

@@ -27,7 +27,7 @@ SEARCH_CLUSTERS = {
 
 
 def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
-         min_sessions_per_query, search_cluster):
+         min_sessions_per_query, search_cluster, brokers):
     # TODO: Should this jar have to be provided on the command line instead?
     sqlContext.sql("ADD JAR /mnt/hdfs/wmf/refinery/current/artifacts/refinery-hive.jar")
     sqlContext.sql("CREATE TEMPORARY FUNCTION stemmer AS 'org.wikimedia.analytics.refinery.hive.StemmerUDF'")
@@ -129,17 +129,24 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
 
     # Collect features for all known queries. Note that this intentionally
     # uses query and NOT norm_query_id. Merge those back into the source hits.
-    df_features = mjolnir.features.collect(
-        df_hits,
-        url_list=SEARCH_CLUSTERS[search_cluster],
-        # TODO: While this works for now, at some point we might want to handle
-        # things like multimedia search from commons, and non-main namespace searches.
-        indices={wiki: '%s_content' % (wiki) for wiki in wikis},
-        # TODO: If we are going to do multiple wikis, this probably needs different features
-        # per wiki? At a minimum trying to include useful templates as features will need
-        # to vary per-wiki. Varied features per wiki would also mean they can't be trained
-        # together, which is perhaps a good thing anyways.
-        feature_definitions=mjolnir.features.enwiki_features())
+    if brokers:
+        df_features = mjolnir.features.collect_kafka(
+            df_hits,
+            brokers=brokers,
+            indices={wiki: '%s_content' % (wiki) for wiki in wikis},
+            feature_definitions=mjolnir.features.enwiki_features())
+    else:
+        df_features = mjolnir.features.collect_es(
+            df_hits,
+            url_list=SEARCH_CLUSTERS[search_cluster],
+            # TODO: While this works for now, at some point we might want to handle
+            # things like multimedia search from commons, and non-main namespace searches.
+            indices={wiki: '%s_content' % (wiki) for wiki in wikis},
+            # TODO: If we are going to do multiple wikis, this probably needs different features
+            # per wiki? At a minimum trying to include useful templates as features will need
+            # to vary per-wiki. Varied features per wiki would also mean they can't be trained
+            # together, which is perhaps a good thing anyways.
+            feature_definitions=mjolnir.features.enwiki_features())
     df_hits_with_features = (
         df_hits
         .join(df_features, how='inner', on=['wikiid', 'query', 'hit_page_id'])
@@ -169,6 +176,11 @@ def parse_arguments():
     parser.add_argument(
         '-o', '--output-dir', dest='output_dir', type=str, required=True,
         help='Output path, prefixed with hdfs://, to write resulting dataframe to')
+    parser.add_argument(
+        '-k', '--kafka', metavar='BROKER', dest='brokers', type=str, nargs='+',
+        help='Collect feature vectors via kafka using specified broker in <host>:<port> '
+             + ' form to bootstrap access. Query normalization will still use the '
+             + ' --search-cluster option')
     parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='+',
         help='A wiki to generate features and labels for')
