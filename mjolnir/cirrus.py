@@ -26,7 +26,7 @@ def _bulk_success(response):
     return True
 
 
-def make_request(session, url, url_list, bulk_query, num_retries=5):
+def make_request(session, url, url_list, bulk_query, num_retries=5, reuse_url=False):
     failures = 0
     while True:
         try:
@@ -37,12 +37,15 @@ def make_request(session, url, url_list, bulk_query, num_retries=5):
         except requests.ConnectionError as e:
             last_ex = e
         failures += 1
-        if failures >= num_retries or len(url_list) == 0:
+        if failures >= num_retries:
             raise last_ex
-        # TODO: This is only desirable if url_list is a list of actual
-        # servers. If the url_list is a loadbalancer like LVS then we
-        # want to keep using the existing url.
-        url = url_list.pop()
+        if not reuse_url:
+            if len(url_list) == 0:
+                raise last_ex
+            # TODO: This is only desirable if url_list is a list of actual
+            # servers. If the url_list is a loadbalancer like LVS then we
+            # want to keep using the existing url.
+            url = url_list.pop()
 
 
 def full_text_query(query):
