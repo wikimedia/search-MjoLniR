@@ -1,6 +1,7 @@
+from __future__ import absolute_import
 import hyperopt
 import mjolnir.spark
-import mjolnir.training.tuning
+import mjolnir.training.hyperopt
 import numpy as np
 import pprint
 import pyspark.sql
@@ -442,7 +443,7 @@ def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
     """
     def eval_space(space, max_evals):
         """Eval a space using standard hyperopt"""
-        best, trials = mjolnir.training.tuning.hyperopt(
+        best, trials = mjolnir.training.hyperopt.minimize(
             df, train, space, max_evals=max_evals,
             num_folds=num_folds, num_fold_partitions=num_fold_partitions,
             num_cv_jobs=num_cv_jobs, num_workers=num_workers)
@@ -453,7 +454,7 @@ def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
 
     def eval_space_grid(space):
         """Eval all points in the space via a grid search"""
-        best, trials = mjolnir.training.tuning.grid_search(
+        best, trials = mjolnir.training.hyperopt.grid_search(
             df, train, space, num_folds=num_folds, num_fold_partitions=num_fold_partitions,
             num_cv_jobs=num_cv_jobs, num_workers=num_workers)
         for k, v in space.items():
