@@ -121,8 +121,9 @@ def parse_arguments():
              + 'of executors required is workers * cv-jobs. (Default: 10)')
     parser.add_argument(
         '-c', '--cv-jobs', dest='num_cv_jobs', default=None, type=int,
-        help='Number of cross validations to perform in parallel. Defaults to number '
-             + 'of folds, to run all in parallel.')
+        help='Number of cross validation folds to perform in parallel. Defaults to number '
+             + 'of folds, to run all in parallel. If this is a multiple of the number '
+             + 'of folds multiple cross validations will run in parallel.')
     parser.add_argument(
         '-f', '--folds', dest='num_folds', default=5, type=int,
         help='Number of cross validation folds to use. (Default: 5)')

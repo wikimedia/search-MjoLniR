@@ -1,7 +1,7 @@
 """
 Support for making test/train or k-fold splits
 """
-
+from __future__ import absolute_import
 from collections import defaultdict
 import mjolnir.spark
 from multiprocessing.dummy import Pool

@@ -4,10 +4,83 @@ Integration and additional features for the hyperopt library
 from __future__ import absolute_import
 import hyperopt
 import hyperopt.pyll.base
+from hyperopt.utils import coarse_utcnow
 import itertools
 import math
 import mjolnir.training.tuning
+from multiprocessing.dummy import Pool
 import numpy as np
+import pyspark
+
+
+# FMinIter, when used async, puts the domain into attachments. Unfortunately
+# this domain isn't picklable in our use case. We don't actually need it
+# to be picklable, but FMinIter pickles it anways. Hax around it by setting
+# async after FMinIter.__init__ runs and providing domain manually.
+if not hasattr(hyperopt.FMinIter, '_mjolnir_hack'):
+    # Alternatively, could inherit from FMinIter, then replace?
+    hyperopt.FMinIter._mjolnir_hack = True
+    fminiter_orig_init = hyperopt.FMinIter.__init__
+
+    def _new_fminiter_init(self, *args, **kwargs):
+        fminiter_orig_init(self, *args, **kwargs)
+        if type(self.trials) == ThreadingTrials:
+            # We have to set this here, rather than letting it
+            # autodetect from self.trials.async, because then
+            # it will try, and fail, to pickle the domain object
+            self.async = True
+            # Since domain wasn't pickled and provided we have
+            # to do it manually
+            self.trials.attachments['domain'] = self.domain
+    hyperopt.FMinIter.__init__ = _new_fminiter_init
+
+
+class ThreadingTrials(hyperopt.Trials):
+    def __init__(self, pool_size):
+        super(ThreadingTrials, self).__init__()
+        self.pool = Pool(pool_size)
+
+    def _evaluate_one(self, trial):
+        if trial['state'] != hyperopt.JOB_STATE_NEW:
+            return
+        trial['state'] = hyperopt.JOB_STATE_RUNNING
+        now = coarse_utcnow()
+        trial['book_time'] = now
+        trial['refresh_time'] = now
+        spec = hyperopt.base.spec_from_misc(trial['misc'])
+        ctrl = hyperopt.base.Ctrl(self, current_trial=trial)
+        try:
+            result = self.attachments['domain'].evaluate(spec, ctrl)
+        except Exception as e:
+            trial['state'] = hyperopt.JOB_STATE_ERROR
+            trial['misc']['error'] = (str(type(e)), str(e))
+            trial['misc']['e'] = e
+            trial['refresh_time'] = coarse_utcnow()
+        else:
+            trial['state'] = hyperopt.JOB_STATE_DONE
+            trial['result'] = result
+            trial['refresh_time'] = coarse_utcnow()
+
+    def _insert_trial_docs(self, docs):
+        rval = super(ThreadingTrials, self)._insert_trial_docs(docs)
+        self.pool.imap_unordered(self._evaluate_one, docs)
+        self.refresh()
+        return rval
+
+    def __getstate__(self):
+        # This will be called by pickle. Attempting to pickle the domain object
+        # will error out, as the objective function isn't top-level. The pool
+        # is also un-picklable. Clear out these pieces to allow pickling to work.
+        # Note that this object will basically be unusable for minimization after
+        # unpickling, it will only be a data carrier at that point.
+        state = self.__dict__.copy()
+        del state['pool']
+        state['attachments'] = state['attachments'].copy()
+        try:
+            del state['attachments']['domain']
+        except KeyError:
+            pass
+        return state
 
 
 class _GridSearchAlgo(object):
@@ -69,10 +142,6 @@ def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
         Number of cross validation folds to train in parallel
     num_workers : int
         Number of executors to use for each model training
-    cache : bool
-        True if the folds of df should be individually cached
-    unpersist : bool
-        True if the folds of df should be unpersisted when complete.
 
     Returns
     -------
@@ -109,12 +178,19 @@ def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
     folds = mjolnir.training.tuning._make_folds(
         df, num_folds=num_folds, num_workers=num_workers, num_cv_jobs=num_cv_jobs)
 
+    # Figure out if we can run multiple cross validations in parallel
+    pool_size = int(math.floor(num_cv_jobs / num_folds))
+    print 'Running %d cross validations in parallel' % (pool_size)
+
     for fold in folds:
-        fold['train'].cache()
-        fold['test'].cache()
+        fold['train'].persist(pyspark.StorageLevel.MEMORY_AND_DISK_2)
+        fold['test'].persist(pyspark.StorageLevel.MEMORY_AND_DISK_2)
 
     try:
-        trials = hyperopt.Trials()
+        if pool_size > 1:
+            trials = ThreadingTrials(pool_size)
+        else:
+            trials = hyperopt.Trials()
         best = hyperopt.fmin(objective, space, algo=algo,
                              max_evals=max_evals, trials=trials)
     finally:

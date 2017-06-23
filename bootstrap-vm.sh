@@ -26,6 +26,9 @@ apt-get install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="-
     gfortran \
     zip
 
+# xgboost master requires cmake > 3.2, so we need it from jessie-backports
+apt-get -t jessie-backports install cmake cmake-data
+
 
 # While we only asked for java 8, 7 was installed as well. switch over the
 # alternative. TODO: Do we need anything else?
@@ -117,6 +120,12 @@ cd /srv/xgboost
 if [ ! -f /srv/xgboost/jvm-packages/xgboost4j-spark/target/xgboost4j-spark-0.7.jar ]; then
     git checkout 197a9eac
     git submodule update --init --recursive
+    # TODO: We also need the patch that fixes parallel-CV. XGBoost has a race condition
+    # triggered when running many models in parallel, but the current fix is more of
+    # a hack and wont be merged upstream.
+    git remote add ebernhardson https://github.com/ebernhardson/xgboost
+    git fetch ebernhardson
+    git cherry-pick ebernhardson/booster_to_bytes
     cd jvm-packages
     # The test suite requires 4 cores or it gets stuck. Not ideal but skip them for
     # now. It also needs a bit more than the default heap allocation.
