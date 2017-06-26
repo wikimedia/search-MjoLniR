@@ -21,36 +21,14 @@ from pyspark.sql import Window
 import requests
 
 
-def _binary_sim_jaccard(X, Y):
-    """Calculate jaccard binary similarity between two vectors
+def _binary_sim(matrix):
+    """Compute a jaccard similarity matrix.
+
+    Vecorization based on: https://stackoverflow.com/a/40579567
 
     Parameters
     ----------
-    X : np.array
-    Y : np.array
-
-    Returns
-    -------
-    float
-    """
-    assert len(X) == len(Y)
-    # both true
-    a = np.sum((X == 1) & (Y == 1))
-    # both false
-    d = np.sum((X == 0) & (Y == 0))
-    # number of both true over number of both not false.
-    return a / float(len(X) - d)
-
-
-def _binary_sim(mat, sim=_binary_sim_jaccard):
-    """Compute a similarity matrix
-
-    Parameters
-    ----------
-    mat : np.array
-    sim : func
-        function taking two one dimensonal arrays of the same
-        size as input and returns a similarity value.
+    matrix : np.array
 
     Returns
     -------
@@ -58,14 +36,27 @@ def _binary_sim(mat, sim=_binary_sim_jaccard):
         matrix of shape (n_rows, n_rows) giving the similarity
         between rows of the input matrix.
     """
-    n_rows = mat.shape[0]
-    res = np.empty((n_rows, n_rows), dtype=np.float32)
-    for i in range(n_rows):
-        res[i][i] = 1.
-        for j in range(0, i):
-            res[i][j] = sim(mat[i], mat[j])
-            res[j][i] = res[i][j]
-    return res
+    # Generate the indices of the lower triangle of our result matrix.
+    # The diagonal is offset by -1 because the identity in a similarity
+    # matrix is always 1.
+    r, c = np.tril_indices(matrix.shape[0], -1)
+    # Use those indices to build two matrices that contains all
+    # the rows we need to do a similarity comparison on
+    p1 = matrix[c]
+    p2 = matrix[r]
+    # Run the main jaccard calculation
+    intersection = np.logical_and(p1, p2).sum(1)
+    union = np.logical_or(p1, p2).sum(1).astype(np.float64)
+    # Build the result matrix with 1's on the diagonal
+    out = np.eye(matrix.shape[0])
+    # Insert the result of our similarity calculation at their original indices
+    out[c, r] = intersection / union
+    # Above only populated half of the matrix, the mirrored diagonal contains
+    # only zeros. Fix that up by transposing. Adding the transposed matrix double
+    # counts the diagonal so subtract that back out. We could skip this step and
+    # leave half the matrix empty, but it takes a fraction of a ms to be correct
+    # even on mid-sized inputs (~200 queries).
+    return out + out.T - np.diag(np.diag(out))
 
 
 def _make_query_groups(source, threshold=0.5):

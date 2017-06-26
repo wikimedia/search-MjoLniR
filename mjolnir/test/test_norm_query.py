@@ -1,5 +1,6 @@
 from collections import namedtuple
 import mjolnir.norm_query
+import numpy as np
 import os
 import pytest
 
@@ -50,3 +51,30 @@ def test_make_query_groups(hits, expected):
     source = [row(str(i), hit_page_ids) for i, hit_page_ids in enumerate(hits)]
     groups = mjolnir.norm_query._make_query_groups(source)
     assert [(str(i), g) for i, g in enumerate(expected)] == groups
+
+
+def test_vectorized_jaccard_sim():
+    # The vectorized version of jaccard similarity is 20x faster, but it is
+    # harder to understand. Compute it the simple way and compare to the
+    # vectorized version
+    def jaccard_sim(X, Y):
+        assert len(X) == len(Y)
+        a = np.sum((X == 1) & (Y == 1))
+        d = np.sum((X == 0) & (Y == 0))
+        return a / float(len(X) - d)
+
+    def binary_sim(mat):
+        n_rows = mat.shape[0]
+        out = np.empty((n_rows, n_rows), dtype=np.float64)
+        for i in range(n_rows):
+            out[i][i] = 1.
+            for j in range(0, i):
+                out[i][j] = jaccard_sim(mat[i], mat[j])
+                out[j][i] = out[i][j]
+        return out
+
+    # Simulate 200 queries with 100 shared page ids
+    matrix = np.random.rand(200, 100) > 0.7
+    simple = binary_sim(matrix)
+    vectorized = mjolnir.norm_query._binary_sim(matrix)
+    assert np.array_equal(simple, vectorized)
