@@ -13,7 +13,11 @@ apt-get install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="-
     python-virtualenv \
     git-core \
     build-essential \
-    maven
+    maven \
+    liblapack-dev \
+    python-dev \
+    gfortran \
+    zip
 
 
 # While we only asked for java 8, 7 was installed as well. switch over the
