@@ -9,7 +9,7 @@ apt-get update
 apt-get install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
     openjdk-8-jre-headless \
     openjdk-8-jdk \
-    ca-certificates-java='20161107~bpo8+1'
+    ca-certificates-java='20161107~bpo8+1' \
     python-virtualenv \
     git-core \
     build-essential \
@@ -22,8 +22,10 @@ update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
 # Grab spark 2.1.0 and put it in /opt
 cd /opt
-wget -qO - http://d4kbcqa49mib13.cloudfront.net/spark-2.1.0-bin-hadoop2.6.tgz | tar -zxvf
-ln -s /opt/spark-2.1.0-bin-hadoop2.6/bin/pyspark /usr/local/bin
+if [ ! -f /usr/local/bin/pyspark ]; then
+    wget -qO - https://archive.apache.org/dist/spark/spark-2.1.0/spark-2.1.0-bin-hadoop2.6.tgz | tar -zxvf -
+    ln -s /opt/spark-2.1.0-bin-hadoop2.6/bin/pyspark /usr/local/bin
+fi
 # findspark needs a SPARK_HOME to setup pyspark
 cat >/etc/profile.d/spark.sh <<EOD
 SPARK_HOME=/opt/spark-2.1.0-bin-hadoop2.6
@@ -60,17 +62,21 @@ fi
 
 # Grab and compile xgboost. install it into local maven repository
 # as they don't publish to maven central yet.
-git clone https://github.com/dmlc/xgboost.git /srv/xgboost
+if [ ! -d /srv/xgboost ]; then
+    git clone https://github.com/dmlc/xgboost.git /srv/xgboost
+fi
 cd /srv/xgboost
 # We need d3b866e, da58f34 and ccccf8a0 from master which don't cherry-pick
 # cleanly back to the last released tag (v0.60), so use a hardcoded version of
 # master branch that we think works.
-git checkout ccccf8a0
-git submodule update --init --recursive
-cd jvm-packages
-# The test suite requires 4 cores or it gets stuck. Not ideal but skip them for
-# now. It also needs a bit more than the default heap allocation.
-MAVEN_OPTS="-Xmx1024M" mvn -DskipTests -Dmaven.test.skip=true install
+if [ ! -f /srv/xgboost/jvm-packages/xgboost4j-spark/target/xgboost4j-spark-0.7.jar ]; then
+    git checkout ccccf8a0
+    git submodule update --init --recursive
+    cd jvm-packages
+    # The test suite requires 4 cores or it gets stuck. Not ideal but skip them for
+    # now. It also needs a bit more than the default heap allocation.
+    MAVEN_OPTS="-Xmx768M" mvn -DskipTests -Dmaven.test.skip=true install
+fi
 
 # Build the mjolnir jar which depends on xgboost4j-spark
 cd /vagrant/jvm
