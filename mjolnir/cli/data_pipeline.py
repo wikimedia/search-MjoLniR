@@ -11,6 +11,7 @@ To run:
 """
 
 import argparse
+import logging
 import mjolnir.dbn
 import mjolnir.metrics
 import mjolnir.norm_query
@@ -182,6 +183,12 @@ def parse_arguments():
              + ' form to bootstrap access. Query normalization will still use the '
              + ' --search-cluster option')
     parser.add_argument(
+        '-v', '--verbose', dest='verbose', default=False, action='store_true',
+        help='Increase logging to INFO')
+    parser.add_argument(
+        '-vv', '--very-verbose', dest='very_verbose', default=False, action='store_true',
+        help='Increase logging to DEBUG')
+    parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='+',
         help='A wiki to generate features and labels for')
 
@@ -191,6 +198,14 @@ def parse_arguments():
 
 if __name__ == "__main__":
     args = parse_arguments()
+    if args['very_verbose']:
+        logging.basicConfig(level=logging.DEBUG)
+    elif args['verbose']:
+        logging.basicConfig(level=logging.INFO)
+    else:
+        logging.basicConfig()
+    del args['verbose']
+    del args['very_verbose']
     sc = SparkContext(appName="MLR: data collection pipeline")
     # spark info logging is incredibly spammy. Use warn to have some hope of
     # human decipherable output
