@@ -28,7 +28,7 @@ SEARCH_CLUSTERS = {
 
 
 def main(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
-         min_sessions_per_query, search_cluster, brokers):
+         min_sessions_per_query, search_cluster, brokers, ltr_feature_definitions):
     # TODO: Should this jar have to be provided on the command line instead?
     sqlContext.sql("ADD JAR /mnt/hdfs/wmf/refinery/current/artifacts/refinery-hive.jar")
     sqlContext.sql("CREATE TEMPORARY FUNCTION stemmer AS 'org.wikimedia.analytics.refinery.hive.StemmerUDF'")
@@ -129,26 +129,44 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     # Collect features for all known queries. Note that this intentionally
     # uses query and NOT norm_query_id. Merge those back into the source hits.
     fnames_accu = df_hits._sc.accumulator({}, mjolnir.features.FeatureNamesAccumulator())
-    if brokers:
-        df_features = mjolnir.features.collect_kafka(
-            df_hits,
-            brokers=brokers,
-            indices={wiki: '%s_content' % (wiki) for wiki in wikis},
-            feature_definitions=mjolnir.features.enwiki_features(),
-            feature_names_accu=fnames_accu)
+    if ltr_feature_definitions:
+        if brokers:
+            df_features = mjolnir.features.collect_from_ltr_plugin_and_kafka(
+                df_hits,
+                brokers=brokers,
+                indices={wiki: '%s_content' % (wiki) for wiki in wikis},
+                model=ltr_feature_definitions,
+                feature_names_accu=fnames_accu)
+        else:
+            df_features = mjolnir.features.collect_from_ltr_plugin(
+                df_hits,
+                url_list=SEARCH_CLUSTERS[search_cluster],
+                # TODO: While this works for now, at some point we might want to handle
+                # things like multimedia search from commons, and non-main namespace searches.
+                indices={wiki: '%s_content' % (wiki) for wiki in wikis},
+                model=ltr_feature_definitions,
+                feature_names_accu=fnames_accu)
     else:
-        df_features = mjolnir.features.collect_es(
-            df_hits,
-            url_list=SEARCH_CLUSTERS[search_cluster],
-            # TODO: While this works for now, at some point we might want to handle
-            # things like multimedia search from commons, and non-main namespace searches.
-            indices={wiki: '%s_content' % (wiki) for wiki in wikis},
-            # TODO: If we are going to do multiple wikis, this probably needs different features
-            # per wiki? At a minimum trying to include useful templates as features will need
-            # to vary per-wiki. Varied features per wiki would also mean they can't be trained
-            # together, which is perhaps a good thing anyways.
-            feature_definitions=mjolnir.features.enwiki_features(),
-            feature_names_accu=fnames_accu)
+        if brokers:
+            df_features = mjolnir.features.collect_kafka(
+                df_hits,
+                brokers=brokers,
+                indices={wiki: '%s_content' % (wiki) for wiki in wikis},
+                feature_definitions=mjolnir.features.enwiki_features(),
+                feature_names_accu=fnames_accu)
+        else:
+            df_features = mjolnir.features.collect_es(
+                df_hits,
+                url_list=SEARCH_CLUSTERS[search_cluster],
+                # TODO: While this works for now, at some point we might want to handle
+                # things like multimedia search from commons, and non-main namespace searches.
+                indices={wiki: '%s_content' % (wiki) for wiki in wikis},
+                # TODO: If we are going to do multiple wikis, this probably needs different features
+                # per wiki? At a minimum trying to include useful templates as features will need
+                # to vary per-wiki. Varied features per wiki would also mean they can't be trained
+                # together, which is perhaps a good thing anyways.
+                feature_definitions=mjolnir.features.enwiki_features(),
+                feature_names_accu=fnames_accu)
 
     # collect the accumulator
     df_features.cache().count()
@@ -198,6 +216,10 @@ def parse_arguments():
     parser.add_argument(
         '-vv', '--very-verbose', dest='very_verbose', default=False, action='store_true',
         help='Increase logging to DEBUG')
+    parser.add_argument(
+        '-f', '--feature-definitions', dest='ltr_feature_definitions', type=str, required=False,
+        help='Name of the LTR plugin feature definitions (featureset:name[@store] or '
+             + 'model:name[@store])')
     parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='+',
         help='A wiki to generate features and labels for')
