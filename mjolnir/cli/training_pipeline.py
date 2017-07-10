@@ -34,15 +34,10 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, target_node_evaluations,
             print ''
             continue
 
-        # Make a guess at the number of fold partitions needed based on data size.
-        # This requires there to be around 40k data points, arbitrarily chosen,
-        # per partition used to calculate the folds, up to 100 partitions.
-        num_fold_partitions = min(100, max(1, data_size / 40000))
-
         # Explore a hyperparameter space. Skip the most expensive part of tuning,
         # increasing the # of trees, with target_node_evaluations=None
         tune_results = mjolnir.training.xgboost.tune(
-            df_hits_with_features, num_folds=num_folds, num_fold_partitions=num_fold_partitions,
+            df_hits_with_features, num_folds=num_folds,
             num_cv_jobs=num_cv_jobs, num_workers=num_workers,
             target_node_evaluations=target_node_evaluations)
 

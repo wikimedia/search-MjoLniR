@@ -54,6 +54,6 @@ def test_cross_validate_plain_df(df_train):
         # xgboost needs all jobs to have a worker assigned before it will
         # finish a round of training, so we have to be careful not to use
         # too many workers
-        num_folds=2, num_fold_partitions=1, num_cv_jobs=1, num_workers=1)
+        num_folds=2, num_cv_jobs=1, num_workers=1)
     # one score for each fold
     assert len(scores) == 2
