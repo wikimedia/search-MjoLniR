@@ -15,7 +15,7 @@ def test_collect_es(spark_context, hive_context, make_requests_session):
     df = spark_context.parallelize(rows).toDF()
 
     accu = df._sc.accumulator({}, mjolnir.features.FeatureNamesAccumulator())
-    df_result = mjolnir.features.collect_es(df, ['http://localhost:9200/_msearch'],
+    df_result = mjolnir.features.collect_es(df, ['http://localhost:9200'],
                                             mjolnir.features.enwiki_features(),
                                             accu,
                                             {'enwiki': 'enwiki_content'},

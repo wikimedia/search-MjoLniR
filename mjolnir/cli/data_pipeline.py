@@ -21,8 +21,8 @@ from pyspark.sql import HiveContext
 from pyspark.sql import functions as F
 
 SEARCH_CLUSTERS = {
-    'eqiad': ['http://elastic%d.eqiad.wmnet:9200/_msearch' % (i) for i in range(1017, 1052)],
-    'codfw': ['http://elastic%d.codfw.wmnet:9200/_msearch' % (i) for i in range(2001, 2035)],
+    'eqiad': ['http://elastic%d.eqiad.wmnet:9200' % (i) for i in range(1017, 1052)],
+    'codfw': ['http://elastic%d.codfw.wmnet:9200' % (i) for i in range(2001, 2035)],
 }
 
 

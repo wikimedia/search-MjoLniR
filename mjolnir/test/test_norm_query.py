@@ -22,7 +22,7 @@ def test_norm_query(df_love, hive_context, make_requests_session):
 
     df_res = mjolnir.norm_query.transform(
         df_love,
-        url_list=['http://localhost:9200/_msearch'],
+        url_list=['http://localhost:9200'],
         min_sessions_per_query=10,
         session_factory=session_factory)
 

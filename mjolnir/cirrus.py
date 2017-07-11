@@ -30,7 +30,7 @@ def make_request(session, url, url_list, bulk_query, num_retries=5, reuse_url=Fa
     failures = 0
     while True:
         try:
-            result = session.get(url, data=bulk_query)
+            result = session.get(url + '/_msearch', data=bulk_query)
             if _bulk_success(result):
                 return url, result
             last_ex = RuntimeError('Too many failures or no urls left')
