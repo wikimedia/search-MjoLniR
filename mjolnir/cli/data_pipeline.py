@@ -129,12 +129,14 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
 
     # Collect features for all known queries. Note that this intentionally
     # uses query and NOT norm_query_id. Merge those back into the source hits.
+    fnames_accu = df_hits._sc.accumulator({}, mjolnir.features.FeatureNamesAccumulator())
     if brokers:
         df_features = mjolnir.features.collect_kafka(
             df_hits,
             brokers=brokers,
             indices={wiki: '%s_content' % (wiki) for wiki in wikis},
-            feature_definitions=mjolnir.features.enwiki_features())
+            feature_definitions=mjolnir.features.enwiki_features(),
+            feature_names_accu=fnames_accu)
     else:
         df_features = mjolnir.features.collect_es(
             df_hits,
@@ -146,7 +148,17 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
             # per wiki? At a minimum trying to include useful templates as features will need
             # to vary per-wiki. Varied features per wiki would also mean they can't be trained
             # together, which is perhaps a good thing anyways.
-            feature_definitions=mjolnir.features.enwiki_features())
+            feature_definitions=mjolnir.features.enwiki_features(),
+            feature_names_accu=fnames_accu)
+
+    # collect the accumulator
+    df_features.cache().count()
+
+    # TODO: test that features returned a coherent map (all features must have the same counts)
+    features = sorted(fnames_accu.value)
+    df_features = df_features.withColumn('features', mjolnir.spark.add_meta(df_features._sc, F.col('features'), {
+            'features': features
+        }))
     df_hits_with_features = (
         df_hits
         .join(df_features, how='inner', on=['wikiid', 'query', 'hit_page_id'])

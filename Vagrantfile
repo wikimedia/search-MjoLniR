@@ -7,7 +7,7 @@ Vagrant.configure("2") do |config|
 
     root_share_options = { id: 'vagrant-root' }
     root_share_options[:type] = :nfs
-    root_share_options[:mount_options] = ['noatime', 'rsize=32767', 'wsize=3267', 'async']
+    root_share_options[:mount_options] = ['noatime', 'rsize=32767', 'wsize=3267', 'async', 'nolock']
     config.nfs.map_uid = Process.uid
     config.nfs.map_gid = Process.gid
     config.vm.synced_folder ".", "/vagrant", root_share_options

@@ -10,6 +10,7 @@ import mjolnir.cirrus
 import mjolnir.kafka.client
 import mjolnir.spark
 import os
+from pyspark.accumulators import AccumulatorParam
 from pyspark.ml.linalg import Vectors
 from pyspark.sql import functions as F
 import random
@@ -185,6 +186,21 @@ class DisMaxFeature(object):
         }
 
 
+class FeatureNamesAccumulator(AccumulatorParam):
+    """
+    Spark accumulator to keep track of the feature names used
+    when retrieving feature vectors.
+    Keep a dict with feature names as keys and a counter as values.
+    """
+    def zero(self, value):
+        return dict()
+
+    def addInPlace(self, value1, value2):
+        for k, v in value2.iteritems():
+            value1[k] = value1.get(k, 0) + v
+        return value1
+
+
 def _create_bulk_query(row, indices, feature_definitions):
     """Create an elasticsearch bulk query for provided row.
 
@@ -219,8 +235,17 @@ def _create_bulk_query(row, indices, feature_definitions):
     return "%s\n" % ('\n'.join(bulk_query))
 
 
-def _handle_response(response, num_features):
+def _handle_response(response, feature_names, feature_names_accu):
     """Parse an elasticsearch response from requests into a feature vector.
+
+    Parameters
+    ----------
+    response : dict
+        msearch responses
+    feature_names : list
+        feature names
+    feature_names_accu : Accumulator
+        count logged features
 
     Returns
     ------
@@ -233,16 +258,24 @@ def _handle_response(response, num_features):
     parsed = json.loads(response.text)
     assert 'responses' in parsed, response.text
 
-    features = defaultdict(lambda: [float('nan')] * num_features)
+    features = defaultdict(lambda: [float('nan')] * len(feature_names))
+    features_seen = {}
+    # feature ordinals (sorted by feature names)
+    # ordinal_map[i] returns the feature ordinal for request i and feature_names[i]
+    ordinal_map = [elts[0] for elts in sorted(enumerate(feature_names), key=lambda i:i[1])]
+    ordinal_map = [elts[0] for elts in sorted(enumerate(ordinal_map), key=lambda i:i[1])]
     for i, response in enumerate(parsed['responses']):
+        ordinal = ordinal_map[i]
         # These should be retried when making the queries. If we get this far then
         # no retry is possible anymore, and the default NaN value will signal to
         # throw away the hit_page_id
         if response['status'] != 200:
             continue
+        features_seen[feature_names[i]] = 1
         for hit in response['hits']['hits']:
             hit_page_id = int(hit['_id'])
-            features[hit_page_id][i] = hit['_score']
+            features[hit_page_id][ordinal] = hit['_score']
+    feature_names_accu += features_seen
     return features.items()
 
 
@@ -277,7 +310,7 @@ def enwiki_features():
     ]
 
 
-def collect_kafka(df, brokers, feature_definitions, indices=None):
+def collect_kafka(df, brokers, feature_definitions, feature_names_accu, indices=None):
     """Collect feature vectors from elasticsearch via kafka
 
     Pushes queries into a kafka topic and retrieves results from a second kafka topic.
@@ -292,6 +325,8 @@ def collect_kafka(df, brokers, feature_definitions, indices=None):
         List of kafka brokers used to bootstrap access into the kafka cluster.
     feature_definitions : list
         list of feature objects defining the features to collect.
+    feature_names_accu : Accumulator
+        used to collect feature names
     indices : dict, optional
         map from wikiid to elasticsearch index to query. If wikiid is
         not present the wikiid will be used as index name. (Default: None)
@@ -299,12 +334,12 @@ def collect_kafka(df, brokers, feature_definitions, indices=None):
     mjolnir.spark.assert_columns(df, ['wikiid', 'query', 'hit_page_id'])
     if indices is None:
         indices = {}
-    num_features = len(feature_definitions)
+    feature_names = [f.name for f in feature_definitions]
     Response = namedtuple('Response', ['status_code', 'text'])
 
     def kafka_handle_response(record):
         response = Response(record['status_code'], record['text'])
-        for hit_page_id, features in _handle_response(response, num_features):
+        for hit_page_id, features in _handle_response(response, feature_names, feature_names_accu):
             # nan features mean some sort of failure, drop the row.
             # TODO: Add some accumulator to count and report dropped rows?
             if not any(map(math.isnan, features)):
@@ -333,13 +368,10 @@ def collect_kafka(df, brokers, feature_definitions, indices=None):
             run_id)
         .toDF(['wikiid', 'query', 'hit_page_id', 'features'])
         # We could have gotten duplicate data from kafka. Clean them up.
-        .drop_duplicates(['wikiid', 'query', 'hit_page_id'])
-        .withColumn('features', mjolnir.spark.add_meta(df._sc, F.col('features'), {
-            'features': [f.name for f in feature_definitions]
-        })))
+        .drop_duplicates(['wikiid', 'query', 'hit_page_id']))
 
 
-def collect_es(df, url_list, feature_definitions, indices=None, session_factory=requests.Session):
+def collect_es(df, url_list, feature_definitions, feature_names_accu, indices=None, session_factory=requests.Session):
     """Collect feature vectors from elasticsearch
 
     Performs queries against a remote elasticsearch instance to collect feature
@@ -355,6 +387,7 @@ def collect_es(df, url_list, feature_definitions, indices=None, session_factory=
         random per partition.
     feature_definitions : list
         list of feature objects defining the features to collect.
+    feature_names_accu : Accumulator used to track feature names and ordinals
     indices : dict, optional
         map from wikiid to elasticsearch index to query. If wikiid is
         not present the wikiid will be used as index name. (Default: None)
@@ -373,6 +406,8 @@ def collect_es(df, url_list, feature_definitions, indices=None, session_factory=
     if indices is None:
         indices = {}
 
+    feature_names = [f.name for f in feature_definitions]
+
     def collect_partition(rows):
         """Generate a function that will collect feature vectors for each partition.
 
@@ -381,14 +416,13 @@ def collect_es(df, url_list, feature_definitions, indices=None, session_factory=
         pyspark.sql.Row
             Collected feature vectors for a single (wiki, query, hit_page_id)
         """
-        num_features = len(feature_definitions)
         random.shuffle(url_list)
         url = url_list.pop()
         with session_factory() as session:
             for row in rows:
                 bulk_query = _create_bulk_query(row, indices, feature_definitions)
                 url, response = mjolnir.cirrus.make_request(session, url, url_list, bulk_query)
-                for hit_page_id, features in _handle_response(response, num_features):
+                for hit_page_id, features in _handle_response(response, feature_names, feature_names_accu):
                     # nan features mean some sort of failure, drop the row.
                     # TODO: Add some accumulator to count and report dropped rows?
                     if not any(map(math.isnan, features)):
@@ -399,7 +433,4 @@ def collect_es(df, url_list, feature_definitions, indices=None, session_factory=
         .groupBy('wikiid', 'query')
         .agg(F.collect_set('hit_page_id').alias('hit_page_ids'))
         .rdd.mapPartitions(collect_partition)
-        .toDF(['wikiid', 'query', 'hit_page_id', 'features'])
-        .withColumn('features', mjolnir.spark.add_meta(df._sc, F.col('features'), {
-            'features': [f.name for f in feature_definitions]
-        })))
+        .toDF(['wikiid', 'query', 'hit_page_id', 'features']))

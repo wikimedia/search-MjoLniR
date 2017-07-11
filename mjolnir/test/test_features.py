@@ -14,12 +14,18 @@ def test_collect_es(spark_context, hive_context, make_requests_session):
     rows = [r('enwiki', query, page_id) for query, ids in source_data.items() for page_id in ids]
     df = spark_context.parallelize(rows).toDF()
 
+    accu = df._sc.accumulator({}, mjolnir.features.FeatureNamesAccumulator())
     df_result = mjolnir.features.collect_es(df, ['http://localhost:9200/_msearch'],
                                             mjolnir.features.enwiki_features(),
+                                            accu,
                                             {'enwiki': 'enwiki_content'},
                                             session_factory=session_factory)
     result = df_result.collect()
-    feature_names = df_result.schema['features'].metadata['features']
+
+    # all features must have been logged
+    assert len(set(accu.value.values())) == 1
+    feature_names = sorted(accu.value)
+
     expected_page_ids = set([row.hit_page_id for row in rows])
     result_page_ids = set([row.hit_page_id for row in result])
     assert expected_page_ids == result_page_ids
