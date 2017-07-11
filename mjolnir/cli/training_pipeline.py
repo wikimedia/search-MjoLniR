@@ -14,13 +14,23 @@ import logging
 import mjolnir.training.xgboost
 import os
 import pickle
+import sys
 from pyspark import SparkContext
 from pyspark.sql import HiveContext
 from pyspark.sql import functions as F
 
 
 def main(sc, sqlContext, input_dir, output_dir, wikis, target_node_evaluations,
-         num_workers, num_cv_jobs, num_folds):
+         num_workers, num_cv_jobs, num_folds, test_dir):
+
+    if os.path.exists(output_dir):
+        logging.error('Output directory (%s) already exists' % (output_dir))
+        sys.exit(1)
+
+    # Maybe this is a bit early to create the path ... but should be fine.
+    # The annoyance might be that an error in training requires deleting
+    # this directory to try again.
+    os.mkdir(output_dir)
 
     for wiki in wikis:
         print 'Training wiki: %s' % (wiki)
@@ -41,13 +51,6 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, target_node_evaluations,
             num_cv_jobs=num_cv_jobs, num_workers=num_workers,
             target_node_evaluations=target_node_evaluations)
 
-        # Save the tune results somewhere for later analysis. Use pickle
-        # to maintain the hyperopt.Trials objects as is.
-        tune_output = os.path.join(output_dir, 'tune_%s.pickle' % (wiki))
-        with open(tune_output, 'w') as f:
-            f.write(pickle.dumps(tune_results))
-            print 'Wrote tuning results to %s' % (tune_output)
-
         print 'CV  test-ndcg@10: %.4f' % (tune_results['metrics']['test'])
         print 'CV train-ndcg@10: %.4f' % (tune_results['metrics']['train'])
 
@@ -61,7 +64,27 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, target_node_evaluations,
         best_params['groupData'] = j_groups
         model = mjolnir.training.xgboost.train(df_grouped, best_params)
 
-        print 'train-ndcg@10: %.3f' % (model.eval(df_grouped, j_groups))
+        tune_results['metrics']['train'] = model.eval(df_grouped, j_groups)
+        print 'train-ndcg@10: %.5f' % (tune_results['metrics']['train'])
+
+        if test_dir is not None:
+            try:
+                df_test = sqlContext.read.parquet(test_dir)
+                tune_results['metrics']['test'] = model.eval(df_test)
+                print 'test-ndcg@10: %.5f' % (tune_results['metrics']['test'])
+            except:
+                # It has probably taken some time to get this far. Don't bail
+                # because the user input an invalid test dir.
+                logging.exception('Could not evaluate test_dir: %s' % (test_dir))
+
+        # Save the tune results somewhere for later analysis. Use pickle
+        # to maintain the hyperopt.Trials objects as is. It might be nice
+        # to write out a json version, but the Trials objects require
+        # some more work before they can be json encoded.
+        tune_output_pickle = os.path.join(output_dir, 'tune_%s.pickle' % (wiki))
+        with open(tune_output_pickle, 'w') as f:
+            f.write(pickle.dumps(tune_results))
+            print 'Wrote tuning results to %s' % (tune_output_pickle)
 
         # Generate a feature map so xgboost can include feature names in the dump.
         # The final `q` indicates all features are quantitative values (floats).
@@ -105,6 +128,12 @@ def parse_arguments():
              + 'the final result will require. This controls the number of '
              + 'trees used in the final result. Default uses 100 trees rather '
              + 'than dynamically choosing based on max_depth. (Default: None)')
+    parser.add_argument(
+        '-t', '--test-path', dest='test_dir', type=str, required=False, default=None,
+        help='A holdout test set to evaluate the final model against')
+    parser.add_argument(
+        '-z', '--zero-feature', dest='zero_features', type=str, nargs='+',
+        help='Zero out feature in input')
     parser.add_argument(
         '-v', '--verbose', dest='verbose', default=False, action='store_true',
         help='Increase logging to INFO')
