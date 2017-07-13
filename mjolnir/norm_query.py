@@ -21,6 +21,14 @@ from pyspark.sql import Window
 import requests
 
 
+def _batch(a, b, size):
+    assert len(a) == len(b)
+    idx = 0
+    while idx < len(a):
+        yield a[idx:idx+size], b[idx:idx+size]
+        idx += size
+
+
 def _binary_sim(matrix):
     """Compute a jaccard similarity matrix.
 
@@ -40,17 +48,31 @@ def _binary_sim(matrix):
     # The diagonal is offset by -1 because the identity in a similarity
     # matrix is always 1.
     r, c = np.tril_indices(matrix.shape[0], -1)
-    # Use those indices to build two matrices that contains all
-    # the rows we need to do a similarity comparison on
-    p1 = matrix[c]
-    p2 = matrix[r]
-    # Run the main jaccard calculation
-    intersection = np.logical_and(p1, p2).sum(1)
-    union = np.logical_or(p1, p2).sum(1).astype(np.float64)
-    # Build the result matrix with 1's on the diagonal
+
+    # Particularly large groups can blow out memory usage. Chunk the calculation
+    # into steps that require no more than ~100MB of memory at a time.
+    # We have 4 2d intermediate arrays in memory at a given time, plus the
+    # input and output:
+    #  p1 = max_rows * matrix.shape[1]
+    #  p2 = max_rows * matrix.shape[1]
+    #  intersection = max_rows * matrix.shape[1] * 4
+    #  union = max_rows * matrix.shape[1] * 8
+    # This adds up to:
+    #  memory usage = max_rows * matrix.shape[1] * 14
+    mem_limit = 100 * pow(2, 20)
+    max_rows = mem_limit / (14 * matrix.shape[1])
     out = np.eye(matrix.shape[0])
-    # Insert the result of our similarity calculation at their original indices
-    out[c, r] = intersection / union
+    for c_batch, r_batch in _batch(c, r, max_rows):
+        # Use those indices to build two matrices that contains all
+        # the rows we need to do a similarity comparison on
+        p1 = matrix[c_batch]
+        p2 = matrix[r_batch]
+        # Run the main jaccard calculation
+        intersection = np.logical_and(p1, p2).sum(1)
+        union = np.logical_or(p1, p2).sum(1).astype(np.float64)
+        # Build the result matrix with 1's on the diagonal
+        # Insert the result of our similarity calculation at their original indices
+        out[c_batch, r_batch] = intersection / union
     # Above only populated half of the matrix, the mirrored diagonal contains
     # only zeros. Fix that up by transposing. Adding the transposed matrix double
     # counts the diagonal so subtract that back out. We could skip this step and
@@ -76,6 +98,11 @@ def _make_query_groups(source, threshold=0.5):
     all_page_ids = list(set([page_id for row in source for page_id in row.hit_page_ids]))
     n_rows = len(source)
     n_columns = len(all_page_ids)
+    # No hits? something odd ... but ok. Return a unique
+    # group for each query.
+    if n_columns == 0:
+        return zip([row.query for row in source], range(n_rows))
+
     # Build up a matrix that has a unique query
     # for each row, and the columns are all known page ids. Cells are set
     # to True if that page id was shown for that query.
