@@ -150,7 +150,7 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
     df_hits_with_features = (
         df_hits
         .join(df_features, how='inner', on=['wikiid', 'query', 'hit_page_id'])
-        .withColumn('labels', mjolnir.spark.add_meta(sc, F.col('labels'), {
+        .withColumn('label', mjolnir.spark.add_meta(sc, F.col('label'), {
             'weightedNdcgAt10': weightedNdcgAt10,
             'ndcgAt10': ndcgAt10,
         })))

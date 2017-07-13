@@ -176,7 +176,7 @@ def sample(df, wikis, seed=None, queries_per_wiki=10000,
     Parameters
     ----------
     df : pyspark.sql.DataFrame
-        Input dataframe with columns wikiid, query, session_id and q_by_ip_day.
+        Input dataframe with columns wikiid, query, and session_id.
     wikis : set of strings
         The set of wikis to sample for. Many wikis will not have enough data
         to generate reasonable ml models. TODO: Should we instead define a
@@ -199,7 +199,7 @@ def sample(df, wikis, seed=None, queries_per_wiki=10000,
         The input DataFrame with all columns it origionally had sampled down
         based on the provided constraints.
     """
-    mjolnir.spark.assert_columns(df, ['wikiid', 'norm_query_id', 'session_id', 'q_by_ip_day'])
+    mjolnir.spark.assert_columns(df, ['wikiid', 'norm_query_id', 'session_id'])
 
     # Aggregate down into a unique set of (wikiid, norm_query_id) and add in a
     # count of the number of unique sessions per pair. Filter on the number
