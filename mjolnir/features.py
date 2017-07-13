@@ -402,6 +402,7 @@ def collect_es(df, url_list, feature_definitions, feature_names_accu, indices=No
     """
 
     mjolnir.spark.assert_columns(df, ['wikiid', 'query', 'hit_page_id'])
+    mjolnir.cirrus.check_idle(url_list, session_factory)
 
     if indices is None:
         indices = {}
@@ -428,9 +429,20 @@ def collect_es(df, url_list, feature_definitions, feature_names_accu, indices=No
                     if not any(map(math.isnan, features)):
                         yield [row.wikiid, row.query, hit_page_id, Vectors.dense(features)]
 
-    return (
+    # Protect the cluster from being overloaded. Bulk queries are issued in
+    # parallel, although feature queries aren't particularly expensive. Keep
+    # the total number of parallel queries < 1500
+    num_executors = 1500 / len(feature_definitions)
+
+    df_agg = (
         df
         .groupBy('wikiid', 'query')
-        .agg(F.collect_set('hit_page_id').alias('hit_page_ids'))
+        .agg(F.collect_set('hit_page_id').alias('hit_page_ids')))
+
+    if df_agg.rdd.getNumPartitions() > num_executors:
+        df_agg = df_agg.coalesce(num_executors)
+
+    return (
+        df_agg
         .rdd.mapPartitions(collect_partition)
         .toDF(['wikiid', 'query', 'hit_page_id', 'features']))

@@ -3,7 +3,9 @@ Reasonable facsimile's of queries from CirrusSearch, and utils
 to make those queries against an elasticsearch cluster.
 """
 
+import random
 import requests
+import urlparse
 
 
 def _bulk_success(response):
@@ -46,6 +48,34 @@ def make_request(session, url, url_list, bulk_query, num_retries=5, reuse_url=Fa
             # servers. If the url_list is a loadbalancer like LVS then we
             # want to keep using the existing url.
             url = url_list.pop()
+
+
+def check_idle(url_list, session_factory=requests.Session):
+    # Make a copy of url_list to ensure poping items off it doesn't
+    # effect other users of the same list.
+    url_list = list(url_list)
+    random.shuffle(url_list)
+    failed = []
+    with session_factory() as session:
+        while len(url_list):
+            parsed = urlparse.urlparse(url_list.pop())
+            try:
+                url = '%s://%s/_nodes/stats/os' % (parsed.scheme, parsed.netloc)
+                res = session.get(url).json()
+                num_nodes = len(res['nodes'])
+                busy_nodes = 0
+                for stats in res['nodes'].values():
+                    if stats['os']['cpu']['percent'] > 10:
+                        busy_nodes += 1
+            except:
+                failed.append(parsed.netloc)
+                #  Host depooled/unavailable? No big deal check another.
+                pass
+            if busy_nodes / float(num_nodes) > .1:
+                raise Exception('Refusing to use cluster containing %s: %d nodes with > 10 percent cpu usage'
+                                % (parsed.netloc, busy_nodes))
+            return
+    raise Exception('Failed to check idle status of elasticsearch cluster on: %s' % (', '.join(failed)))
 
 
 def full_text_query(query):

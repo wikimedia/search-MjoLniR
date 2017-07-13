@@ -54,7 +54,7 @@ def _batch(iterable, n):
         yield cur_batch
 
 
-def transform(df, url_list, indices=None, batch_size=30, top_n=5, session_factory=requests.Session):
+def transform(df, url_list, indices=None, batch_size=15, top_n=5, session_factory=requests.Session):
     """Collect hit page ids for queries from elasticsearch
 
     Parameters
@@ -92,6 +92,16 @@ def transform(df, url_list, indices=None, batch_size=30, top_n=5, session_factor
                     # difficult. Explicit, rather than row + (hit_page_ids,) to ensure
                     # ordering matches toDF([...]) call that names them
                     yield (row.wikiid, row.query, row.norm_query, hit_page_ids)
+
+    # To protect the cluster from overload limit the # of partitions.
+    # elasticsearch issues bulk queries in parallel so we are running, at most,
+    # batch_size * num_executors queries at a time within the cluster. The
+    # value of 1500 here has shown to be reasonable to keep the cluster busy
+    # but out of thread pool rejection.
+    mjolnir.cirrus.check_idle(url_list, session_factory)
+    max_executors = 1500 / batch_size
+    if df.rdd.getNumPartitions > max_executors:
+        df = df.coalesce(max_executors)
 
     return (
         df

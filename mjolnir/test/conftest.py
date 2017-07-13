@@ -93,7 +93,8 @@ class MockSession(object):
     def get(self, url, data=None):
         md5 = hashlib.md5()
         md5.update(url)
-        md5.update(data)
+        if data is not None:
+            md5.update(data)
         digest = md5.hexdigest()
 
         for row in self.sqlite.execute("SELECT status_code, content from requests WHERE digest=?", [digest]):
