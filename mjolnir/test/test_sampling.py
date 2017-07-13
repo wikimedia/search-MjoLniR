@@ -6,20 +6,20 @@ from pyspark.sql import functions as F
 import string
 
 
-def test_sampling_selects_all_if_less_than_queries_per_wiki(spark_context, hive_context):
+def test_sampling_selects_all_if_less_than_samples_per_wiki(spark_context, hive_context):
     # Although hive_context is not used directly, it must be requested so it
     # can monkey-patch pyspark.RDD
 
     # Generate a sample dataframe with only 10 queries, then ask for 10000
     df = spark_context.parallelize([
-        ('foo', 'a', 'aaa', 1),
-        ('foo', 'b', 'ccc', 2),
-        ('foo', 'c', 'ccc', 2),
-        ('foo', 'd', 'ddd', 2),
-        ('foo', 'e', 'eee', 2),
-    ]).toDF(['wikiid', 'norm_query_id', 'session_id', 'q_by_ip_day'])
+        ('foo', 'a', 1, 'aaa', list(range(3))),
+        ('foo', 'b', 2, 'ccc', list(range(3))),
+        ('foo', 'c', 3, 'ccc', list(range(3))),
+        ('foo', 'd', 4, 'ddd', list(range(3))),
+        ('foo', 'e', 5, 'eee', list(range(3))),
+    ]).toDF(['wikiid', 'query', 'norm_query_id', 'session_id', 'hit_page_ids'])
 
-    sampled = mjolnir.sampling.sample(df, ['foo'], queries_per_wiki=100,
+    sampled = mjolnir.sampling.sample(df, ['foo'], samples_per_wiki=100,
                                       min_sessions_per_query=1, seed=12345).collect()
     # The sampling rate should have been chosen as 1.0, so we should have all data
     # regardless of probabilities.

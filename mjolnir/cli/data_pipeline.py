@@ -27,7 +27,7 @@ SEARCH_CLUSTERS = {
 }
 
 
-def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
+def main(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
          min_sessions_per_query, search_cluster, brokers):
     # TODO: Should this jar have to be provided on the command line instead?
     sqlContext.sql("ADD JAR /mnt/hdfs/wmf/refinery/current/artifacts/refinery-hive.jar")
@@ -64,10 +64,8 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, queries_per_wiki,
     df_sampled = (
         mjolnir.sampling.sample(
             df_norm,
-            wikis=wikis,
             seed=54321,
-            queries_per_wiki=queries_per_wiki,
-            min_sessions_per_query=min_sessions_per_query)
+            samples_per_wiki=samples_per_wiki)
         # Explode source into a row per displayed hit
         .select('*', F.expr("posexplode(hit_page_ids)").alias('hit_position', 'hit_page_id'))
         .drop('hit_page_ids')
@@ -178,8 +176,8 @@ def parse_arguments():
         default='hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*',
         help='Input path, prefixed with hdfs://, to query and click data')
     parser.add_argument(
-        '-q', '--queries-per-wiki', dest='queries_per_wiki', type=int, default=20000,
-        help='The number of normalized queries, per wiki, to operate on')
+        '-q', '--samples-per-wiki', dest='samples_per_wiki', type=int, default=1000000,
+        help='The approximate number of rows in the final result per-wiki.')
     parser.add_argument(
         '-s', '--min-sessions', dest='min_sessions_per_query', type=int, default=10,
         help='The minimum number of sessions per normalized query')

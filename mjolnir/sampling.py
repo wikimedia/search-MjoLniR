@@ -82,7 +82,7 @@ def _calc_splits(df, num_buckets=100):
     return splits + [float('inf')]
 
 
-def _sample_queries(df, wikis, num_buckets=100, samples_desired=10000, seed=None):
+def _sample_queries(df, wiki_percents, num_buckets=100, seed=None):
     """Sample down a unique list of (wiki, norm_query_id, num_sessions)
 
     Given a dataset of unique queries, sample it down to samples_desired per wiki
@@ -99,14 +99,11 @@ def _sample_queries(df, wikis, num_buckets=100, samples_desired=10000, seed=None
     ----------
     df : pyspark.sql.DataFrame
         Input dataframe containing (wiki, norm_query_id, num_sessions) fields.
-    wikis : list of strings
-        List of wikis to generate samples for.
+    wiki_percents : dict
+        Map from wikiid to the fraction of norm_query_ids to use from that wiki.
     num_buckets : int, optional
         The number of buckets to divide each wiki's queries into. An equal number
         of queries will be sampled from each bucket. (Default: 100)
-    samples_desired : int, optional
-        The approximate total number of samples to return per wiki.
-        (Default: 10000)
     seed : int or None, optional
         Seed used for random sampling. (Default: None)
 
@@ -117,31 +114,21 @@ def _sample_queries(df, wikis, num_buckets=100, samples_desired=10000, seed=None
         samples_desired rows per wikiid.
     """
 
-    # Number of samples we need per bucket
-    bucket_samples = samples_desired / num_buckets
     # Map from wikiid -> list of splits, used by find_split to bucketize
     wiki_splits = {}
     # Map from (wikiid, split) -> % of samples needed. Used by RDD.sampleByKey
     wiki_fractions = {}
-    for wiki in wikis:
-        df_wiki = df.where(df.wikiid == wiki).cache()
-        try:
-            num_rows = df_wiki.count()
-            # If we have less than the desired amount of data no sampling is needed
-            if num_rows < samples_desired:
-                wiki_fractions[(wiki, float('inf'))] = 1.
-                wiki_splits[wiki] = [float('inf')]
-                continue
+    for wiki, fraction in wiki_percents.items():
+        # If we have less than the desired amount of data no sampling is needed
+        if fraction >= 1.:
+            wiki_fractions[(wiki, float('inf'))] = 1.
+            wiki_splits[wiki] = [float('inf')]
+            continue
 
-            # Number of source rows expected in each bucket
-            bucket_rows = float(num_rows) / num_buckets
-            # Fraction of rows needed from each bucket
-            bucket_fraction = bucket_samples / bucket_rows
-            wiki_splits[wiki] = _calc_splits(df_wiki, num_buckets)
-            for split in wiki_splits[wiki]:
-                wiki_fractions[(wiki, split)] = bucket_fraction
-        finally:
-            df_wiki.unpersist()
+        df_wiki = df.where(df.wikiid == wiki)
+        wiki_splits[wiki] = _calc_splits(df_wiki, num_buckets)
+        for split in wiki_splits[wiki]:
+            wiki_fractions[(wiki, split)] = fraction
 
     def to_pair_rdd(row):
         splits = wiki_splits[row.wikiid]
@@ -163,8 +150,7 @@ def _sample_queries(df, wikis, num_buckets=100, samples_desired=10000, seed=None
         .toDF(['wikiid', 'norm_query_id']))
 
 
-def sample(df, wikis, seed=None, queries_per_wiki=10000,
-           min_sessions_per_query=35, max_queries_per_ip_day=50):
+def sample(df, seed=None, samples_per_wiki=1000000):
     """Choose a representative sample of queries from input dataframe.
 
     Takes in the unsampled query click logs and filters it down into a smaller
@@ -177,21 +163,13 @@ def sample(df, wikis, seed=None, queries_per_wiki=10000,
     ----------
     df : pyspark.sql.DataFrame
         Input dataframe with columns wikiid, query, and session_id.
-    wikis : set of strings
-        The set of wikis to sample for. Many wikis will not have enough data
-        to generate reasonable ml models. TODO: Should we instead define a
-        minimum size to require?
     seed : int or None, optional
         The random seed used when sampling. If None a seed will be chosen
         randomly. (Default: None)
-    queries_per_wiki : int, optional
-        The desired number of distinct normalized queries per wikiid in the
+    samples_per_wiki : int, optional
+        The desired number of distinct (query, hit_page_id) pairs in the
         output. This constraint is approximate and the returned number
-        of queries may slightly vary per wiki. (Default: 10000)
-    min_sessions_per_query : int, optional
-        Require each chosen query to have at least this many sessions per
-        query. This is necessary To train the DBN later in the pipeline.
-        (Default: 35)
+        of queries may vary per wiki. (Default: 1000000)
 
     Returns
     -------
@@ -199,12 +177,39 @@ def sample(df, wikis, seed=None, queries_per_wiki=10000,
         The input DataFrame with all columns it origionally had sampled down
         based on the provided constraints.
     """
-    mjolnir.spark.assert_columns(df, ['wikiid', 'norm_query_id', 'session_id'])
+    mjolnir.spark.assert_columns(df, ['wikiid', 'query', 'hit_page_ids', 'norm_query_id', 'session_id'])
+
+    # We need this df twice, and by default the df coming in here is from
+    # mjolnir.norm_query which is quite expensive.
+    df.cache()
+
+    # Figure out the percentage of each wiki's norm_query_id's we need to approximately
+    # have samples_per_wiki final training samples.
+    hit_page_id_counts = (
+        df
+        .select('wikiid', 'query', F.explode('hit_page_ids').alias('hit_page_id'))
+        # We could groupBy('wikiid').agg(F.countDistinct('query', 'hit_page_id'))
+        # directly, but this causes spark to blow out memory limits by
+        # collecting too much data on too few executors.
+        .groupBy('wikiid', 'query')
+        .agg(F.countDistinct('hit_page_id').alias('num_hit_page_ids'))
+        .groupBy('wikiid')
+        .agg(F.sum('num_hit_page_ids').alias('num_hit_page_ids'))
+        .collect())
+
+    wiki_percents = {}
+    needs_sampling = False
+    for row in hit_page_id_counts:
+        wiki_percents[row.wikiid] = min(1., float(samples_per_wiki) / row.num_hit_page_ids)
+        if wiki_percents[row.wikiid] < 1.:
+            needs_sampling = True
+
+    if not needs_sampling:
+        return df
 
     # Aggregate down into a unique set of (wikiid, norm_query_id) and add in a
-    # count of the number of unique sessions per pair. Filter on the number
-    # of sessions as we need some minimum number of sessions per query to train
-    # the DBN
+    # count of the number of unique sessions per pair. We will sample per-strata
+    # based on percentiles of num_sessions.
     df_queries_unique = (
         df
         .groupBy('wikiid', 'norm_query_id')
@@ -214,7 +219,11 @@ def sample(df, wikis, seed=None, queries_per_wiki=10000,
         # Spark will eventually throw this away in an LRU fashion.
         .cache())
 
-    df_queries_sampled = _sample_queries(df_queries_unique, wikis, samples_desired=queries_per_wiki, seed=seed)
+    # materialize df_queries_unique so we can unpersist the input df
+    df_queries_unique.count()
+    df.unpersist()
 
-    # Select the rows chosen by sampling from the filtered df
+    df_queries_sampled = _sample_queries(df_queries_unique, wiki_percents, seed=seed)
+
+    # Select the rows chosen by sampling from the input df
     return df.join(df_queries_sampled, how='inner', on=['wikiid', 'norm_query_id'])
