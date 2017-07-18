@@ -561,7 +561,7 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, target_node_evaluations=
         },
         'params': space,
         'metrics': {
-            'test': -loss,
-            'train': -loss + true_loss
+            'cv-test': -loss,
+            'cv-train': -loss + true_loss
         }
     }
