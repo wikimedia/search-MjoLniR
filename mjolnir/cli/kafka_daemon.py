@@ -5,6 +5,7 @@ kafka.
 """
 
 import argparse
+import logging
 import mjolnir.kafka.daemon
 
 
@@ -17,10 +18,24 @@ def parse_arguments():
         '-w', '--num-workers', dest='n_workers', type=int, default=5,
         help='Number of workers to issue elasticsearch queries in parallel. '
              + 'Defaults to 5.')
+    parser.add_argument(
+        '-v', '--verbose', dest='verbose', default=False, action='store_true',
+        help='Increase logging to INFO')
+    parser.add_argument(
+        '-vv', '--very-verbose', dest='very_verbose', default=False, action='store_true',
+        help='Increase logging to DEBUG')
     args = parser.parse_args()
     return dict(vars(args))
 
 
 if __name__ == '__main__':
     args = parse_arguments()
+    if args['very_verbose']:
+        logging.basicConfig(level=logging.DEBUG)
+    elif args['verbose']:
+        logging.basicConfig(level=logging.INFO)
+    else:
+        logging.basicConfig()
+    del args['verbose']
+    del args['very_verbose']
     mjolnir.kafka.daemon.Daemon(**args).run()

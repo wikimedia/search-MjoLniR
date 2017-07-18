@@ -10,6 +10,7 @@ To run:
 """
 
 import argparse
+import logging
 import mjolnir.training.xgboost
 import os
 import pickle
@@ -110,6 +111,12 @@ def parse_arguments():
              + 'trees used in the final result. Default uses 100 trees rather '
              + 'than dynamically choosing based on max_depth. (Default: None)')
     parser.add_argument(
+        '-v', '--verbose', dest='verbose', default=False, action='store_true',
+        help='Increase logging to INFO')
+    parser.add_argument(
+        '-vv', '--very-verbose', dest='very_verbose', default=False, action='store_true',
+        help='Increase logging to DEBUG')
+    parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='+',
         help='A wiki to perform model training for.')
 
@@ -121,6 +128,14 @@ def parse_arguments():
 
 if __name__ == "__main__":
     args = parse_arguments()
+    if args['very_verbose']:
+        logging.basicConfig(level=logging.DEBUG)
+    elif args['verbose']:
+        logging.basicConfig(level=logging.INFO)
+    else:
+        logging.basicConfig()
+    del args['verbose']
+    del args['very_verbose']
     # TODO: Set spark configuration? Some can't actually be set here though, so best might be to set all of it
     # on the command line for consistency.
     sc = SparkContext(appName="MLR: training pipeline")
