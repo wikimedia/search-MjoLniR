@@ -45,6 +45,10 @@ def test_norm_query(df_love, hive_context, make_requests_session):
     ([[1, 2, 3, 4, 5], [2, 3, 4, 5, 6], [3, 4, 5, 6, 7]], [0, 0, 0]),
     # first item doesn't overlap enough to group with the other two
     ([[2, 3, 6, 7, 8], [2, 3, 4, 5, 6], [3, 4, 5, 6, 7]], [0, 1, 1]),
+    # One item no hits
+    ([[1, 2], []], [0, 1]),
+    # All items no hits
+    ([[], []], [0, 1]),
 ])
 def test_make_query_groups(hits, expected):
     row = namedtuple('row', ('query', 'hit_page_ids'))
