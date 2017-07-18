@@ -21,7 +21,7 @@ from pyspark.sql import functions as F
 
 
 def main(sc, sqlContext, input_dir, output_dir, wikis, target_node_evaluations,
-         num_workers, num_cv_jobs, num_folds, test_dir):
+         num_workers, num_cv_jobs, num_folds, test_dir, zero_features):
 
     if os.path.exists(output_dir):
         logging.error('Output directory (%s) already exists' % (output_dir))
@@ -43,6 +43,10 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, target_node_evaluations,
             print 'No data found.' % (wiki)
             print ''
             continue
+
+        if zero_features:
+            df_hits_with_features = mjolnir.feature_engineering.zero_features(
+                    df_hits_with_features, zero_features)
 
         # Explore a hyperparameter space. Skip the most expensive part of tuning,
         # increasing the # of trees, with target_node_evaluations=None

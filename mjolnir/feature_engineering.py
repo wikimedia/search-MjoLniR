@@ -41,6 +41,7 @@ def zero_features(df, *feature_names):
     """
     features = df.schema['features'].metadata['features']
     idxs = [features.index(name) for name in feature_names]
+
     def zero_features(feat):
         raw = feat.toArray()
         for idx in idxs:
@@ -63,6 +64,7 @@ def explode_features(df):
     pyspark.sql.DataFrame
     """
     features = df.schema['features'].metadata['features']
+
     def extract_feature(features, idx):
         return features.toArray()[idx]
     extract_feature_udf = F.udf(extract_feature, pyspark.sql.types.FloatType())
