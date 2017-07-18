@@ -83,7 +83,7 @@ def split(df, splits, output_column='fold', num_partitions=100):
         .collect())
 
     df_splits = (
-        sc.parallelize(split_rows(rows))
+        df._sc.parallelize(split_rows(rows))
         .toDF(['wikiid', 'norm_query_id', output_column]))
 
     return df.join(df_splits, how='inner', on=['wikiid', 'norm_query_id'])

@@ -19,8 +19,8 @@ def test_sampling_selects_all_if_less_than_samples_per_wiki(spark_context, hive_
         ('foo', 'e', 5, 'eee', list(range(3))),
     ]).toDF(['wikiid', 'query', 'norm_query_id', 'session_id', 'hit_page_ids'])
 
-    sampled = mjolnir.sampling.sample(df, ['foo'], samples_per_wiki=100,
-                                      min_sessions_per_query=1, seed=12345).collect()
+    sampled = mjolnir.sampling.sample(df, samples_per_wiki=100,
+                                      seed=12345).collect()
     # The sampling rate should have been chosen as 1.0, so we should have all data
     # regardless of probabilities.
     assert len(sampled) == 5
@@ -49,26 +49,34 @@ def test_sampling_general_approach(spark_context, hive_context):
             num_sessions = max(1, min(100, int(a * math.pow(x+1, k)) + 10))
             for j in xrange(0, num_sessions):
                 session_id = "%s_%s_%s" % (wiki, q, str(j))
-                rows.append((wiki, q, session_id, 1))
+                rows.append((wiki, q, x, session_id, list(range(3))))
 
-    df = spark_context.parallelize(rows).toDF(['wikiid', 'norm_query_id', 'session_id', 'q_by_ip_day'])
-    queries_per_wiki = 100
-    df_sampled = mjolnir.sampling.sample(df, [wiki for (wiki, _, _) in wikis],
-                                         queries_per_wiki=queries_per_wiki,
-                                         min_sessions_per_query=10, seed=12345)
-    sampled = df_sampled.collect()
+    df = (
+        spark_context.parallelize(rows)
+        .toDF(['wikiid', 'query', 'norm_query_id', 'session_id', 'hit_page_ids']))
 
-    ratio_of_sessions = len(sampled) / len(rows)
-    expected_ratio_of_sessions = queries_per_wiki / len(queries)
-    # assert the overall sampling matches constraint on ratio
-    assert abs(ratio_of_sessions - expected_ratio_of_sessions) < 0.01
+    samples_per_wiki = 1000
+    # Using a constant seed ensures deterministic testing. Because this code
+    # actually relies on the law of large numbers, and we do not have large
+    # numbers here, many seeds probably fail.
+    df_sampled = mjolnir.sampling.sample(df, samples_per_wiki=samples_per_wiki,
+                                         seed=12345)
+    sampled = (
+        df_sampled
+        .select('wikiid', 'query', F.explode('hit_page_ids').alias('hit_page_id'))
+        .drop_duplicates()
+        .groupBy('wikiid')
+        .agg(F.count(F.lit(1)).alias('num_samples'))
+        .collect())
+
+    total_samples_desired = len(wikis) * samples_per_wiki
+    total_samples = sum([r.num_samples for r in sampled])
+    assert abs(total_samples - total_samples_desired) / float(total_samples_desired) < 0.05
     # Test each wiki also meets the constraint
     for (wiki, _, _) in wikis:
         # ratio of rows
-        sampled_num_rows = len([r for r in sampled if r.wikiid == wiki])
-        orig_num_rows = len([r for r in rows if r[0] == wiki])
-        ratio_of_sessions = sampled_num_rows / orig_num_rows
-        assert abs(ratio_of_sessions - expected_ratio_of_sessions) < 0.01, wiki
+        sampled_num_rows = sum([r.num_samples for r in sampled if r.wikiid == wiki])
+        assert abs(sampled_num_rows - samples_per_wiki) / float(samples_per_wiki) < 0.05
 
     # assert correlation between sessions per query
     orig_grouped = (
