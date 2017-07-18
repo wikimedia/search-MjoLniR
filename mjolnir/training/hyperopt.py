@@ -37,18 +37,17 @@ class _GridSearchAlgo(object):
         return rval
 
 
-def grid_search(df, train_func, space, num_folds=5, num_fold_partitions=100,
-                num_cv_jobs=5, num_workers=5):
+def grid_search(df, train_func, space, num_folds=5, num_cv_jobs=5, num_workers=5):
     # TODO: While this tried to look simple, hyperopt is a bit odd to integrate
     # with this directly. Perhaps implement naive gridsearch directly instead
     # of through hyperopt.
     algo = _GridSearchAlgo(space)
     return minimize(df, train_func, space, algo.max_evals, algo, num_folds,
-                    num_fold_partitions, num_cv_jobs, num_workers)
+                    num_cv_jobs, num_workers)
 
 
 def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
-             num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5):
+             num_folds=5, num_cv_jobs=5, num_workers=5):
     """Perform cross validated hyperparameter optimization of train_func
 
     Parameters
@@ -66,10 +65,6 @@ def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
         details.
     num_folds : int
         Number of folds to split df into for cross validation
-    num_fold_partitions : int
-        Sets the number of partitions to split with. Each partition needs
-        to be some minimum size for averages to work out to an evenly split
-        final set. (Default: 100)
     num_cv_jobs : int
         Number of cross validation folds to train in parallel
     num_workers : int
@@ -112,8 +107,7 @@ def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
         }
 
     folds = mjolnir.training.tuning._make_folds(
-        df, num_folds=num_folds, num_workers=num_workers,
-        num_fold_partitions=num_fold_partitions, num_cv_jobs=num_cv_jobs)
+        df, num_folds=num_folds, num_workers=num_workers, num_cv_jobs=num_cv_jobs)
 
     for fold in folds:
         fold['train'].cache()

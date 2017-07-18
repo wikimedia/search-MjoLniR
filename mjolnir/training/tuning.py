@@ -48,7 +48,7 @@ def split(df, splits, output_column='fold', num_partitions=100):
 
     mjolnir.spark.assert_columns(df, ['wikiid', 'norm_query_id'])
 
-    def split_partition(rows):
+    def split_rows(rows):
         # Current number of items per split
         split_counts = defaultdict(lambda: [0] * len(splits))
         # starting at 1 prevents div by zero. Using a float allows later
@@ -68,15 +68,22 @@ def split(df, splits, output_column='fold', num_partitions=100):
                 yield (row.wikiid, row.norm_query_id, 0)
             processed[row.wikiid] += row.weight
 
-    df_splits = (
+    # Calculating splits with mapPartitions is only deterministic if the # of input
+    # partitions stays the same but it seems catalyst can sometimes decide to change
+    # the number of partitions of the input if it comes from disk based on the rest
+    # of the plan.
+    # This fights back by calculating everything on the driver. Maybe not ideal
+    # but seems to work as we can guarantee the splits are calculated a single time.
+    # This is reasonable because even with 10's of M of samples there will only
+    # be a few hundred thousand (wikiid, norm_query_id) rows.
+    rows = (
         df
         .groupBy('wikiid', 'norm_query_id')
         .agg(F.count(F.lit(1)).alias('weight'))
-        # Could we guess the correct number of partitions instead? I'm not
-        # sure though how it should be decided, and would require taking
-        # an extra pass over the data.
-        .coalesce(num_partitions)
-        .rdd.mapPartitions(split_partition)
+        .collect())
+
+    df_splits = (
+        sc.parallelize(split_rows(rows))
         .toDF(['wikiid', 'norm_query_id', output_column]))
 
     return df.join(df_splits, how='inner', on=['wikiid', 'norm_query_id'])
@@ -106,7 +113,7 @@ def group_k_fold(df, num_folds, num_partitions=100, output_column='fold'):
         })))
 
 
-def _make_folds(df, num_folds, num_fold_partitions, num_cv_jobs, num_workers):
+def _make_folds(df, num_folds, num_cv_jobs, num_workers):
     """Transform a DataFrame with assigned folds into many dataframes.
 
     The results of split and group_k_fold emit a single dataframe with folds
@@ -128,10 +135,6 @@ def _make_folds(df, num_folds, num_fold_partitions, num_cv_jobs, num_workers):
     num_folds : int
         Number of folds to create. If a 'fold' column already exists in df
         this will be ignored.
-    num_fold_partitions : int
-        Sets the number of partitions to split with. Each partition needs
-        to be some minimum size for averages to work out to an evenly split
-        final set.
     num_cv_jobs: int
         Number of folds to prepare in parallel.
     num_workers : int
@@ -147,10 +150,10 @@ def _make_folds(df, num_folds, num_fold_partitions, num_cv_jobs, num_workers):
         corresponding to group data needed by xgboost for train/eval.
     """
     if 'fold' in df.columns:
-        num_folds = df.schema['fold'].metadata['num_folds']
+        assert num_folds == df.schema['fold'].metadata['num_folds']
         df_folds = df
     else:
-        df_folds = group_k_fold(df, num_folds, num_fold_partitions)
+        df_folds = group_k_fold(df, num_folds)
 
     def job(fold):
         condition = F.col('fold') == fold
@@ -229,8 +232,7 @@ def _cross_validate(folds, train_func, params, num_cv_jobs, num_workers):
         return map(job_w_retry, folds)
 
 
-def cross_validate(df, train_func, params, num_folds=5, num_fold_partitions=100,
-                   num_cv_jobs=5, num_workers=5):
+def cross_validate(df, train_func, params, num_folds=5, num_cv_jobs=5, num_workers=5):
     """Perform cross-validation of the dataframe
 
     Parameters
@@ -243,10 +245,6 @@ def cross_validate(df, train_func, params, num_folds=5, num_fold_partitions=100,
         parameters to pass on to train_func
     num_folds : int
         Number of folds to split df into for cross validation
-    num_fold_partitions : int, optional
-        Sets the number of partitions to split with. Each partition needs
-        to be some minimum size for averages to work out to an evenly split
-        final set. (Default: 100)
     num_cv_jobs : int
         Number of cross validation folds to train in parallel
     num_workers : int
@@ -259,6 +257,6 @@ def cross_validate(df, train_func, params, num_folds=5, num_fold_partitions=100,
         correspond the the model evaluation metric for the train and test
         data frames.
     """
-    folds = _make_folds(df, num_folds, num_fold_partitions, num_cv_jobs, num_workers)
+    folds = _make_folds(df, num_folds, num_cv_jobs, num_workers)
     return _cross_validate(folds, train_func, params, num_cv_jobs=num_cv_jobs,
                            num_workers=num_workers)

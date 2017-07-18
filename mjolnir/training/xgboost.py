@@ -391,8 +391,7 @@ def _estimate_best_eta(trials, source_etas, length=1e4):
     return eta_pred[idx]
 
 
-def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
-         target_node_evaluations=5000):
+def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, target_node_evaluations=5000):
     """Find appropriate hyperparameters for training df
 
     This is far from perfect, hyperparameter tuning is a bit of a black art
@@ -414,10 +413,6 @@ def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
     df : pyspark.sql.DataFrame
     num_folds : int, optional
         The number of cross validation folds to use while tuning. (Default: 5)
-    num_fold_partitions : int, optional
-        The number of partitions to use when calculating folds. For small
-        datasets this needs to be a reasonably small number. For medium to
-        large the default is reasonable. (Default: 100)
     num_cv_jobs : int, optional
         The number of cross validation folds to train in parallel. (Default: 5)
     num_workers : int, optional
@@ -444,8 +439,7 @@ def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
     def eval_space(space, max_evals):
         """Eval a space using standard hyperopt"""
         best, trials = mjolnir.training.hyperopt.minimize(
-            df, train, space, max_evals=max_evals,
-            num_folds=num_folds, num_fold_partitions=num_fold_partitions,
+            df, train, space, max_evals=max_evals, num_folds=num_folds,
             num_cv_jobs=num_cv_jobs, num_workers=num_workers)
         for k, v in space.items():
             if not np.isscalar(v):
@@ -455,7 +449,7 @@ def tune(df, num_folds=5, num_fold_partitions=100, num_cv_jobs=5, num_workers=5,
     def eval_space_grid(space):
         """Eval all points in the space via a grid search"""
         best, trials = mjolnir.training.hyperopt.grid_search(
-            df, train, space, num_folds=num_folds, num_fold_partitions=num_fold_partitions,
+            df, train, space, num_folds=num_folds,
             num_cv_jobs=num_cv_jobs, num_workers=num_workers)
         for k, v in space.items():
             if not np.isscalar(v):
