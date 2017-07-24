@@ -89,7 +89,10 @@ def get_offset_start(brokers, topic=mjolnir.kafka.TOPIC_RESULT):
     list of int
     """
     consumer = kafka.KafkaConsumer(bootstrap_servers=brokers)
-    partitions = [kafka.TopicPartition(topic, p) for p in consumer.partitions_for_topic(topic)]
+    parts = consumer.partitions_for_topic(topic)
+    if parts is None:
+        return None
+    partitions = [kafka.TopicPartition(topic, p) for p in parts]
     consumer.assign(partitions)
     return [consumer.position(p) for p in partitions]
 
@@ -124,6 +127,10 @@ def get_offset_end(brokers, run_id, num_end_sigils, topic=mjolnir.kafka.TOPIC_CO
                                    # sure we don't miss one start at the beginning.
                                    auto_offset_reset='earliest',
                                    value_deserializer=json.loads)
+    parts = consumer.partitions_for_topic(topic=mjolnir.kafka.TOPIC_COMPLETE)
+    if parts is None:
+        raise RuntimeError("topic %s missing" % topic)
+
     partitions = [kafka.TopicPartition(topic, p) for p in consumer.partitions_for_topic(topic)]
     consumer.assign(partitions)
     # Tracks the maximum reported offset in the response topic
@@ -170,11 +177,17 @@ def collect_results(sc, brokers, receive_record, offsets_start, offsets_end, run
     """
 
     offset_ranges = []
-    # If this ends up being too much data from kafka, blowing up memory in the
-    # spark executors, we could chunk the offsets and union together multiple RDD's.
+    if offsets_start is None:
+        offsets_start = get_offset_start(brokers, mjolnir.kafka.TOPIC_RESULT)
+
+    if offsets_start is None:
+        raise RuntimeError("Cannot fetch offset_start, topic %s should have been created" % mjolnir.kafka.TOPIC_RESULT)
     for partition, (start, end) in enumerate(zip(offsets_start, offsets_end)):
         offset_ranges.append(OffsetRange(mjolnir.kafka.TOPIC_RESULT, partition, start, end))
+    assert not isinstance(brokers, basestring)
     kafka_params = {"metadata.broker.list": ','.join(brokers)}
+    # If this ends up being too much data from kafka, blowing up memory in the
+    # spark executors, we could chunk the offsets and union together multiple RDD's.
     return (
         KafkaUtils.createRDD(sc, kafka_params, offset_ranges)
         .map(lambda (k, v): json.loads(v))

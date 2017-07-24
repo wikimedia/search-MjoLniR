@@ -129,6 +129,7 @@ class Daemon(object):
         partitions = [kafka.TopicPartition(self.topic_result, p)
                       for p in consumer.partitions_for_topic(self.topic_result)]
         consumer.assign(partitions)
+        consumer.seek_to_end()
         offsets = [consumer.position(tp) for tp in partitions]
         consumer.close()
         return offsets
