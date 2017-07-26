@@ -263,6 +263,7 @@ class XGBoostModel(object):
         else:
             fmap_f = tempfile.NamedTemporaryFile()
             fmap_f.write(feature_map)
+            fmap_f.flush()
             fmap_path = fmap_f.name
         # returns an Array[String] from scala, where each element of the array
         # is a json string representing a single tree.
