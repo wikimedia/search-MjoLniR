@@ -51,6 +51,15 @@ This will be worked out, but for now it is all manual. Some caveats:
 * MjoLniR requires a jar built in the /jvm directory of this repository. This is a fat jar
   containing other dependencies, such as xgboost and kafka streaming.
 
+* Some conflict with dependencies installed in the analytics cluster may cause kafka streaming
+  to fail with `kafka.cluster.BrokerEndPoint cannot be cast to kafka.cluster.broker`.
+  This is probably due to `kafka 0.9` client jar being imported with flume. Workround
+  is to copy wmf spark conf:
+  `cp -r /etc/spark/conf.analytics-hadoop my_spark_conf`
+  then comment the flume dependency in spark-env.sh:
+  `#SPARK_DIST_CLASSPATH="$SPARK_DIST_CLASSPATH:/usr/lib/flume-ng/lib/*"`
+  and run spark with SPARK_CONF_DIR set to your custom folder.
+
 Spark gotchas
 =============
 
