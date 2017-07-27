@@ -55,8 +55,8 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, target_node_evaluations,
             num_cv_jobs=num_cv_jobs, num_workers=num_workers,
             target_node_evaluations=target_node_evaluations)
 
-        print 'CV  test-ndcg@10: %.4f' % (tune_results['metrics']['test'])
-        print 'CV train-ndcg@10: %.4f' % (tune_results['metrics']['train'])
+        print 'CV  test-ndcg@10: %.4f' % (tune_results['metrics']['cv-test'])
+        print 'CV train-ndcg@10: %.4f' % (tune_results['metrics']['cv-train'])
 
         # Train a model over all data with best params
         best_params = tune_results['params']
