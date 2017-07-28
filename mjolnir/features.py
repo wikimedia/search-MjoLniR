@@ -670,6 +670,7 @@ def collect_from_ltr_plugin(df, url_list, model, feature_names_accu, indices=Non
             for row in rows:
                 req = log_query.make_msearch(row, indices)
                 url, response = mjolnir.cirrus.make_request(session, url, url_list, req)
+                assert response.status_code == 200
                 parsed = json.loads(response.text)
                 assert 'responses' in parsed, response.text
                 resp = parsed['responses'][0]
@@ -711,12 +712,10 @@ def collect_from_ltr_plugin_and_kafka(df, brokers, model, feature_names_accu, in
         indices = {}
     eltType, name, store = _explode_ltr_model_definition(model)
     log_query = LtrLoggingQuery(eltType, name, store)
-    Response = namedtuple('Response', ['status_code', 'text'])
 
     def kafka_handle_response(record):
-        response = Response(record['status_code'], record['text'])
-        parsed = json.loads(response.text)
-        assert 'responses' in parsed, response.text
+        assert record['status_code'] == 200
+        parsed = json.loads(record['text'])
         response = parsed['responses'][0]
 
         for hit_page_id, features in extract_ltr_log_feature_values(response, feature_names_accu):
