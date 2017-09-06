@@ -1,7 +1,9 @@
 from __future__ import absolute_import
 import hyperopt
+import math
 import mjolnir.spark
 import mjolnir.training.hyperopt
+from multiprocessing.dummy import Pool
 import numpy as np
 import pprint
 import pyspark.sql
@@ -446,11 +448,20 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, target_node_evaluations=
         performed, each containing a hyperopt.Trials object recording what
         happened.
     """
+
+    cv_pool = Pool(num_cv_jobs)
+    trials_pool_size = int(math.floor(num_cv_jobs / num_folds))
+    if trials_pool_size > 1:
+        print 'Running %d cross validations in parallel' % (trials_pool_size)
+        trials_pool = Pool(trials_pool_size)
+    else:
+        trials_pool = None
+
     def eval_space(space, max_evals):
         """Eval a space using standard hyperopt"""
         best, trials = mjolnir.training.hyperopt.minimize(
             df, train, space, max_evals=max_evals, num_folds=num_folds,
-            num_cv_jobs=num_cv_jobs, num_workers=num_workers)
+            num_workers=num_workers, cv_pool=cv_pool, trials_pool=trials_pool)
         for k, v in space.items():
             if not np.isscalar(v):
                 print 'best %s: %f' % (k, best[k])
@@ -460,7 +471,7 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, target_node_evaluations=
         """Eval all points in the space via a grid search"""
         best, trials = mjolnir.training.hyperopt.grid_search(
             df, train, space, num_folds=num_folds,
-            num_cv_jobs=num_cv_jobs, num_workers=num_workers)
+            num_workers=num_workers, cv_pool=cv_pool, trials_pool=trials_pool)
         for k, v in space.items():
             if not np.isscalar(v):
                 print 'best %s: %f' % (k, best[k])

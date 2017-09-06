@@ -8,7 +8,6 @@ from hyperopt.utils import coarse_utcnow
 import itertools
 import math
 import mjolnir.training.tuning
-from multiprocessing.dummy import Pool
 import numpy as np
 
 
@@ -35,9 +34,9 @@ if not hasattr(hyperopt.FMinIter, '_mjolnir_hack'):
 
 
 class ThreadingTrials(hyperopt.Trials):
-    def __init__(self, pool_size):
+    def __init__(self, pool):
         super(ThreadingTrials, self).__init__()
-        self.pool = Pool(pool_size)
+        self.pool = pool
 
     def _evaluate_one(self, trial):
         if trial['state'] != hyperopt.JOB_STATE_NEW:
@@ -109,17 +108,18 @@ class _GridSearchAlgo(object):
         return rval
 
 
-def grid_search(df, train_func, space, num_folds=5, num_cv_jobs=5, num_workers=5):
+def grid_search(df, train_func, space, num_folds=5, num_workers=5,
+                cv_pool=None, trials_pool=None):
     # TODO: While this tried to look simple, hyperopt is a bit odd to integrate
     # with this directly. Perhaps implement naive gridsearch directly instead
     # of through hyperopt.
     algo = _GridSearchAlgo(space)
     return minimize(df, train_func, space, algo.max_evals, algo, num_folds,
-                    num_cv_jobs, num_workers)
+                    num_workers, cv_pool, trials_pool)
 
 
 def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
-             num_folds=5, num_cv_jobs=5, num_workers=5):
+             num_folds=5, num_workers=5, cv_pool=None, trials_pool=None):
     """Perform cross validated hyperparameter optimization of train_func
 
     Parameters
@@ -137,10 +137,14 @@ def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
         details.
     num_folds : int
         Number of folds to split df into for cross validation
-    num_cv_jobs : int
-        Number of cross validation folds to train in parallel
     num_workers : int
         Number of executors to use for each model training
+    cv_pool : multiprocessing.dummy.Pool or None
+        Controls the number of models to run in parallel. If None models
+        are trained sequentially.
+    trials_pool : multiprocessing.dummy.Pool or None
+        Controls the number of hyperopt trials run in parallel. If None trials
+        are run sequentially.
 
     Returns
     -------
@@ -149,10 +153,11 @@ def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
     trials : hyperopt.Trials
         Information about every iteration of the search
     """
+
     def objective(params):
         scores = mjolnir.training.tuning._cross_validate(
-            folds, train_func, params, num_cv_jobs=num_cv_jobs,
-            num_workers=num_workers)
+            folds, train_func, params, num_workers=num_workers,
+            pool=cv_pool)
         # For now the only metric is NDCG, and hyperopt is a minimizer
         # so return the negative NDCG
         loss = [-s['test'] for s in scores]
@@ -175,17 +180,13 @@ def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
         }
 
     folds = mjolnir.training.tuning._make_folds(
-        df, num_folds=num_folds, num_workers=num_workers, num_cv_jobs=num_cv_jobs)
-
-    # Figure out if we can run multiple cross validations in parallel
-    pool_size = int(math.floor(num_cv_jobs / num_folds))
-    print 'Running %d cross validations in parallel' % (pool_size)
+        df, num_folds=num_folds, num_workers=num_workers, pool=cv_pool)
 
     try:
-        if pool_size > 1:
-            trials = ThreadingTrials(pool_size)
-        else:
+        if trials_pool is None:
             trials = hyperopt.Trials()
+        else:
+            trials = ThreadingTrials(trials_pool)
         best = hyperopt.fmin(objective, space, algo=algo,
                              max_evals=max_evals, trials=trials)
     finally:

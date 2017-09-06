@@ -4,7 +4,6 @@ Support for making test/train or k-fold splits
 from __future__ import absolute_import
 from collections import defaultdict
 import mjolnir.spark
-from multiprocessing.dummy import Pool
 import py4j.protocol
 from pyspark.sql import functions as F
 
@@ -113,7 +112,7 @@ def group_k_fold(df, num_folds, num_partitions=100, output_column='fold'):
         })))
 
 
-def _make_folds(df, num_folds, num_cv_jobs, num_workers):
+def _make_folds(df, num_folds, num_workers, pool):
     """Transform a DataFrame with assigned folds into many dataframes.
 
     The results of split and group_k_fold emit a single dataframe with folds
@@ -135,11 +134,12 @@ def _make_folds(df, num_folds, num_cv_jobs, num_workers):
     num_folds : int
         Number of folds to create. If a 'fold' column already exists in df
         this will be ignored.
-    num_cv_jobs: int
-        Number of folds to prepare in parallel.
     num_workers : int
         Number of workers used to train each model. This is passed onto
         xgboost.prep_training to prepare each fold.
+    pool : multiprocessing.dummy.Pool or None
+        Used to prepare folds in parallel. If not provided folds will be
+        generated sequentially.
 
     Returns
     -------
@@ -171,11 +171,10 @@ def _make_folds(df, num_folds, num_cv_jobs, num_workers):
             'j_test_groups': j_test_groups
         }
 
-    if num_cv_jobs > 1:
-        pool = Pool(num_cv_jobs)
-        return pool.map(job, range(num_folds))
-    else:
+    if pool is None:
         return map(job, range(num_folds))
+    else:
+        return pool.map(job, range(num_folds))
 
 
 def _py4j_retry(fn, default_retval):
@@ -198,7 +197,7 @@ def _py4j_retry(fn, default_retval):
     return with_retry
 
 
-def _cross_validate(folds, train_func, params, num_cv_jobs, num_workers):
+def _cross_validate(folds, train_func, params, num_workers, pool):
     """Perform cross validation of the provided folds
 
     Parameters
@@ -206,8 +205,8 @@ def _cross_validate(folds, train_func, params, num_cv_jobs, num_workers):
     folds : list
     train_func : callable
     params : dict
-    num_cv_jobs : int
     num_workers : int
+    pool : multiprocessing.dummy.Pool or None
 
     Returns
     -------
@@ -227,14 +226,13 @@ def _cross_validate(folds, train_func, params, num_cv_jobs, num_workers):
         'test': float('nan'),
     })
 
-    if num_cv_jobs > 1:
-        p = Pool(num_cv_jobs)
-        return p.map(job_w_retry, folds)
-    else:
+    if pool is None:
         return map(job_w_retry, folds)
+    else:
+        return pool.map(job_w_retry, folds)
 
 
-def cross_validate(df, train_func, params, num_folds=5, num_cv_jobs=5, num_workers=5):
+def cross_validate(df, train_func, params, num_folds=5, num_workers=5, pool=None):
     """Perform cross-validation of the dataframe
 
     Parameters
@@ -247,10 +245,11 @@ def cross_validate(df, train_func, params, num_folds=5, num_cv_jobs=5, num_worke
         parameters to pass on to train_func
     num_folds : int
         Number of folds to split df into for cross validation
-    num_cv_jobs : int
-        Number of cross validation folds to train in parallel
     num_workers : int
         Number of executors to use for each model training
+    pool : multiprocessing.dummy.Pool, optional
+        Used to prepare folds and run cross validations in parallel. If
+        not provided all work will be done sequentially.
 
     Returns
     -------
@@ -259,10 +258,9 @@ def cross_validate(df, train_func, params, num_folds=5, num_cv_jobs=5, num_worke
         correspond the the model evaluation metric for the train and test
         data frames.
     """
-    folds = _make_folds(df, num_folds, num_cv_jobs, num_workers)
+    folds = _make_folds(df, num_folds, num_workers, pool)
     try:
-        return _cross_validate(folds, train_func, params, num_cv_jobs=num_cv_jobs,
-                               num_workers=num_workers)
+        return _cross_validate(folds, train_func, params, num_workers=num_workers, pool=pool)
     finally:
         for fold in folds:
             fold['train'].unpersist()

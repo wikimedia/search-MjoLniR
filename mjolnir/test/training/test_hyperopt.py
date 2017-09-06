@@ -31,7 +31,7 @@ def test_minimize(df_train):
     # mock it out w/MockModel.
     best_params, trails = mjolnir.training.hyperopt.minimize(
         df_train, MockModel, space, max_evals=5, num_folds=2,
-        num_cv_jobs=1, num_workers=1)
+        num_workers=1)
     assert isinstance(best_params, dict)
     # num_rounds should have been unchanged
     assert 'num_rounds' in best_params
@@ -49,7 +49,7 @@ def test_gridsearch(df_train):
     gen = MockModelGen()
     best_params, trials = mjolnir.training.hyperopt.grid_search(
         df_train, gen, space, num_folds=2,
-        num_cv_jobs=1, num_workers=1)
+        num_workers=1)
     assert isinstance(best_params, dict)
     assert 'num_rounds' in best_params
     # num rounds should be unchanged
