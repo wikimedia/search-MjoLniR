@@ -58,8 +58,10 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, target_node_evaluations,
         print 'CV  test-ndcg@10: %.4f' % (tune_results['metrics']['cv-test'])
         print 'CV train-ndcg@10: %.4f' % (tune_results['metrics']['cv-train'])
 
-        # Train a model over all data with best params
-        best_params = tune_results['params']
+        # Train a model over all data with best params. Use a copy
+        # so j_groups doesn't end up inside tune_results and prevent
+        # pickle from serializing it.
+        best_params = tune_results['params'].copy()
         print 'Best parameters:'
         for param, value in best_params.items():
             print '\t%20s: %s' % (param, value)
