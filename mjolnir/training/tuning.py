@@ -147,7 +147,9 @@ def _make_folds(df, num_folds, num_cv_jobs, num_workers):
         Generates a list of dicts, one for each fold. Each dict contains
         train and test keys containing DataFrames, along with j_train_groups
         and j_test_groups keys which contain py4j JavaObject instances
-        corresponding to group data needed by xgboost for train/eval.
+        corresponding to group data needed by xgboost for train/eval. The train
+        and test dataframes have been persisted, so should be unpersisted
+        when no longer needed.
     """
     if 'fold' in df.columns:
         assert num_folds == df.schema['fold'].metadata['num_folds']
@@ -258,5 +260,10 @@ def cross_validate(df, train_func, params, num_folds=5, num_cv_jobs=5, num_worke
         data frames.
     """
     folds = _make_folds(df, num_folds, num_cv_jobs, num_workers)
-    return _cross_validate(folds, train_func, params, num_cv_jobs=num_cv_jobs,
-                           num_workers=num_workers)
+    try:
+        return _cross_validate(folds, train_func, params, num_cv_jobs=num_cv_jobs,
+                               num_workers=num_workers)
+    finally:
+        for fold in folds:
+            fold['train'].unpersist()
+            fold['test'].unpersist()

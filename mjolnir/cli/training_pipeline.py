@@ -71,6 +71,7 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, target_node_evaluations,
         model = mjolnir.training.xgboost.train(df_grouped, best_params)
 
         tune_results['metrics']['train'] = model.eval(df_grouped, j_groups)
+        df_grouped.unpersist()
         print 'train-ndcg@10: %.5f' % (tune_results['metrics']['train'])
 
         if test_dir is not None:

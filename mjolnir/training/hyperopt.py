@@ -10,7 +10,6 @@ import math
 import mjolnir.training.tuning
 from multiprocessing.dummy import Pool
 import numpy as np
-import pyspark
 
 
 # FMinIter, when used async, puts the domain into attachments. Unfortunately
@@ -181,10 +180,6 @@ def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
     # Figure out if we can run multiple cross validations in parallel
     pool_size = int(math.floor(num_cv_jobs / num_folds))
     print 'Running %d cross validations in parallel' % (pool_size)
-
-    for fold in folds:
-        fold['train'].persist(pyspark.StorageLevel.MEMORY_AND_DISK_2)
-        fold['test'].persist(pyspark.StorageLevel.MEMORY_AND_DISK_2)
 
     try:
         if pool_size > 1:

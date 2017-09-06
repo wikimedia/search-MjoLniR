@@ -51,7 +51,8 @@ def prep_training(df, num_partitions=None):
     Returns
     -------
     pyspark.sql.DataFrame
-        Dataframe repartitioned and sorted into query groups.
+        Dataframe repartitioned and sorted into query groups. The dataframe is
+        additionally cached and must be unpersisted when no longer necessary
     py4j.java_gateway.JavaObject
         group information for xgboost groupData parameter. scala type
         is Seq[Seq[Int]].
@@ -66,7 +67,8 @@ def prep_training(df, num_partitions=None):
         # the pipeline so various tasks can accept a single column to work with.
         df.select('label', 'features', F.concat('wikiid', 'query').alias('queryId'))
         .repartition(num_partitions, 'queryId')
-        .sortWithinPartitions('queryId'))
+        .sortWithinPartitions('queryId')
+        .cache())
 
     j_groups = df._sc._jvm.org.wikimedia.search.mjolnir.PythonUtils.calcQueryGroups(
         df_grouped._jdf, 'queryId')
@@ -136,6 +138,7 @@ def train(df, params, num_workers=None):
     if 'eval_metric' not in params:
         params['eval_metric'] = 'ndcg@10'
 
+    unpersist = False
     if num_workers is None:
         num_workers = df.rdd.getNumPartitions()
         if 'groupData' in params:
@@ -143,11 +146,13 @@ def train(df, params, num_workers=None):
             df_grouped = df
         else:
             df_grouped, j_groups = prep_training(df, num_workers)
+            unpersist = True
             params['groupData'] = j_groups
     elif 'groupData' in params:
         df_grouped = df
     else:
         df_grouped, j_groups = prep_training(df, num_workers)
+        unpersist = True
         params['groupData'] = j_groups
 
     # We must have the same number of partitions here as workers the model will
@@ -158,9 +163,13 @@ def train(df, params, num_workers=None):
     assert 'groupData' in params
     assert params['groupData'].length() == num_workers
 
-    return XGBoostModel.trainWithDataFrame(df_grouped, params, num_rounds,
-                                           num_workers, feature_col='features',
-                                           label_col='label')
+    try:
+        return XGBoostModel.trainWithDataFrame(df_grouped, params, num_rounds,
+                                               num_workers, feature_col='features',
+                                               label_col='label')
+    finally:
+        if unpersist:
+            df_grouped.unpersist()
 
 
 class XGBoostModel(object):
