@@ -519,19 +519,6 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, target_node_evaluations=
     space['min_child_weight'] = int(best_complexity['min_child_weight'])
     pprint.pprint(space)
 
-    # Gamma also controls complexity, but in a less brute force manner than min_child_weight.
-    # Essentially each newly generated split has a gain value calculated indicating how
-    # good the split is. gamma is the minimum gain a split must achieve to be considered
-    # a good split. Gamma has a mostly linear relationship with true_loss. The relationship
-    # to ndcg@10 is less clear, although documentation suggests with enough data points
-    # gamma vs loss should draw a U shaped graph (inverted in case of ndcg@10)
-    # TODO: Should we even tune this? The results are all over the place, suggesting we may simply
-    # be finding some gamma that matches the CV folds best and not something generalizable.
-    space['gamma'] = hyperopt.hp.quniform('gamma', 0, 3, 0.01)
-    best_gamma, trials_gamma = eval_space(space, 50)
-    space['gamma'] = best_gamma['gamma']
-    pprint.pprint(space)
-
     # subsample helps make the model more robust to noisy data. For each update to
     # a tree only this % of samples are considered.
     space['subsample'] = hyperopt.hp.quniform('subsample', 0.8, 1, .01)
@@ -576,7 +563,6 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, target_node_evaluations=
         'trials': {
             'initial': trials_eta,
             'complexity': trials_complexity,
-            'gamma': trials_gamma,
             'noise': trials_noise,
             'trees': trials_trees,
         },
