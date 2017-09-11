@@ -478,26 +478,96 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, initial_num_trees=100, f
                 print 'best %s: %f' % (k, best[k])
         return best, trials
 
+    num_obs = df.count()
+
+    if num_obs > 8000000:
+        dataset_size = 'xlarge'
+    elif num_obs > 1000000:
+        dataset_size = 'large'
+    elif num_obs > 500000:
+        dataset_size = 'med'
+    else:
+        dataset_size = 'small'
+
+    # Setup different tuning profiles for different sizes of datasets.
+    tune_space = {
+        'xlarge': {
+            # This is intentionally a numpy space for grid search, as xlarge
+            # datasets get slightly different handling here.
+            'eta': np.linspace(0.3, 0.8, 30),
+            # Have seen values of 7 and 10 as best on roughly same size
+            # datasets from different wikis. It really just depends.
+            'max_depth': hyperopt.hp.quniform('max_depth', 6, 11, 1),
+            'min_child_weight': hyperopt.hp.qloguniform(
+                'min_child_weight', np.log(10), np.log(500), 10),
+        },
+        'large': {
+            'eta': hyperopt.hp.uniform('eta', 0.3, 0.6),
+            'max_depth': hyperopt.hp.quniform('max_depth', 5, 9, 1),
+            'min_child_weight': hyperopt.hp.qloguniform(
+                'min_child_weight', np.log(10), np.log(300), 10),
+        },
+        'med': {
+            'eta': hyperopt.hp.uniform('eta', 0.1, 0.6),
+            'max_depth': hyperopt.hp.quniform('max_depth', 4, 7, 1),
+            'min_child_weight': hyperopt.hp.qloguniform(
+                'min_child_weight', np.log(10), np.log(300), 10),
+        },
+        'small': {
+            'eta': hyperopt.hp.uniform('eta', 0.1, 0.4),
+            'max_depth': hyperopt.hp.quniform('max_depth', 3, 6, 1),
+            'min_child_weight': hyperopt.hp.qloguniform(
+                'min_child_weight', np.log(10), np.log(100), 10),
+        }
+    }
+
     # Baseline parameters to start with. Roughly tuned by what has worked in
-    # the past. These vary though depending on number of training samples
+    # the past. These vary though depending on number of training samples. These
+    # defaults are for the smallest of wikis, which are then overridden for larger
+    # wikis
     space = {
         'objective': 'rank:ndcg',
         'eval_metric': 'ndcg@10',
         'num_rounds': initial_num_trees,
         'min_child_weight': 200,
-        'max_depth': 6,
+        'max_depth': 4,
         'gamma': 0,
         'subsample': 1.0,
         'colsample_bytree': 0.8,
     }
 
+    # Overrides for the first round of training when tuning eta.
+    space_overrides = {
+        'xlarge': {
+            'max_depth': 7,
+        },
+        'large': {
+            'max_depth': 6,
+        },
+        'med': {
+            'max_depth': 5,
+        },
+        'small': {}
+    }
+
+    for k, v in space_overrides[dataset_size].items():
+        space[k] = v
+
     # Find an eta that gives good results with only 100 trees. This is done
     # so most of the tuning is relatively quick. A final step will re-tune
     # eta with more trees.
-    etas = np.linspace(0.3, 0.7, 30)
-    space['eta'] = hyperopt.hp.choice('eta', etas)
-    best_eta, trials_eta = eval_space_grid(space)
-    space['eta'] = _estimate_best_eta(trials_eta, etas)
+    # This estimate only seems to work well for xlarge datasets. On smaller
+    # datasets the shape of the graph is much less consistent and doesn't
+    # match the builtin expectation of an L shaped graph.
+    if dataset_size == 'xlarge':
+        etas = tune_space[dataset_size]['eta']
+        space['eta'] = hyperopt.hp.choice('eta', etas)
+        best_eta, trials_eta = eval_space_grid(space)
+        space['eta'] = _estimate_best_eta(trials_eta, etas)
+    else:
+        space['eta'] = tune_space[dataset_size]['eta']
+        best_eta, trials_eta = eval_space(space, 50)
+        space['eta'] = best_eta['eta']
     pprint.pprint(space)
 
     # Determines the size of each tree. Larger trees increase model complexity
@@ -505,12 +575,12 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, initial_num_trees=100, f
     # do a better job at capturing interactions between features. Larger training
     # sets support deeper trees. Not all trees will be this depth, min_child_weight
     # gamma, and regularization all push back on this.
-    space['max_depth'] = hyperopt.hp.quniform('max_depth', 4, 10, 1)
+    space['max_depth'] = tune_space[dataset_size]['max_depth']
     # The minimum number of samples that must be in each leaf node. This pushes
     # back against tree depth, preventing the tree from growing if a potential
     # split applies to too few samples. ndcg@10 on the test set increases linearly
     # with smaller min_child_weight, but true_loss also increases.
-    space['min_child_weight'] = hyperopt.hp.qloguniform('min_child_weight', np.log(10), np.log(500), 10)
+    space['min_child_weight'] = tune_space[dataset_size]['min_child_weight']
 
     # TODO: Somewhat similar to eta, as min_child_weight decreases the
     # true_loss increases. Need to figure out how to choose the max_depth that
@@ -549,11 +619,16 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, initial_num_trees=100, f
         # the number of trees. A small wiki with 300k observations and 500 trees needs
         # to search a very different space than a large wiki with 30M observations
         # and the same 500 trees.
-        etas = np.linspace(0.01, 0.3, 30)
-        space['eta'] = hyperopt.hp.choice('eta', etas)
-        best_trees, trials_trees = eval_space_grid(space)
+        if dataset_size == 'xlarge':
+            etas = np.linspace(0.2, 0.7, 30)
+            space['eta'] = hyperopt.hp.choice('eta', etas)
+            best_trees, trials_trees = eval_space_grid(space)
+            space['eta'] = _estimate_best_eta(trials_trees, etas)
+        else:
+            space['eta'] = hyperopt.hp.uniform('eta', 0.01, 0.5)
+            best_trees, trials_trees = eval_space(space, 30)
+            space['eta'] = best_trees['eta']
         trials_final = trials_trees
-        space['eta'] = _estimate_best_eta(trials_trees, etas)
         pprint.pprint(space)
 
     best_trial = np.argmin(trials_final.losses())
