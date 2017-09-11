@@ -20,7 +20,7 @@ from pyspark.sql import HiveContext
 from pyspark.sql import functions as F
 
 
-def main(sc, sqlContext, input_dir, output_dir, wikis, target_node_evaluations,
+def main(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_num_trees,
          num_workers, num_cv_jobs, num_folds, test_dir, zero_features):
 
     if os.path.exists(output_dir):
@@ -48,12 +48,11 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, target_node_evaluations,
             df_hits_with_features = mjolnir.feature_engineering.zero_features(
                     df_hits_with_features, zero_features)
 
-        # Explore a hyperparameter space. Skip the most expensive part of tuning,
-        # increasing the # of trees, with target_node_evaluations=None
         tune_results = mjolnir.training.xgboost.tune(
             df_hits_with_features, num_folds=num_folds,
             num_cv_jobs=num_cv_jobs, num_workers=num_workers,
-            target_node_evaluations=target_node_evaluations)
+            initial_num_trees=initial_num_trees,
+            final_num_trees=final_num_trees)
 
         print 'CV  test-ndcg@10: %.4f' % (tune_results['metrics']['cv-test'])
         print 'CV train-ndcg@10: %.4f' % (tune_results['metrics']['cv-train'])
@@ -131,11 +130,12 @@ def parse_arguments():
         '-f', '--folds', dest='num_folds', default=5, type=int,
         help='Number of cross validation folds to use. (Default: 5)')
     parser.add_argument(
-        '-n', '--node-evaluations', dest='target_node_evaluations', type=int, default=None,
-        help='Approximate number of node evaluations per predication that '
-             + 'the final result will require. This controls the number of '
-             + 'trees used in the final result. Default uses 100 trees rather '
-             + 'than dynamically choosing based on max_depth. (Default: None)')
+        '--initial-trees', dest='initial_num_trees', default=100, type=int,
+        help='Number of trees to perform hyperparamter tuning with.  (Default: 100)')
+    parser.add_argument(
+        '--final-trees', dest='final_num_trees', default=None, type=int,
+        help='Number of trees in the final ensemble. If not provided the value from '
+             + '--initial-trees will be used.  (Default: None)')
     parser.add_argument(
         '-t', '--test-path', dest='test_dir', type=str, required=False, default=None,
         help='A holdout test set to evaluate the final model against')

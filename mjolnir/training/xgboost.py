@@ -403,7 +403,7 @@ def _estimate_best_eta(trials, source_etas, length=1e4):
     return eta_pred[idx]
 
 
-def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, target_node_evaluations=5000):
+def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, initial_num_trees=100, final_num_trees=500):
     """Find appropriate hyperparameters for training df
 
     This is far from perfect, hyperparameter tuning is a bit of a black art
@@ -432,13 +432,14 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, target_node_evaluations=
         number of executors used will be (num_cv_jobs * num_workers). Generally
         prefer executors with more cpu's over a higher number of workers where
         possible. (Default: 5)
-    target_node_evaluations : int, optional
-        The approximate number of node evaluations per prediction that the
-        final result will require. This controls the number of trees used in
-        the final result. The number of trees will be (target_node_evaluations
-        / optimal_max_depth). This is by far the most expensive part to tune,
-        setting to None skips this and uses a constant 100 trees.
-        (Default: 5000)
+    initial_num_trees: int, optional
+        The number of trees to do most of the hyperparameter tuning with. This
+        should be large enough to be resonably representative of the final
+        training size. (Default: 100)
+    final_num_trees: int, optional
+        The number of trees to do the final eta optimization with. If set to
+        None the final eta optimization will be skipped and initial_n_tree will
+        be kept.
 
     Returns
     -------
@@ -482,7 +483,7 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, target_node_evaluations=
     space = {
         'objective': 'rank:ndcg',
         'eval_metric': 'ndcg@10',
-        'num_rounds': 100,
+        'num_rounds': initial_num_trees,
         'min_child_weight': 200,
         'max_depth': 6,
         'gamma': 0,
@@ -535,19 +536,19 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, target_node_evaluations=
     space['colsample_bytree'] = best_noise['colsample_bytree']
     pprint.pprint(space)
 
-    # Finally increase the number of trees to our target, which is mostly based
-    # on how computationally expensive it is to generate predictions with the final
-    # model. Find the optimal eta for this new # of trees. This step can take as
-    # much time as all previous steps combined, and then some, so it can be disabled
-    # with target_node_evalations of None.
-    if target_node_evaluations is None:
+    # Finally increase the number of trees to our target, if it was requested.
+    if final_num_trees is None or final_num_trees == initial_num_trees:
         trials_trees = None
         trials_final = trials_noise
     else:
-        space['num_rounds'] = target_node_evaluations / space['max_depth']
+        space['num_rounds'] = final_num_trees
         # TODO: Is 30 steps right amount? too many? too few? This generally
-        # uses a large number of trees which takes 10 to 20 minutes per evaluation.
-        # That means evaluating 15 points is 2.5 to 5 hours.
+        # uses a large number of trees which takes 10 to 20 minutes per evaluation
+        # on large training sets.That means evaluating 15 points is 2.5 to 5 hours.
+        # TODO: The appropriate space here really depends on the amount of data and
+        # the number of trees. A small wiki with 300k observations and 500 trees needs
+        # to search a very different space than a large wiki with 30M observations
+        # and the same 500 trees.
         etas = np.linspace(0.01, 0.3, 30)
         space['eta'] = hyperopt.hp.choice('eta', etas)
         best_trees, trials_trees = eval_space_grid(space)
