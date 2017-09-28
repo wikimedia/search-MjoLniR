@@ -1,0 +1,31 @@
+global_config:
+  commands:
+    some_command:
+      environment:
+        HOME: /home/pytest
+        USER: pytest
+        a: global
+        b: global
+        c: global
+      w: global
+      x: global
+      y: global_command
+      z: global_command
+  wikis: []
+profiles:
+  randomly_named_profile:
+    commands:
+      some_command:
+        environment:
+          HOME: /home/pytest
+          USER: pytest
+          a: global
+          b: profile
+          c: command
+        results_of_environment_merge: global profile command
+        results_of_template_merge: global profile command
+        w: global
+        x: profile
+        y: global_command
+        z: command
+    wikis: []

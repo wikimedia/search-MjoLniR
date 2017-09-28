@@ -35,21 +35,20 @@ def spark_context(request):
         SparkContext for tests
     """
 
-    # TODO: This is much too specialized to the vagrant test environment
     quiet_log4j()
+    # Pull appropriate jvm dependencies from archiva. Would be nice
+    # if we could provide this in SparkConf, but in 2.1.x there isn't
+    # a way.
+    os.environ['PYSPARK_SUBMIT_ARGS'] = '--repositories %s pyspark-shell' % (
+            ','.join(['https://archiva.wikimedia.org/repository/%s' % (repo)
+                      for repo in ['releases', 'snapshots', 'mirrored']]))
     conf = (
         SparkConf()
         .setMaster("local[2]")
         .setAppName("pytest-pyspark-local-testing")
-        # Pull appropriate jvm dependencies from archiva.
-        # TODO: How to use a local version of mjolnir jar?
-        .set('spark.jars.ivy', ','.join([
-            'https://archiva.wikimedia.org/repository/releases',
-            'https://archiva.wikimedia.org/repository/snapshots',
-            'https://archiva.wikimedia.org/repository/mirrored']))
         # Maven coordinates of jvm dependencies
         .set('spark.jars.packages', ','.join([
-            'ml.dmlc.xgboost4j-spark:0.7-wmf-1',
+            'ml.dmlc:xgboost4j-spark:0.7-wmf-1',
             'org.wikimedia.search:mjolnir:0.2',
             'org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0']))
         # By default spark will shuffle to 200 partitions, which is

@@ -22,12 +22,7 @@ of the enwiki revisions table for example would take perhaps hours::
 
 Open a pyspark shell with mjolnir::
 
-    PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf ~/spark-2.1.0-bin-hadoop2.6/bin/pyspark \
-        --jars /home/ebernhardson/mjolnir-0.1-jar-with-dependencies.jar \
-        --driver-class-path /home/ebernhardson/mjolnir-0.1-jar-with-dependencies.jar \
-        --master yarn \
-        --files /usr/lib/libhdfs.so.0.0.0 \
-        --archives 'mjolnir_venv.zip#venv'
+    venv/bin/mjolnir-utilities.py spark --config example_train.yaml shell
 
 Load the feature file into a dataframe. Specifying the schema allows naming the columns
 and ensuring they are converted to the correc types::
@@ -70,12 +65,7 @@ Calculating a new query dependent feature from the elasticsearch analyze api
 
 Open a pyspark shell with mjolnir::
 
-    PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf ~/spark-2.1.0-bin-hadoop2.6/bin/pyspark \
-        --jars /home/ebernhardson/mjolnir-0.1-jar-with-dependencies.jar \
-        --driver-class-path /home/ebernhardson/mjolnir-0.1-jar-with-dependencies.jar \
-        --master yarn \
-        --files /usr/lib/libhdfs.so.0.0.0 \
-        --archives 'mjolnir_venv.zip#venv'
+    venv/bin/mjolnir-utilities.py spark --config example_train.yaml shell
 
 Load all the relevant query strings into an rdd::
 
@@ -134,23 +124,12 @@ Merge our new feature into the existing data sets and write them out to hdfs::
 Again we have two new datasets with an additional feature that can be evaluated
 with training_pipeline.py. These new features can be tested together directly::
 
-    PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf ~/spark-2.1.0-bin-hadoop2.6/bin/spark-submit \
-        --jars /home/ebernhardson/mjolnir-0.1-jar-with-dependencies.jar \
-        --driver-class-path /home/ebernhardson/mjolnir-0.1-jar-with-dependencies.jar \
-        --master yarn \
-        --files /usr/lib/libhdfs.so.0.0.0 \
-        --conf spark.dynamicAllocation.maxExecutors=105 \
-        --conf spark.sql.autoBroadcastJoinThreshold=-1 \
-        --conf spark.task.cpus=4 \
-        --conf spark.yarn.executor.memoryOverhead=1536 \
-        --executor-memory 2G i\
-        --executor-cores 4 \
-        --archives 'mjolnir_venv.zip#venv' \
-        venv/bin/mjolnir-utilities.py training_pipeline
-        -i hdfs://analytics-hadoop/user/ebernhardson/mjolnir/1193k_with_num_query_tokens \
-        -o /home/ebernhardson/training_size/1193k_with_num_query_tokens \
-        -t hdfs://analytics-hadoop/user/ebernhardson/mjolnir/test_with_num_query_tokens
-        -w 1 -c 100 -f 5 enwiki
+    venv/bin/mjolnir-utilities.py spark \
+        --config example_train.yaml \
+        --marker num_query_tokens \
+        --template-var training_data_path=user/ebernhardson/mjolnir/1193k_with_num_query_tokens \
+        train
+
 
 The new features can also be tested individually by using `--zero-feature`
 argument to training_pipeline.py to zero out the feature not being evaluated.

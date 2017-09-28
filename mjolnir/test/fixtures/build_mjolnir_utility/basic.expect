@@ -1,0 +1,10 @@
+- venv/bin/mjolnir-utilities.py
+- data_pipeline
+- --input
+- hdfs://some-cluster/path/to/my/data/input
+- --output-dir
+- hdfs://some-cluster/path/to/my/data/output
+- --samples-per-wiki
+- '123456789'
+- --search-cluster
+- codfw

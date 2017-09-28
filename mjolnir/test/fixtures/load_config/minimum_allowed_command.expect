@@ -1,0 +1,11 @@
+global_config:
+  commands: {}
+  wikis: []
+profiles:
+  not_good_at_naming_things:
+    commands:
+      qux:
+        environment:
+          HOME: /home/pytest
+          USER: pytest
+    wikis: []

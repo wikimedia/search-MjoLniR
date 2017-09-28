@@ -1,0 +1,9 @@
+spark_command: /some/where/that/has/spark-submit
+spark_conf:
+    org.apache.spark.foo: bar
+    some.other.path: has data
+spark_args:
+    jars: /some/path/foo.jar,/other/place/bang.jar
+    driver-class-path: /some/path/foo.jar,/other/place/bang.jar
+    archives: wozers.zip#my_stuff
+

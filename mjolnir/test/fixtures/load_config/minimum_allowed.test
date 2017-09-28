@@ -1,0 +1,5 @@
+# The mimimum parsable configuration file Not particularly useful, but asserts
+# we aren't expecting particular things.
+global: {}
+profiles: {}
+

@@ -1,0 +1,14 @@
+global_config:
+  commands: {}
+  wikis: []
+profiles:
+  basic:
+    commands:
+      foo:
+        environment:
+          HOME: /home/pytest
+          USER: pytest
+          thing: foobar
+        keys_can_be_about_anything:
+          jars: that/foobar/qwerty/hithere/thing.jar
+    wikis: []

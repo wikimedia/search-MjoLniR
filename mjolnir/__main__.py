@@ -3,8 +3,8 @@ Provides access to a set of utilities for running mjolnir pipelines.
 
 Utilities:
 
-* train                Executes the full data + training pipeline based
-*                      on a configuration definition
+* spark                Wrapper around spark-submit and a configuration file
+*                      to run commands in expected environments.
 * upload               Upload trained models to elasticsearch
 * data_pipeline        Individual spark job for converting click data into
 *                      labeled training data.

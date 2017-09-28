@@ -1,0 +1,195 @@
+# Configuration shared by all training groups and
+global:
+    environment:
+        PYSPARK_PYTHON: venv/bin/python
+        SPARK_CONF_DIR: /etc/spark/conf
+        SPARK_HOME: "%(HOME)s/spark-%(spark_version)s-bin-hadoop2.6"
+    template_vars:
+        spark_version: 2.1.0
+        # Path to spark-submit applicatoin
+        spark_submit: "%(SPARK_HOME)s/bin/spark-submit"
+        # Local path to zip'd virtualenv which will be shipped to executors
+        mjolnir_venv_zip: "%(mjolnir_dir)s/mjolnir_venv.zip"
+        # Local path to python script for running mjolnir utilities
+        mjolnir_utility_path: "%(mjolnir_dir)s/venv/bin/mjolnir-utilities.py"
+        # Path inside hdfs to the training data
+        training_data_path: "user/%(USER)s/mjolnir/%(marker)s"
+        # Fully qualified HDFS path to the training data
+        hdfs_training_data_path: "hdfs://analytics-hadoop/%(training_data_path)s"
+        # Fully qualified local path to the training data
+        local_training_data_path: "/mnt/hdfs/%(training_data_path)s"
+        # Base directory used to build path to write training output to
+        base_training_output_dir: "%(HOME)s/training_size"
+        # Number of cpu cores to assign per task. Must be a multiple of
+        # cores_per_executor. Spark can't take advantage of this being > 1, but
+        # xgboost can.
+        cores_per_task: 1
+        # Number of cpu cores to request per executor. If cores_per_task is
+        # less than this spark will run multiple tasks per executor in separate
+        # threads.
+        cores_per_executor: 1
+        # Size of JVM heap on executors
+        executor_memory: 2G
+        # Additional memory allocated by yarn beyond executor_memory. This
+        # accounts for off-heap data structures both in the JVM itself, and
+        # those created via JNI for xgboost. Primarily this is set here so it
+        # can be overridden from the command line.
+        executor_memory_overhead: 512
+        # Used by the data pipeline to decide the minimum number of sessions
+        # to group together. Setting this too high on low volume wikis will
+        # result in little to no training data.
+        min_sessions_per_query: 10
+    # Files that must exist to run
+    paths:
+        dir_exist: !!set
+            ? "%(SPARK_CONF_DIR)s"
+        file_exist: !!set
+            ? "%(mjolnir_venv_zip)s"
+            ? "%(mjolnir_utility_path)s"
+            ? "%(spark_submit)s"
+            ? "%(PYSPARK_PYTHON)s"
+    spark_args:
+        master: yarn
+        # TODO: When is this necessary?
+        files: /usr/lib/libhdfs.so.0.0.0
+        # Ship the mjolnir virtualenv to executors and decompress it to ./venv
+        archives: "%(mjolnir_venv_zip)s#venv"
+        executor-cores: "%(cores_per_executor)s"
+        executor-memory: "%(executor_memory)s"
+        # Source our jvm dependencies from archiva. 
+        repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
+        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:%(spark_version)s
+    spark_conf:
+        spark.task.cpus: "%(cores_per_task)s"
+        spark.yarn.executor.memoryOverhead: "%(executor_memory_overhead)s"
+        # While undesirable, we can't disable the public (maven central) repository
+        # until spark 2.2, which depends on java 8 (and our cluster is on java 7 still)
+        spark.driver.extraJavaOptions: "-Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080 -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080"
+    commands:
+        pyspark:
+            spark_command: "%(SPARK_HOME)s/bin/pyspark"
+        # Shell used to test model training
+        pyspark_train:
+            spark_command: "%(SPARK_HOME)s/bin/pyspark"
+            template_vars:
+                cores_per_executor: 4
+                cores_per_task: 4
+                executor_memory: 2G
+                executor_memory_overhead: 6144
+        data_pipeline:
+            spark_command: "%(SPARK_HOME)s/bin/spark-submit"
+            mjolnir_utility_path: "%(mjolnir_utility_path)s"
+            mjolnir_utility: data_pipeline
+            paths:
+                dir_not_exist: !!set
+                    ? "%(local_training_data_path)s"
+            cmd_args:
+                input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
+                output-dir: "%(hdfs_training_data_path)s"
+                # Maximum number of training observations per-wiki. We usually get a bit less
+                # than requestsed, 35M turns into 25 or 30M.
+                samples-per-wiki: 35000000
+                search-cluster: codfw
+                min-sessions: "%(min_sessions_per_query)s"
+        training_pipeline:
+            spark_command: "%(SPARK_HOME)s/bin/spark-submit"
+            mjolnir_utility_path: "%(mjolnir_utility_path)s"
+            mjolnir_utility: training_pipeline
+            paths:
+                dir_exist: !!set
+                    # TODO: Would be nice if we could specify paths.dir_exist for
+                    # input training data, but it's evaluated before data_pipeline is
+                    # called when doing collect_and_train.
+                    ? "%(base_training_output_dir)s"
+            spark_args:
+                driver-memory: 3G
+            spark_conf:
+                # Disabling auto broadcast join prevents memory explosion when spark
+                # mis-predicts the size of a dataframe. (where does this happen?)
+                spark.sql.autoBroadcastJoinThreshold: -1
+                # Adjusting up executor idle timeout from 60s to 180s is a bit greedy,
+                # but prevents a whole bunch of log spam from spark killing executors
+                # between CV runs
+                spark.dynamicAllocation.executorIdleTimeout: 180s
+            cmd_args:
+                input: "%(hdfs_training_data_path)s"
+                output: "%(base_training_output_dir)s/%(marker)s_%(profile_name)s"
+
+# Individual training groups
+profiles:
+    large:
+        # 12M to 30M observations. 4M to 12M per executor.
+        # Approximately 63 executors, 378 cores, 756GB memory
+        wikis:
+            - enwiki
+            - dewiki
+        commands:
+            training_pipeline:
+                template_vars:
+                    cores_per_executor: 6
+                    cores_per_task: 6
+                    executor_memory: 3G
+                    executor_memory_overhead: 9216
+                spark_conf:
+                    spark.dynamicAllocation.maxExecutors: 65
+                cmd_args:
+                    workers: 3
+                    cv-jobs: 22
+                    folds: 3
+                    final-trees: 100
+
+    medium:
+        # 4M to 12M observations per executor.
+        # Approximately 70 executors, 420 cores, 840GB memory
+        wikis:
+            - itwiki
+            - ptwiki
+            - frwiki
+            - ruwiki
+        commands:
+            training_pipeline:
+                template_vars:
+                    cores_per_executor: 6
+                    cores_per_task: 6
+                    executor_memory: 3G
+                    executor_memory_overhead: 9216
+                spark_conf:
+                    spark.dynamicAllocation.maxExecutors: 75
+                cmd_args:
+                    workers: 1
+                    cv-jobs: 70
+                    folds: 5
+                    final-trees: 100
+
+    small:
+        # 100k to 4M observations per executor. Way overprovisioned
+        # Approximately 100 executors, 400 cores, 800G memory.
+        wikis:
+            - svwiki
+            - fawiki
+            - idwiki
+            - viwiki
+            - nowiki
+            - hewiki
+            - kowiki
+            - fiwiki
+            - jawiki
+            - arwiki
+            - itwiki
+            - nlwiki
+            - zhwiki
+            - plwiki
+        commands:
+            training_pipeline:
+                template_vars:
+                    cores_per_executor: 4
+                    cores_per_task: 4
+                    executor_memory: 2G
+                    executor_memory_overhead: 6144
+                spark_conf:
+                    spark.dynamicAllocation.maxExecutors: 105
+                cmd_args:
+                    workers: 1
+                    cv-jobs: 100
+                    folds: 5
+                    final-trees: 500

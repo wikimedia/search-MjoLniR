@@ -17,7 +17,7 @@ A few terms used in this document:
 * driver - This is the JVM that is in control of the spark job and orchestrates
   everything. This instance does not generally get assigned any tasks, instead only
   being responsible for orchestrating the delivery of tasks to executors. For
-  the instructions in this document this is always on stat1004, but it is
+  the instructions in this document this is always on stat1005, but it is
   possible for the driver to be created inside the hadoop cluster instead.
 
 * executor - Also known as workers. These instances do the heavy lifting of executing
@@ -35,21 +35,23 @@ Caveats
 As MjoLniR is still in early days there is not a defined process to deploy to the analytics cluster.
 This will be worked out, but for now it is all manual. Some caveats:
 >
-* MjoLniR must be run from a debian jessie based host. The is because the hadoop workers
-  are also running debian jessie and the python binary on ubuntu will not run properly on them.
+* MjoLniR must be run from a debian jessie or greater based host. The is
+  because the hadoop workers are also running debian jessie and the python
+  binary on ubuntu will not run properly on them.
 
-* The only debian jessie based host available as a spark driver is stat1004.eqiad.wmnet.
+* The best host to run everything from is stat1005, a debian stretch based machine.
 
 * MjoLniR requires spark 2.1.0, but the default installed version in the hadoop
   cluster is 1.6.0.  You will need to fetch spark from apache and uncompress
-  the archive in your home directory on stat1004.
+  the archive in your home directory on stat1005.
 
 * MjoLniR requires a python virtualenv containing all the appropriate library
-  dependencies. Unfortunately it is not possible yet to build the virtualenv on
-  stat1004 due to some missing compile time dependencies. See https://gerrit.wikimedia.org/r/348669
+  dependencies. Pip shiped with debian stretch is able to utilize wheel packages
+  which makes installing all our dependencies a breeze.
 
-* MjoLniR requires a jar built in the /jvm directory of this repository. This is a fat jar
-  containing other dependencies, such as xgboost and kafka streaming.
+* MjoLniR requires a jar built in the /jvm directory of this repository, along
+  with a few others. These are all deployed to archiva and referenced from the
+  configuration for the `spark` utility.
 
 * Some conflict with dependencies installed in the analytics cluster may cause kafka streaming
   to fail with `kafka.cluster.BrokerEndPoint cannot be cast to kafka.cluster.broker`.
@@ -71,65 +73,53 @@ Spark gotchas
 Setting everything up
 =====================
 
-Taking the above into account, the process to get started is basically:
+Taking the above into account, the process to get started is basically (all run from stat1005.eqiad.wmnet):
 
-Build a virtualenv inside the vagrant box configured with this repository::
+Clone mjolnir, build a virtualenv, and zip it up for deployment to spark executors::
 
-	cd /vagrant
-	virtualenv mjolnir_venv
-	mjolnir_venv/bin/pip install .
-	cd mjolnir_venv
+	cd ~
+	git clone https://gerrit.wikimedia.org/r/search/MjoLniR mjolnir
+	cd mjolnir
+	virtualenv venv
+	venv/bin/pip install .
+	cd venv
 	zip -qr ../mjolnir_venv.zip .
 	cd ..
-	rm -rf mjolnir_venv
 
-That zip file needs to be copied over to stat1004, along with the appropriate jar::
+Pull down spark 2.1 and decompress that into your home directory::
 
-	scp mjolnir_venv.zip stat1004.eqiad.wmnet:~/
-	scp jvm/target/mjolnir-0.1-jar-with-dependencies.jar stat1004.eqiad.wmnet:~/
-
-SSH into stat1004::
-
-	ssh stat1004.eqiad.wmnet
-
-Make a directory just for mjolnir stuff::
-
-	mkdir ~/mjolnir
-
-Move the files we copied to the machine into it::
-
-	mv mjolnir_venv.zip mjolnir/
-	mv mjolnir-0.1-jar-with-dependencies.jar mjolnir/
-
-Pull down spark 2.1 and decompress that there too::
-
-	cd mjolnir/
+	cd ~
 	https_proxy=http://webproxy.eqiad.wmnet:8080 wget https://archive.apache.org/dist/spark/spark-2.1.0/spark-2.1.0-bin-hadoop2.6.tgz
 	tar -zxf spark-2.1.0-bin-hadoop2.6.tgz
 
-We need to uncompress mjolnir_venv.zip so that it is accessible both in the
-driver and the hadoop workers::
+Upgrading mjolnir
+=================
 
-	mkdir venv
+Upgrading mjolnir in your analytics checkout is fairly painless. Run the
+following commands. If you need dependencies as well leave off the --no-deps
+argument, and be sure to set an appropriate https_proxy environment variable::
+
+	cd ~/mjolnir
+	git pull --ff-only
+	venv/bin/pip install --upgrade --no-deps .
 	cd venv
-	unzip -q ../mjolnir_venv.zip
+	zip -qr ../mjolnir_venv.zip .
+	cd ..
 
-Running an interactive shell
-============================
+The configuration file
+======================
 
-Finally we should be ready to run things. Lets start first with the pyspark
-REPL to see things are working::
+The configuration file, located at `example_train.yaml`, helps automate the
+relatively tedious task of running spark command lines. Both spark and mjolnir
+take an incredible amount of arguments that all have to be configured just-so
+for training to work out. The high level design of this file is to have global
+and per-profile configuration, and then to have defined commands. See the doc
+comments in mjolnir/utilities/spark.py for more information. Many things in
+this file are templated where they might not really need to be to allow
+overriding them from the command line.
 
-	ssh stat1004.eqiad.wmnet
-	cd mjolnir/
-	PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf spark-2.1.0-bin-hadoop2.6/bin/pyspark \
-	  --repositories https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored \
-	  --packages ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0 \
-	  --master yarn \
-	  --files /usr/lib/libhdfs.so.0.0.0 \
-	  --archives 'mjolnir_venv.zip#venv'
+An explanation of some of the configuration used:
 
-An expanation of the options used:
 * PYSPARK_PYTHON - Tells spark where to find the python executable. This path
   must be a relative path to work both locally and on the worker nodes where
   mjolnir_venv.zip is decompressed.
@@ -156,47 +146,7 @@ An expanation of the options used:
   directory. The part before # is the path to the file locally, and the part
   after the # is the directory to decompress to.
 
-After a bunch of output, some warnings, perhaps a few exceptions printed out
-(normal, they are usually related to trying to find a port to run the web ui
-on), you will be greated with a prompt. It should look something like::
-
-	Welcome to
-	      ____              __
-	     / __/__  ___ _____/ /__
-	    _\ \/ _ \/ _ `/ __/  '_/
-	   /__ / .__/\_,_/_/ /_/\_\   version 2.1.0
-	      /_/
-	
-	Using Python version 2.7.9 (default, Jun 29 2016 13:08:31)
-	SparkSession available as 'spark'.
-	>>>
-
-From here you can do anything you could do when programming mjolnir. This can be quite
-useful for one-off tasks such as evaluating a previously trained model against a new
-dataset, or splitting up an existing dataset into smaller pieces.
-
-Running data_pipeline.py
-========================
-
-The commandline for kicking off the data pipeline looks like::
-
-	cd ~/mjolnir
-	PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf spark-2.1.0-bin-hadoop2.6/bin/spark-submit \
-		--repositories https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored \
-		--packages ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0 \
-		--master yarn \
-		--files /usr/lib/libhdfs.so.0.0.0 \
-		--archives 'mjolnir_venv.zip#venv' \
-		venv/bin/mjolnir-utilities.py data_pipeline \
-		-i 'hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*' \
-		-o hdfs://analytics-hadoop/user/${USER}/mjolnir/training_data \
-		-c codfw \
-		enwiki
-
-This uses all the same basic spark options as before, but changes the binary
-run from `pyspark`, the interactive REPL, to `spark-submit` which runs a
-predefined script. This script takes a few options, but for simplicity here we
-pass only a few of the available parameters:
+data_pipeline.py arguments:
 
 * -i The input directory containing the query click data. It is unlikely you
   will ever need to use a different value than shown here.
@@ -208,28 +158,8 @@ pass only a few of the available parameters:
   the *hot*spare* search cluster.  Pointing this at the currently active cluster
   could cause increased latency for our users.
 
-Running training_pipeline.py
-============================
-
-The commandline for kicking off training looks like::
-
-	PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf ~/spark-2.1.0-bin-hadoop2.6/bin/spark-submit \
-		--repositories https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored \
-		--packages ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0 \
-		--master yarn --files /usr/lib/libhdfs.so.0.0.0 \
-		--archives 'mjolnir_venv.zip#venv' \
-		--conf spark.dynamicAllocation.maxExecutors=105 \
-		--conf spark.sql.autoBroadcastJoinThreshold=-1 \
-		--conf spark.task.cpus=4 \
-		--conf spark.yarn.executor.memoryOverhead=1536 \
-		--executor-memory 2G \
-		--executor-cores 4 \
-		venv/bin/mjolnir-utilities.py training_pipeline \
-		-i hdfs://analytics-hadoop/user/ebernhardson/mjolnir/1193k_with_one_hot_wp10 \
-		-o ~/training_size/1193k_with_one_hot_wp10 \
-		-w 1 -c 100 -f 5 enwiki
-
-This includes a few more arguments than the interactive shell did. These are:
+training_pipeline.py takes a few more arguments, mostly related to having
+an appropriate amount of resources available for training:
 
 * --conf spark.dynamicAllocation.maxExecutors=105 - The training process can
   use an incredible amount of resources on the cluster if allowed to. Generally
@@ -267,10 +197,6 @@ This includes a few more arguments than the interactive shell did. These are:
   for each executor. With the current cluster configuration 4 is the maximum that
   can be requested. Must be the same as spark.task.cpus above when training
 
-* venv/bin/mjolnir-utilities.py training_pipeline - This is the script to run
-  on the driver to actually run the spark job. This will call the utility
-  script at mjolnir.utilities.training_pipeline.
-
 * -i ... - Tells the training pipeline where to find the training data. This must be
   on HDFS and should be the output of the `data_pipeline.py` script.
 
@@ -292,11 +218,86 @@ This includes a few more arguments than the interactive shell did. These are:
   variance increasing this to 11 will make the training take longer but might have more accurate
   statistics.
 
-* enwiki - Finally we take a list of wikis to train models for. Each wiki is trained on its own,
-  and a training dataset can contain features for multiple wikis.
+Running an interactive shell
+============================
+
+Finally we should be ready to run things. Lets start first with the pyspark
+REPL to see things are working::
+
+	ssh stat1005.eqiad.wmnet
+	cd mjolnir/
+	venv/bin/mjolnir-utilities.py --config example_config.yaml shell
+
+After a bunch of output, some warnings, perhaps a few exceptions printed out
+(normal, they are usually related to trying to find a port to run the web ui
+on), you will be greated with a prompt. It should look something like::
+
+	Welcome to
+	      ____              __
+	     / __/__  ___ _____/ /__
+	    _\ \/ _ \/ _ `/ __/  '_/
+	   /__ / .__/\_,_/_/ /_/\_\   version 2.1.0
+	      /_/
+
+	Using Python version 2.7.9 (default, Jun 29 2016 13:08:31)
+	SparkSession available as 'spark'.
+	>>>
+
+From here you can do anything you could do when programming mjolnir. This can be quite
+useful for one-off tasks such as evaluating a previously trained model against a new
+dataset, or splitting up an existing dataset into smaller pieces.
+
+Running data_pipeline.py
+========================
+
+The commandline for kicking off the data pipeline looks like::
+
+	cd ~/mjolnir
+	venv/bin/mjolnir-utilities.py spark --config example_config.yaml collect enwiki
+
+Providing enwiki at the very end limits data collection to a single wiki. Leave
+this parameter off to collect data for all wikis configured in
+example_config.yaml.
+
+With the default configuration this will store the data in hdfs at::
+
+    hdfs://analytics-hadoop/user/<username>/mjolnir/<Ymd>
+
+Running training_pipeline.py
+============================
+
+The commandline for kicking off training looks like::
+
+	venv/bin/mjolnir-utilities.py spark --config example_config.yaml train enwiki
+
+Similar to the collection phase, providing enwiki at the very end limits
+training to a single wiki.  Leave this parameter off to train for all
+configured wikis (that exist in the data).
+
+By default this will look for data in hdfs at the same location that the
+`collect` script stores data. Because this uses the current date as the name it
+will not work correctly the next day. With the `example_config.yaml` file you
+can override this location to point at a previous day like so::
+
+	venv/bin/mjolnir-utilities.py spark \
+		--config example_config.yaml \
+		--template-var training_data_path=user/ebernhardson/mjolnir/20171023 \
+		train enwiki
+
+Running both together
+=====================
+
+The commandline for kicking off running a full data collect and training in one
+go looks like::
+
+	venv/bin/mjolnir-utilities.py spark --config example_config.yaml collect_and_train enwiki
+
+Same as before the final argument is the wiki to limit data collection and
+training to.
 
 Resource usage in the hadoop cluster
 ====================================
+TODO
 
 
 Help! There are exceptions eveywhere!

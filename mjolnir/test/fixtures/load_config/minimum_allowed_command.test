@@ -1,0 +1,8 @@
+# The mimimum parsable configuration file Not particularly useful, but asserts
+# we aren't expecting particular things.
+global: {}
+profiles:
+    not_good_at_naming_things:
+        commands:
+            qux: {}
+
