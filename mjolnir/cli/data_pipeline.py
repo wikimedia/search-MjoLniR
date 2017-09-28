@@ -11,6 +11,7 @@ To run:
 """
 
 import argparse
+from collections import OrderedDict
 import logging
 import mjolnir.dbn
 import mjolnir.metrics
@@ -128,7 +129,7 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
 
     # Collect features for all known queries. Note that this intentionally
     # uses query and NOT norm_query_id. Merge those back into the source hits.
-    fnames_accu = df_hits._sc.accumulator({}, mjolnir.features.FeatureNamesAccumulator())
+    fnames_accu = df_hits._sc.accumulator(OrderedDict(), mjolnir.features.FeatureNamesAccumulator())
     if ltr_feature_definitions:
         if brokers:
             df_features = mjolnir.features.collect_from_ltr_plugin_and_kafka(
@@ -171,8 +172,10 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     # collect the accumulator
     df_features.cache().count()
 
-    # TODO: test that features returned a coherent map (all features must have the same counts)
-    features = sorted(fnames_accu.value)
+    if len(set(fnames_accu.value.values())) != 1:
+        raise ValueError("Not all features were collected properly: " + str(fnames_accu.value))
+
+    features = fnames_accu.value.keys()
     df_features = df_features.withColumn('features', mjolnir.spark.add_meta(df_features._sc, F.col('features'), {
             'features': features
         }))

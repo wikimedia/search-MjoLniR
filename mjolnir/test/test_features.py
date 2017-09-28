@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import mjolnir.features
 import pyspark.sql
 
@@ -14,7 +15,7 @@ def test_collect_es(spark_context, hive_context, make_requests_session):
     rows = [r('enwiki', query, page_id) for query, ids in source_data.items() for page_id in ids]
     df = spark_context.parallelize(rows).toDF()
 
-    accu = df._sc.accumulator({}, mjolnir.features.FeatureNamesAccumulator())
+    accu = df._sc.accumulator(OrderedDict(), mjolnir.features.FeatureNamesAccumulator())
     df_result = mjolnir.features.collect_es(df, ['http://localhost:9200'],
                                             mjolnir.features.enwiki_features(),
                                             accu,
@@ -24,7 +25,7 @@ def test_collect_es(spark_context, hive_context, make_requests_session):
 
     # all features must have been logged
     assert len(set(accu.value.values())) == 1
-    feature_names = sorted(accu.value)
+    feature_names = accu.value.keys()
 
     expected_page_ids = set([row.hit_page_id for row in rows])
     result_page_ids = set([row.hit_page_id for row in result])
@@ -48,7 +49,7 @@ def test_collect_ltr_plugin(spark_context, hive_context, make_requests_session):
     rows = [r('enwiki', query, page_id) for query, ids in source_data.items() for page_id in ids]
     df = spark_context.parallelize(rows).toDF()
 
-    accu = df._sc.accumulator({}, mjolnir.features.FeatureNamesAccumulator())
+    accu = df._sc.accumulator(OrderedDict(), mjolnir.features.FeatureNamesAccumulator())
     df_result = mjolnir.features.collect_from_ltr_plugin(df, ['http://localhost:9200'],
                                                          "model:enwiki_100t_v1",
                                                          accu,
@@ -59,7 +60,7 @@ def test_collect_ltr_plugin(spark_context, hive_context, make_requests_session):
 
     # all features must have been logged
     assert len(set(accu.value.values())) == 1
-    feature_names = sorted(accu.value)
+    feature_names = accu.value.keys()
 
     expected_page_ids = set([row.hit_page_id for row in rows])
     result_page_ids = set([row.hit_page_id for row in result])

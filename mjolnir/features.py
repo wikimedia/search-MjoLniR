@@ -3,7 +3,7 @@ Integration for collecting feature vectors from elasticsearch
 """
 
 import base64
-from collections import defaultdict, namedtuple
+from collections import defaultdict, namedtuple, OrderedDict
 import json
 import math
 import mjolnir.cirrus
@@ -176,8 +176,7 @@ class LtrLoggingQuery(object):
 
 def extract_ltr_log_feature_values(response, accum):
     """Extract feature vector from ltr_log search ext
-    Scan all hits and inspect the ltr_log field. Feature names are then
-    lexically ordered to have consistent ordinals
+    Scan all hits and inspect the ltr_log field.
 
     Parameters
     ----------
@@ -195,9 +194,11 @@ def extract_ltr_log_feature_values(response, accum):
     for hit in response['hits']['hits']:
         page_id = int(hit['_id'])
         features = []
-        counts = {}
-        for n, v in sorted(hit['fields']['_ltrlog'][0]['sltr_log'].iteritems()):
-            features.append(v)
+        counts = OrderedDict()
+        for v in hit['fields']['_ltrlog'][0]['sltr_log']:
+            score = v['value']
+            n = v['name']
+            features.append(score)
             counts[n] = counts.get(n, 0) + 1
         accum += counts
         yield page_id, Vectors.dense(features)
@@ -343,7 +344,7 @@ class FeatureNamesAccumulator(AccumulatorParam):
     Keep a dict with feature names as keys and a counter as values.
     """
     def zero(self, value):
-        return dict()
+        return OrderedDict()
 
     def addInPlace(self, value1, value2):
         for k, v in value2.iteritems():
@@ -409,22 +410,18 @@ def _handle_response(response, feature_names, feature_names_accu):
     assert 'responses' in parsed, response.text
 
     features = defaultdict(lambda: [float('nan')] * len(feature_names))
-    features_seen = {}
-    # feature ordinals (sorted by feature names)
-    # ordinal_map[i] returns the feature ordinal for request i and feature_names[i]
-    ordinal_map = [elts[0] for elts in sorted(enumerate(feature_names), key=lambda i:i[1])]
-    ordinal_map = [elts[0] for elts in sorted(enumerate(ordinal_map), key=lambda i:i[1])]
+    features_seen = OrderedDict()
     for i, response in enumerate(parsed['responses']):
-        ordinal = ordinal_map[i]
         # These should be retried when making the queries. If we get this far then
         # no retry is possible anymore, and the default NaN value will signal to
         # throw away the hit_page_id
         if response['status'] != 200:
+            features_seen[feature_names[i]] = 0
             continue
         features_seen[feature_names[i]] = 1
         for hit in response['hits']['hits']:
             hit_page_id = int(hit['_id'])
-            features[hit_page_id][ordinal] = hit['_score']
+            features[hit_page_id][i] = hit['_score']
     feature_names_accu += features_seen
     return features.items()
 
