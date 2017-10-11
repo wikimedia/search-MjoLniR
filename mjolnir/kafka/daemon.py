@@ -23,7 +23,8 @@ REPORT_IDLE_SIGL = 'report idle'
 
 class Daemon(object):
     def __init__(self, brokers, n_workers=5, topic_work=mjolnir.kafka.TOPIC_REQUEST,
-                 topic_result=mjolnir.kafka.TOPIC_RESULT, topic_complete=mjolnir.kafka.TOPIC_COMPLETE):
+                 topic_result=mjolnir.kafka.TOPIC_RESULT, topic_complete=mjolnir.kafka.TOPIC_COMPLETE,
+                 max_request_size=4*1024*1024):
         self.brokers = brokers
         self.n_workers = n_workers
         self.topic_work = topic_work
@@ -31,12 +32,15 @@ class Daemon(object):
         self.topic_complete = topic_complete
         # Standard producer for query results
         self.producer = kafka.KafkaProducer(bootstrap_servers=brokers,
-                                            compression_type='gzip')
+                                            max_request_size=max_request_size,
+                                            compression_type='gzip',
+                                            api_version=mjolnir.kafka.BROKER_VERSION)
         # More reliable producer for reflecting end run sigils. As this
         # is only used for sigils and not large messages like es responses
         # compression is unnecessary here.
         self.ack_all_producer = kafka.KafkaProducer(bootstrap_servers=brokers,
-                                                    acks='all')
+                                                    acks='all',
+                                                    api_version=mjolnir.kafka.BROKER_VERSION)
         # TODO: 10 items? No clue how many is appropriate...10 seems reasonable
         # enough.  We want enough to keep the workers busy, but not so many
         # that the commited offsets are siginficantly ahead of the work
@@ -49,7 +53,8 @@ class Daemon(object):
                                        group_id='mjolnir',
                                        enable_auto_commit=True,
                                        auto_offset_reset='latest',
-                                       value_deserializer=json.loads)
+                                       value_deserializer=json.loads,
+                                       api_version=mjolnir.kafka.BROKER_VERSION)
 
         try:
             consumer.subscribe([self.topic_work])
@@ -119,13 +124,15 @@ class Daemon(object):
         log.info('reflecting end sigil for run %s and partition %d' %
                  (record.value['run_id'], record.value['partition']))
         future = self.ack_all_producer.send(self.topic_complete, json.dumps(record.value))
+        future.add_errback(self._log_error_on_end_run)
         # TODO: Is this enough to guarantee delivery? Not sure what failures cases are.
         future.get()
 
     def _get_result_offsets(self):
         """Get the latest offsets for all partitions in topic"""
         consumer = kafka.KafkaConsumer(bootstrap_servers=self.brokers,
-                                       auto_offset_reset='latest')
+                                       auto_offset_reset='latest',
+                                       api_version=mjolnir.kafka.BROKER_VERSION)
         partitions = [kafka.TopicPartition(self.topic_result, p)
                       for p in consumer.partitions_for_topic(self.topic_result)]
         consumer.assign(partitions)
@@ -144,6 +151,26 @@ class Daemon(object):
                 continue_processing = self._handle_record(session, record)
             except Exception:
                 log.exception('Exception processing record')
+
+    def _log_error_on_send(self, exception):
+        """Log an error when a failure occurs while sending a document to the broker
+
+        Parameters
+        ----------
+        exception: BaseException
+            exception raised while sending a document
+        """
+        log.error('Failed to send a message to the broker: %s', exception)
+
+    def _log_error_on_end_run(self, exception):
+        """Log an error when a failure occurs while sending a document to the broker
+
+        Parameters
+        ----------
+        exception: BaseException
+            exception raised while sending a document
+        """
+        log.critical('Failed to send the "end run" message: %s', exception)
 
     def _handle_record(self, session, record):
         """Handle a single kafka record from request topic
@@ -168,13 +195,14 @@ class Daemon(object):
             # Standard execution of elasticsearch bulk query
             _, response = mjolnir.cirrus.make_request(session, 'http://localhost:9200', [],
                                                       record.value['request'], reuse_url=True)
-            self.producer.send(self.topic_result, json.dumps({
+            future = self.producer.send(self.topic_result, json.dumps({
                 'run_id': record.value['run_id'],
                 'wikiid': record.value['wikiid'],
                 'query': record.value['query'],
                 'status_code': response.status_code,
                 'text': response.text,
             }))
+            future.add_errback(self._log_error_on_send)
             return True
         finally:
             self.work_queue.task_done()

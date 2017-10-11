@@ -29,7 +29,8 @@ SEARCH_CLUSTERS = {
 
 
 def main(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
-         min_sessions_per_query, search_cluster, brokers, ltr_feature_definitions):
+         min_sessions_per_query, search_cluster, brokers, ltr_feature_definitions,
+         samples_size_tolerance):
     # TODO: Should this jar have to be provided on the command line instead?
     sqlContext.sql("ADD JAR /mnt/hdfs/wmf/refinery/current/artifacts/refinery-hive.jar")
     sqlContext.sql("CREATE TEMPORARY FUNCTION stemmer AS 'org.wikimedia.analytics.refinery.hive.StemmerUDF'")
@@ -76,7 +77,11 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
         .cache())
 
     # materialize df_sampled and unpersist df_norm
-    df_sampled.count()
+    nb_samples = df_sampled.count()
+    if ((nb_samples / float(len(wikis)*samples_per_wiki)) < samples_size_tolerance):
+        raise ValueError('Collected %d samples this is less than %d%% of the requested sample size %d'
+                         % (nb_samples, samples_size_tolerance*100, samples_per_wiki))
+    print 'Fetched a total of %d samples for %d wikis' % (nb_samples, len(wikis))
     df_norm.unpersist()
 
     # Learn relevances
@@ -175,6 +180,10 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     if len(set(fnames_accu.value.values())) != 1:
         raise ValueError("Not all features were collected properly: " + str(fnames_accu.value))
 
+    print 'Collected %d datapoints' % (fnames_accu.value.values()[0])
+    # TODO: count and check that this value is sane, this would require computing the number
+    # of request sent
+
     features = fnames_accu.value.keys()
     df_features = df_features.withColumn('features', mjolnir.spark.add_meta(df_features._sc, F.col('features'), {
             'features': features
@@ -199,6 +208,9 @@ def parse_arguments():
     parser.add_argument(
         '-q', '--samples-per-wiki', dest='samples_per_wiki', type=int, default=1000000,
         help='The approximate number of rows in the final result per-wiki.')
+    parser.add_argument(
+        '-qe', '--sample-size-tolerance', dest='samples_size_tolerance', type=float, default=0.5,
+        help='The tolerance between the --samples-per-wiki set and the actual number of rows fetched.')
     parser.add_argument(
         '-s', '--min-sessions', dest='min_sessions_per_query', type=int, default=10,
         help='The minimum number of sessions per normalized query')
@@ -228,6 +240,9 @@ def parse_arguments():
         help='A wiki to generate features and labels for')
 
     args = parser.parse_args()
+    if args.samples_size_tolerance < 0 or args.samples_size_tolerance > 1:
+        raise ValueError('--sample-size-tolerance must be between 0 and 1')
+
     return dict(vars(args))
 
 

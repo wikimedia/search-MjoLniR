@@ -14,7 +14,8 @@ import kafka.common
 
 def _make_producer(brokers):
     return kafka.KafkaProducer(bootstrap_servers=brokers,
-                               compression_type='gzip')
+                               compression_type='gzip',
+                               api_version=mjolnir.kafka.BROKER_VERSION)
 
 
 def produce_queries(df, brokers, run_id, create_bulk_query, topic=mjolnir.kafka.TOPIC_REQUEST):
@@ -88,7 +89,7 @@ def get_offset_start(brokers, topic=mjolnir.kafka.TOPIC_RESULT):
     -------
     list of int
     """
-    consumer = kafka.KafkaConsumer(bootstrap_servers=brokers)
+    consumer = kafka.KafkaConsumer(bootstrap_servers=brokers, api_version=mjolnir.kafka.BROKER_VERSION)
     parts = consumer.partitions_for_topic(topic)
     if parts is None:
         return None
@@ -126,7 +127,8 @@ def get_offset_end(brokers, run_id, num_end_sigils, topic=mjolnir.kafka.TOPIC_CO
                                    # containing only reflected end run sigils. To make
                                    # sure we don't miss one start at the beginning.
                                    auto_offset_reset='earliest',
-                                   value_deserializer=json.loads)
+                                   value_deserializer=json.loads,
+                                   api_version=mjolnir.kafka.BROKER_VERSION)
     parts = consumer.partitions_for_topic(topic=mjolnir.kafka.TOPIC_COMPLETE)
     if parts is None:
         raise RuntimeError("topic %s missing" % topic)
@@ -185,6 +187,7 @@ def collect_results(sc, brokers, receive_record, offsets_start, offsets_end, run
     for partition, (start, end) in enumerate(zip(offsets_start, offsets_end)):
         offset_ranges.append(OffsetRange(mjolnir.kafka.TOPIC_RESULT, partition, start, end))
     assert not isinstance(brokers, basestring)
+    # TODO: how can we force the kafka api_version here?
     kafka_params = {"metadata.broker.list": ','.join(brokers)}
     # If this ends up being too much data from kafka, blowing up memory in the
     # spark executors, we could chunk the offsets and union together multiple RDD's.
