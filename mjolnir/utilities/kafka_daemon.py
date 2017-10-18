@@ -10,7 +10,7 @@ import logging
 import mjolnir.kafka.daemon
 
 
-def parse_arguments():
+def parse_arguments(argv):
     parser = argparse.ArgumentParser(description='...')
     parser.add_argument(
         '-b', '--brokers', dest='brokers', required=True, type=lambda x: x.split(','),
@@ -29,12 +29,12 @@ def parse_arguments():
     parser.add_argument(
         '-vv', '--very-verbose', dest='very_verbose', default=False, action='store_true',
         help='Increase logging to DEBUG')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     return dict(vars(args))
 
 
-if __name__ == '__main__':
-    args = parse_arguments()
+def main(argv=None):
+    args = parse_arguments(argv)
     if args['very_verbose']:
         logging.basicConfig(level=logging.DEBUG)
     elif args['verbose']:
@@ -44,3 +44,7 @@ if __name__ == '__main__':
     del args['verbose']
     del args['very_verbose']
     mjolnir.kafka.daemon.Daemon(**args).run()
+
+
+if __name__ == '__main__':
+    main()

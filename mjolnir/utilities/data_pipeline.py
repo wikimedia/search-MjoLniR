@@ -29,9 +29,9 @@ SEARCH_CLUSTERS = {
 }
 
 
-def main(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
-         min_sessions_per_query, search_cluster, brokers, ltr_feature_definitions,
-         samples_size_tolerance):
+def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
+                 min_sessions_per_query, search_cluster, brokers, ltr_feature_definitions,
+                 samples_size_tolerance):
     # TODO: Should this jar have to be provided on the command line instead?
     sqlContext.sql("ADD JAR /mnt/hdfs/wmf/refinery/current/artifacts/refinery-hive.jar")
     sqlContext.sql("CREATE TEMPORARY FUNCTION stemmer AS 'org.wikimedia.analytics.refinery.hive.StemmerUDF'")
@@ -200,7 +200,7 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     df_hits_with_features.write.parquet(output_dir)
 
 
-def parse_arguments():
+def parse_arguments(argv):
     parser = argparse.ArgumentParser(description='...')
     parser.add_argument(
         '-i', '--input', dest='input_dir', type=str,
@@ -240,15 +240,15 @@ def parse_arguments():
         'wikis', metavar='wiki', type=str, nargs='+',
         help='A wiki to generate features and labels for')
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.samples_size_tolerance < 0 or args.samples_size_tolerance > 1:
         raise ValueError('--sample-size-tolerance must be between 0 and 1')
 
     return dict(vars(args))
 
 
-if __name__ == "__main__":
-    args = parse_arguments()
+def main(argv=None):
+    args = parse_arguments(argv)
     if args['very_verbose']:
         logging.basicConfig(level=logging.DEBUG)
     elif args['verbose']:
@@ -262,4 +262,8 @@ if __name__ == "__main__":
     # human decipherable output
     sc.setLogLevel('WARN')
     sqlContext = HiveContext(sc)
-    main(sc, sqlContext, **args)
+    run_pipeline(sc, sqlContext, **args)
+
+
+if __name__ == "__main__":
+    main()
