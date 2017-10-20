@@ -188,7 +188,13 @@ def collect_results(sc, brokers, receive_record, offsets_start, offsets_end, run
         offset_ranges.append(OffsetRange(mjolnir.kafka.TOPIC_RESULT, partition, start, end))
     assert not isinstance(brokers, basestring)
     # TODO: how can we force the kafka api_version here?
-    kafka_params = {"metadata.broker.list": ','.join(brokers)}
+    kafka_params = {
+        'metadata.broker.list': ','.join(brokers),
+        # Set high fetch size values so we don't fail because of large messages
+        'max.partition.fetch.bytes': '40000000',
+        'fetch.message.max.bytes': '40000000'
+    }
+
     # If this ends up being too much data from kafka, blowing up memory in the
     # spark executors, we could chunk the offsets and union together multiple RDD's.
     return (
