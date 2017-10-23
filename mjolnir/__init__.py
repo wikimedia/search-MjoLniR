@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 from .about import (__author__, __author_email__, __description__, __name__,
                     __url__, __version__)
 

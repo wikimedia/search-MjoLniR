@@ -3,6 +3,7 @@ Reasonable facsimile's of queries from CirrusSearch, and utils
 to make those queries against an elasticsearch cluster.
 """
 
+from __future__ import absolute_import
 import random
 import requests
 import urlparse

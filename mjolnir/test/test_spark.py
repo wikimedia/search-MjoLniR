@@ -2,6 +2,7 @@
 Tests for mjolnir.spark.*
 """
 
+from __future__ import absolute_import
 import mjolnir.spark
 from pyspark.sql import Window
 

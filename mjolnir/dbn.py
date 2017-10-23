@@ -3,6 +3,7 @@ Implements training a Dynamic Bayesian Network, using the clickmodels library,
 within spark
 """
 
+from __future__ import absolute_import
 from clickmodels.inference import DbnModel
 from clickmodels.input_reader import InputReader
 import json

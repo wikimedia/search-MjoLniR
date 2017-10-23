@@ -4,6 +4,7 @@ and pushing the results into a second kafka topic. This runs on the production
 side of the network to have access to relforge servers.
 """
 
+from __future__ import absolute_import
 import json
 import kafka
 import kafka.common

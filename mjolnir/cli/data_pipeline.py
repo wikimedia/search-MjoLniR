@@ -10,6 +10,7 @@ To run:
         mjolnir/cli/data_pipeline.py
 """
 
+from __future__ import absolute_import
 import argparse
 from collections import OrderedDict
 import logging

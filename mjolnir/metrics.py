@@ -2,6 +2,7 @@
 Calculates NDCG@k values for click data
 """
 
+from __future__ import absolute_import
 import math
 from pyspark.sql import functions as F
 from pyspark.sql import Window
