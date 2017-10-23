@@ -7,10 +7,12 @@ requirements = [
     'clickmodels',
     'requests',
     'kafka',
+    'hyperopt',
+    # hyperopt requires networkx < 2.0, but doesn't say so
+    'networkx<2.0',
     # pyspark requirements
     'py4j',
     'numpy',
-    'hyperopt',
 ]
 
 test_requirements = [
