@@ -11,8 +11,11 @@ To run:
 
 from __future__ import absolute_import
 import argparse
+import collections
+import datetime
 import glob
 import logging
+import mjolnir.feature_engineering
 import mjolnir.training.xgboost
 import os
 import pickle
@@ -20,6 +23,31 @@ import sys
 from pyspark import SparkContext
 from pyspark.sql import HiveContext
 from pyspark.sql import functions as F
+
+
+def summarize_training_df(df, data_size):
+    """Generate a summary of min/max/stddev/mean of data frame
+
+    Parameters
+    ----------
+    df : pyspark.sql.DataFrame
+        DataFrame used for training
+    data_size : int
+        Number of rows in df
+
+    Returns
+    -------
+    dict
+        Map from field name to a map of statistics about the field
+    """
+    if data_size > 10000000:
+        df = df.repartition(200)
+    summary = collections.defaultdict(dict)
+    for row in mjolnir.feature_engineering.explode_features(df.describe().collect()):
+        statistic = row.summary
+        for field, value in (x for x in row.asDict().items() if x[0] != 'summary'):
+            summary[field][statistic] = value
+    return dict(summary)
 
 
 def main(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_num_trees,
@@ -49,6 +77,17 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_
         print 'CV  test-ndcg@10: %.4f' % (tune_results['metrics']['cv-test'])
         print 'CV train-ndcg@10: %.4f' % (tune_results['metrics']['cv-train'])
 
+        tune_results['metadata'] = {
+            'wiki': wiki,
+            'input_dir': input_dir,
+            'training_datetime': datetime.datetime.now().isoformat(),
+            'num_observations': data_size,
+            'num_queries': df_hits_with_features.select('query').drop_duplicates().count(),
+            'num_norm_queries': df_hits_with_features.select('norm_query_id').drop_duplicates().count(),
+            'features': df_hits_with_features.schema['features'].metdata['features'],
+            'summary': summarize_training_df(df_hits_with_features, data_size)
+        }
+
         # Train a model over all data with best params. Use a copy
         # so j_groups doesn't end up inside tune_results and prevent
         # pickle from serializing it.
@@ -70,7 +109,7 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_
                 df_test = sqlContext.read.parquet(test_dir)
                 tune_results['metrics']['test'] = model.eval(df_test)
                 print 'test-ndcg@10: %.5f' % (tune_results['metrics']['test'])
-            except:
+            except:  # noqa: E722
                 # It has probably taken some time to get this far. Don't bail
                 # because the user input an invalid test dir.
                 logging.exception('Could not evaluate test_dir: %s' % (test_dir))
@@ -81,6 +120,10 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_
         # some more work before they can be json encoded.
         tune_output_pickle = os.path.join(output_dir, 'tune_%s.pickle' % (wiki))
         with open(tune_output_pickle, 'w') as f:
+            # TODO: This includes special hyperopt and mjolnir objects, it would
+            # be nice if those could be converted to something simple like dicts
+            # and output json instead of pickle. This would greatly simplify
+            # post-processing.
             f.write(pickle.dumps(tune_results))
             print 'Wrote tuning results to %s' % (tune_output_pickle)
 
@@ -178,7 +221,7 @@ if __name__ == "__main__":
 
     try:
         main(sc, sqlContext, **args)
-    except:
+    except:  # noqa: E722
         # If the directory we created is still empty delete it
         # so it doesn't need to be manually re-created
         if not len(glob.glob(os.path.join(output_dir, '*'))):
