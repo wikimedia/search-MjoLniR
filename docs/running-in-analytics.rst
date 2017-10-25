@@ -187,7 +187,7 @@ The commandline for kicking off the data pipeline looks like::
 		--master yarn \
 		--files /usr/lib/libhdfs.so.0.0.0 \
 		--archives 'mjolnir_venv.zip#venv' \
-		venv/lib/python2.7/site-packages/mjolnir/cli/data_pipeline.py \
+		venv/bin/mjolnir-utilities.py data_pipeline \
 		-i 'hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*' \
 		-o hdfs://analytics-hadoop/user/${USER}/mjolnir/training_data \
 		-c codfw \
@@ -224,7 +224,7 @@ The commandline for kicking off training looks like::
 		--conf spark.yarn.executor.memoryOverhead=1536 \
 		--executor-memory 2G \
 		--executor-cores 4 \
-		venv/lib/python2.7/site-packages/mjolnir/cli/training_pipeline.py \
+		venv/bin/mjolnir-utilities.py training_pipeline \
 		-i hdfs://analytics-hadoop/user/ebernhardson/mjolnir/1193k_with_one_hot_wp10 \
 		-o ~/training_size/1193k_with_one_hot_wp10 \
 		-w 1 -c 100 -f 5 enwiki
@@ -267,9 +267,9 @@ This includes a few more arguments than the interactive shell did. These are:
   for each executor. With the current cluster configuration 4 is the maximum that
   can be requested. Must be the same as spark.task.cpus above when training
 
-* venv/lib/python2.7/site-packages/mjolnir/cli/training_pipeline.py - This is the
-  script to run on the driver to actually run the spark job. Reaching into venv
-  like this is perhaps undesirable but gets the job done
+* venv/bin/mjolnir-utilities.py training_pipeline - This is the script to run
+  on the driver to actually run the spark job. This will call the utility
+  script at mjolnir.utilities.training_pipeline.
 
 * -i ... - Tells the training pipeline where to find the training data. This must be
   on HDFS and should be the output of the `data_pipeline.py` script.

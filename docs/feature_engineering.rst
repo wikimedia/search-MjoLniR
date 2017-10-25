@@ -110,15 +110,15 @@ keep-alive is used, and one is created per-thread as it is not thread safe.::
                 })
                 return (row.query, len(res.json()['tokens']))
             pool = multiprocessing.dummy.Pool(10, init)
-            return pool.imap_unordered(rows)
+            return pool.imap_unordered(process_one, rows)
         return f
 
 Apply that function to each partition of the rdd. This is somewhat expensive to
 compute, taking ~75s against 500k unique queries in ~30 partitions, and it will
 be used multiple times so we cache it in memory::
 
-    df_num_plain_tokens = rdd.mapPartitions(gen_collect_partition('enwiki_content', 'text_search')).toDF(['query', 'num_text_tokens'])
-    df_num_text_tokens = rdd.mapPartitions(gen_collect_partition('enwiki_content', 'plain_search')).toDF(['query', 'num_plain_tokens'])
+    df_num_text_tokens = rdd.mapPartitions(gen_collect_partition('enwiki_content', 'text_search')).toDF(['query', 'num_text_tokens'])
+    df_num_plain_tokens = rdd.mapPartitions(gen_collect_partition('enwiki_content', 'plain_search')).toDF(['query', 'num_plain_tokens'])
     df_num_tokens = df_num_plain_tokens.join(df_num_text_tokens, how='inner', on=['query']).cache()
 
 Merge our new feature into the existing data sets and write them out to hdfs::
@@ -146,7 +146,7 @@ with training_pipeline.py. These new features can be tested together directly::
         --executor-memory 2G i\
         --executor-cores 4 \
         --archives 'mjolnir_venv.zip#venv' \
-        venv/lib/python2.7/site-packages/mjolnir/cli/training_pipeline.py \
+        venv/bin/mjolnir-utilities.py training_pipeline
         -i hdfs://analytics-hadoop/user/ebernhardson/mjolnir/1193k_with_num_query_tokens \
         -o /home/ebernhardson/training_size/1193k_with_num_query_tokens \
         -t hdfs://analytics-hadoop/user/ebernhardson/mjolnir/test_with_num_query_tokens

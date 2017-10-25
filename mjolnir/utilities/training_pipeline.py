@@ -50,8 +50,8 @@ def summarize_training_df(df, data_size):
     return dict(summary)
 
 
-def main(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_num_trees,
-         num_workers, num_cv_jobs, num_folds, test_dir, zero_features):
+def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_num_trees,
+                 num_workers, num_cv_jobs, num_folds, test_dir, zero_features):
     for wiki in wikis:
         print 'Training wiki: %s' % (wiki)
         df_hits_with_features = (
@@ -143,7 +143,7 @@ def main(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_
         print ''
 
 
-def parse_arguments():
+def parse_arguments(argv):
     parser = argparse.ArgumentParser(description='Train XGBoost ranking models')
     parser.add_argument(
         '-i', '--input', dest='input_dir', type=str, required=True,
@@ -187,14 +187,14 @@ def parse_arguments():
         'wikis', metavar='wiki', type=str, nargs='+',
         help='A wiki to perform model training for.')
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.num_cv_jobs is None:
         args.num_cv_jobs = args.num_folds
     return dict(vars(args))
 
 
-if __name__ == "__main__":
-    args = parse_arguments()
+def main(argv=None):
+    args = parse_arguments(argv)
     if args['very_verbose']:
         logging.basicConfig(level=logging.DEBUG)
     elif args['verbose']:
@@ -220,10 +220,14 @@ if __name__ == "__main__":
     os.mkdir(output_dir)
 
     try:
-        main(sc, sqlContext, **args)
+        run_pipeline(sc, sqlContext, **args)
     except:  # noqa: E722
         # If the directory we created is still empty delete it
         # so it doesn't need to be manually re-created
         if not len(glob.glob(os.path.join(output_dir, '*'))):
             os.rmdir(output_dir)
         raise
+
+
+if __name__ == "__main__":
+    main()

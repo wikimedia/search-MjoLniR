@@ -7,6 +7,7 @@ requirements = [
     'clickmodels',
     'requests',
     'kafka',
+    'pyyaml',
     'hyperopt',
     # hyperopt requires networkx < 2.0, but doesn't say so
     'networkx<2.0',
@@ -29,6 +30,11 @@ setup(
     author_email='discovery@lists.wikimedia.org',
     description='A plumbing library for Machine Learned Ranking at Wikimedia',
     license='MIT',
+    entry_points={
+        'console_scripts': [
+            'mjolnir-utilities.py = mjolnir.__main__:main',
+        ],
+    },
     packages=find_packages(),
     include_package_data=True,
     data_files=['README.rst'],
