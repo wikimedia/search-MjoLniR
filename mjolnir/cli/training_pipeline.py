@@ -11,6 +11,7 @@ To run:
 
 from __future__ import absolute_import
 import argparse
+import glob
 import logging
 import mjolnir.training.xgboost
 import os
@@ -23,16 +24,6 @@ from pyspark.sql import functions as F
 
 def main(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_num_trees,
          num_workers, num_cv_jobs, num_folds, test_dir, zero_features):
-
-    if os.path.exists(output_dir):
-        logging.error('Output directory (%s) already exists' % (output_dir))
-        sys.exit(1)
-
-    # Maybe this is a bit early to create the path ... but should be fine.
-    # The annoyance might be that an error in training requires deleting
-    # this directory to try again.
-    os.mkdir(output_dir)
-
     for wiki in wikis:
         print 'Training wiki: %s' % (wiki)
         df_hits_with_features = (
@@ -174,4 +165,22 @@ if __name__ == "__main__":
     sc = SparkContext(appName="MLR: training pipeline")
     sc.setLogLevel('WARN')
     sqlContext = HiveContext(sc)
-    main(sc, sqlContext, **args)
+
+    output_dir = args['output_dir']
+    if os.path.exists(output_dir):
+        logging.error('Output directory (%s) already exists' % (output_dir))
+        sys.exit(1)
+
+    # Maybe this is a bit early to create the path ... but should be fine.
+    # The annoyance might be that an error in training requires deleting
+    # this directory to try again.
+    os.mkdir(output_dir)
+
+    try:
+        main(sc, sqlContext, **args)
+    except:
+        # If the directory we created is still empty delete it
+        # so it doesn't need to be manually re-created
+        if not len(glob.glob(os.path.join(output_dir, '*'))):
+            os.rmdir(output_dir)
+        raise
