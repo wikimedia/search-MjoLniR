@@ -67,7 +67,7 @@ def explode_features(df):
     features = df.schema['features'].metadata['features']
 
     def extract_feature(features, idx):
-        return features.toArray()[idx]
+        return float(features[idx])
     extract_feature_udf = F.udf(extract_feature, pyspark.sql.types.FloatType())
     cols = [extract_feature_udf('features', F.lit(idx)).alias(name) for idx, name in enumerate(features)]
     return df.select('*', *cols)

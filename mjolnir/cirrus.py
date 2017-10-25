@@ -68,7 +68,7 @@ def check_idle(url_list, session_factory=requests.Session):
                 for stats in res['nodes'].values():
                     if stats['os']['cpu']['percent'] > 10:
                         busy_nodes += 1
-            except:
+            except:  # noqa: E722
                 failed.append(parsed.netloc)
                 #  Host depooled/unavailable? No big deal check another.
                 pass
