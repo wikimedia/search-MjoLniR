@@ -4,6 +4,7 @@ back from a second kafka topic. This runs on the analytics side as part of featu
 collection.
 """
 
+from __future__ import absolute_import
 import json
 import mjolnir.spark
 import mjolnir.kafka

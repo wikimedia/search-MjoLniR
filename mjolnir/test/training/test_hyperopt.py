@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 import hyperopt
 import mjolnir.training.hyperopt
 from pyspark.ml.linalg import Vectors

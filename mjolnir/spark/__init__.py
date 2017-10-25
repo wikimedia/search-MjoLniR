@@ -1,6 +1,7 @@
 """
 Helper functions for dealing with pyspark
 """
+from __future__ import absolute_import
 import json
 from pyspark import SparkContext
 from pyspark.sql import Column, functions as F

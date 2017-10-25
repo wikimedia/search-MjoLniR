@@ -12,6 +12,7 @@ query and groups together queries that have very similar result
 sets.
 """
 
+from __future__ import absolute_import
 import mjolnir.es_hits
 import mjolnir.spark
 import numpy as np

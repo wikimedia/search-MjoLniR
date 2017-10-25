@@ -4,6 +4,7 @@ run them against relforge, and send the results back over
 kafka.
 """
 
+from __future__ import absolute_import
 import argparse
 import logging
 import mjolnir.kafka.daemon

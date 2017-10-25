@@ -9,6 +9,7 @@ To run:
         path/to/training_pipeline.py
 """
 
+from __future__ import absolute_import
 import argparse
 import logging
 import mjolnir.training.xgboost

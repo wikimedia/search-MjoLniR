@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 import mjolnir.training.xgboost
 from pyspark.ml.linalg import Vectors
 import pytest

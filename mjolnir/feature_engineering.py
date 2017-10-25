@@ -1,4 +1,5 @@
 """Helpful utilities for feature engineering"""
+from __future__ import absolute_import
 import numpy as np
 import mjolnir.spark
 from pyspark.ml.linalg import Vectors, VectorUDT

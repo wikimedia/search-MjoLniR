@@ -2,6 +2,7 @@
 Collect hit page ids for queries from elasticsearch
 """
 
+from __future__ import absolute_import
 import json
 import mjolnir.cirrus
 import mjolnir.spark

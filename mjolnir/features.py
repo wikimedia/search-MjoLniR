@@ -2,6 +2,7 @@
 Integration for collecting feature vectors from elasticsearch
 """
 
+from __future__ import absolute_import
 import base64
 from collections import defaultdict, namedtuple, OrderedDict
 import json

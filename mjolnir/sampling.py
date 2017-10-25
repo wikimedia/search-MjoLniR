@@ -7,6 +7,7 @@ particularly designed to work with multiple datasets (wikis)
 in a single dataframe, but it works well enough for our data sizes.
 """
 
+from __future__ import absolute_import
 import bisect
 import mjolnir.spark
 import pyspark
