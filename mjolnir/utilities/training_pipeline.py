@@ -43,7 +43,7 @@ def summarize_training_df(df, data_size):
     if data_size > 10000000:
         df = df.repartition(200)
     summary = collections.defaultdict(dict)
-    for row in mjolnir.feature_engineering.explode_features(df.describe().collect()):
+    for row in mjolnir.feature_engineering.explode_features(df).describe().collect():
         statistic = row.summary
         for field, value in (x for x in row.asDict().items() if x[0] != 'summary'):
             summary[field][statistic] = value
@@ -84,7 +84,7 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees
             'num_observations': data_size,
             'num_queries': df_hits_with_features.select('query').drop_duplicates().count(),
             'num_norm_queries': df_hits_with_features.select('norm_query_id').drop_duplicates().count(),
-            'features': df_hits_with_features.schema['features'].metdata['features'],
+            'features': df_hits_with_features.schema['features'].metadata['features'],
             'summary': summarize_training_df(df_hits_with_features, data_size)
         }
 
