@@ -39,8 +39,15 @@ Other
 Documentation follows the numpy documentation guidelines:
     https://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt
 
-XGBoost version used is v0.7, with a few additional patches cherry picked in:
-* https://github.com/dmlc/xgboost/pull/2234 - support json dumps in xgboost4j
-* https://github.com/dmlc/xgboost/pull/2241 - store metrics with serialized learner
-* https://github.com/dmlc/xgboost/pull/2247 - expose json dumps to scala
-* https://github.com/dmlc/xgboost/pull/2244 - accept groupData in spark model eval
+XGBoost version used is v0.7 (unreleased master), with a few additional patches. This
+is tracked in the wmf repository cloned from https://gerrit.wikimedia.org/r/search/MjoLniR.
+Versions are tagged with wmf, such as 0.7-wmf-1.
+
+XGBoost needs to be built on a debian jessie host to match the analytics cluster. Building
+on, for example, an ubuntu xenial install will generate the following error when submitted
+to the WMF hadoop cluster:
+
+  /lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.23' not found
+
+Somewhere before:
+  java.lang.NoClassDefFoundError: Could not initialize class ml.dmlc.xgboost4j.java.XGBoostJNI

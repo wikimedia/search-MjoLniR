@@ -26,17 +26,16 @@ apt-get install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="-
     gfortran \
     zip
 
-# xgboost master requires cmake > 3.2, so we need it from jessie-backports
-apt-get -t jessie-backports install cmake cmake-data
-
+# xgboost master requires cmake > 3.2, so we need to force looking in jessie-backports
+apt-get -t jessie-backports install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" cmake cmake-data
 
 # While we only asked for java 8, 7 was installed as well. switch over the
-# alternative. TODO: Do we need anything else?
+# alternative.
 update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
 
 # Setup kafka and zookeeper to start on boot. For whatever reason
 # confluent doesn't set this up for us.
-echo > /lib/systemd/system/zookeeper.service <<EOD
+cat > /lib/systemd/system/zookeeper.service <<EOD
 [Unit]
 Description="zookeeper"
 
@@ -48,7 +47,7 @@ ExecStop=/usr/bin/zookeeper-server-stop
 [Install]
 WantedBy=multi-user.target
 EOD
-echo > /lib/systemd/system/kafka.service <<EOD
+cat > /lib/systemd/system/kafka.service <<EOD
 [Unit]
 Description="kafka"
 After=zookeeper.service
@@ -104,35 +103,22 @@ EOD
 
 if [ ! -d /vagrant/venv ]; then
     cd /vagrant
+    # the clickmodels dependency of mjolnir doesn't work with python 3.x
     virtualenv -p /usr/bin/python2.7 venv
     venv/bin/pip install tox
 fi
 
-# Grab and compile xgboost. install it into local maven repository
-# as they don't publish to maven central yet.
+# Clone xgboost for convenience. Generally we pull the appropriate jars from
+# archiva, but if we want to compile a new version it needs to be done on a
+# debian jessie host (aka this vm) or it can fail with glibc version problems
+# when run in production.
+#
+# Note that the test suite requires 4 cores or it gets stuck. Not ideal but
+# skip them for now. To even package the jars it also needs a bit more than the
+# default heap allocation.  To run the tests we need to create a bigger VM, but
+# taking that much memory will be hard on machines with only 8G of memory.
+#
+# MAVEN_OPTS="-Xmx768M" mvn -DskipTests -Dmaven.test.skip=true clean verify
 if [ ! -d /srv/xgboost ]; then
-    git clone https://github.com/dmlc/xgboost.git /srv/xgboost
+    git clone https://gerrit.wikimedia.org/r/search/xgboost /srv/xgboost
 fi
-cd /srv/xgboost
-# We need d3b866e, da58f34, ccccf8a0 and 197a9eac from master which don't cherry-pick
-# cleanly back to the last released tag (v0.60), so use a hardcoded version of
-# master branch that we think works.
-if [ ! -f /srv/xgboost/jvm-packages/xgboost4j-spark/target/xgboost4j-spark-0.7.jar ]; then
-    git checkout 197a9eac
-    git submodule update --init --recursive
-    # TODO: We also need the patch that fixes parallel-CV. XGBoost has a race condition
-    # triggered when running many models in parallel, but the current fix is more of
-    # a hack and wont be merged upstream.
-    git remote add ebernhardson https://github.com/ebernhardson/xgboost
-    git fetch ebernhardson
-    git cherry-pick ebernhardson/booster_to_bytes
-    cd jvm-packages
-    # The test suite requires 4 cores or it gets stuck. Not ideal but skip them for
-    # now. It also needs a bit more than the default heap allocation.
-    MAVEN_OPTS="-Xmx768M" mvn -DskipTests -Dmaven.test.skip=true install
-fi
-
-# Build the mjolnir jar which depends on xgboost4j-spark
-cd /vagrant/jvm
-mvn package
-
