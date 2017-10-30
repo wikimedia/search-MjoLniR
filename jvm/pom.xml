@@ -6,17 +6,26 @@
 
     <groupId>org.wikimedia.search</groupId>
     <artifactId>mjolnir</artifactId>
-    <version>0.1</version>
+    <version>0.2-SNAPSHOT</version>
     <packaging>jar</packaging>
     <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>1.7</maven.compiler.source>
         <maven.compiler.target>1.7</maven.compiler.target>
         <maven.version>3.3.9</maven.version>
         <spark.version>2.1.0</spark.version>
         <scala.version>2.11.8</scala.version>
         <scala.binary.version>2.11</scala.binary.version>
-        <xgboost.version>0.7</xgboost.version>
+        <xgboost.version>0.7-wmf-1</xgboost.version>
     </properties>
+
+    <scm>
+        <connection>scm:git:https://gerrit.wikimedia.org/r/search/MjoLniR</connection>
+        <developerConnection>scm:git:ssh://gerrit.wikimedia.org:29418/search/MjoLniR</developerConnection>
+        <tag>HEAD</tag>
+        <url>https://gerrit.wikimedia.org/r/#/admin/projects/search/MjoLniR</url>
+    </scm>
+
     <build>
         <sourceDirectory>src/main/scala</sourceDirectory>
         <testSourceDirectory>src/test/scala</testSourceDirectory>
@@ -70,26 +79,6 @@
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <version>2.6</version>
-                <configuration>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>make-assembly</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <!-- disable surefire -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>2.7</version>
                 <configuration>
@@ -110,6 +99,17 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+               <artifactId>maven-release-plugin</artifactId>
+               <version>2.5.3</version>
+               <dependencies>
+                  <dependency>
+                     <groupId>org.apache.maven.scm</groupId>
+                     <artifactId>maven-scm-provider-gitexe</artifactId>
+                     <version>1.9.5</version>
+                  </dependency>
+               </dependencies>
+            </plugin>
         </plugins>
     </build>
     <dependencies>
@@ -117,21 +117,19 @@
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-compiler</artifactId>
             <version>${scala.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-reflect</artifactId>
             <version>${scala.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
             <version>${scala.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>ml.dmlc</groupId>
-            <artifactId>xgboost4j-spark</artifactId>
-            <version>${xgboost.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
@@ -140,18 +138,89 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <!-- While nothing here really depends on this, it's the easiest way to
-              ensure availability in the main package since spark doesn't ship with
-              kafka streaming -->
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-streaming-kafka-0-8_${scala.binary.version}</artifactId>
-            <version>${spark.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest_${scala.binary.version}</artifactId>
             <version>3.0.1</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
+    <repositories>
+        <repository>
+            <id>central</id>
+            <url>http://repo1.maven.org/maven2</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+        <repository>
+            <id>wikimedia.releases</id>
+            <name>Wikimedia Release Repository</name>
+            <url>https://archiva.wikimedia.org/repository/releases</url>
+            <releases>
+                <enabled>true</enabled>
+                <checksumPolicy>fail</checksumPolicy>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+        <repository>
+            <id>wikimedia.snaphots</id>
+            <name>Wikimedia Snapshot Repository</name>
+            <url>https://archiva.wikimedia.org/repository/snapshots</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+                <checksumPolicy>fail</checksumPolicy>
+            </snapshots>
+        </repository>
+        <repository>
+            <id>wikimedia.mirrored</id>
+            <name>Wikimedia Mirrored Repository</name>
+            <url>https://archiva.wikimedia.org/repository/mirrored</url>
+            <releases>
+                <enabled>true</enabled>
+                <checksumPolicy>fail</checksumPolicy>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+    <pluginRepositories>
+        <!-- disable Maven central -->
+        <pluginRepository>
+            <id>central</id>
+            <url>http://repo1.maven.org/maven2</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+
+        <pluginRepository>
+            <id>wikimedia.mirrored</id>
+            <name>Wikimedia Mirrored Repository</name>
+            <url>https://archiva.wikimedia.org/repository/mirrored/</url>
+        </pluginRepository>
+    </pluginRepositories>
+    <distributionManagement>
+        <repository>
+            <id>wikimedia.releases</id>
+            <name>Wikimedia Release Repository</name>
+            <url>https://archiva.wikimedia.org/repository/releases/</url>
+        </repository>
+        <snapshotRepository>
+            <id>wikimedia.snapshots</id>
+            <name>Wikimedia Snapshot Repository</name>
+            <url>https://archiva.wikimedia.org/repository/snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
 </project>

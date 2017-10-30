@@ -36,14 +36,22 @@ def spark_context(request):
     """
 
     # TODO: This is much too specialized to the vagrant test environment
-    extraClassPath = '/vagrant/jvm/target/mjolnir-0.1-jar-with-dependencies.jar'
     quiet_log4j()
     conf = (
         SparkConf()
         .setMaster("local[2]")
         .setAppName("pytest-pyspark-local-testing")
-        .set('spark.driver.extraClassPath', extraClassPath)
-        .set('spark.executor.extraClassPath', extraClassPath)
+        # Pull appropriate jvm dependencies from archiva.
+        # TODO: How to use a local version of mjolnir jar?
+        .set('spark.jars.ivy', ','.join([
+            'https://archiva.wikimedia.org/repository/releases',
+            'https://archiva.wikimedia.org/repository/snapshots',
+            'https://archiva.wikimedia.org/repository/mirrored']))
+        # Maven coordinates of jvm dependencies
+        .set('spark.jars.packages', ','.join([
+            'ml.dmlc.xgboost4j-spark:0.7-wmf-1',
+            'org.wikimedia.search:mjolnir:0.2',
+            'org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0']))
         # By default spark will shuffle to 200 partitions, which is
         # way too many for our small test cases. This cuts execution
         # time of the tests in half.

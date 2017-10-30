@@ -123,8 +123,8 @@ REPL to see things are working::
 	ssh stat1004.eqiad.wmnet
 	cd mjolnir/
 	PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf spark-2.1.0-bin-hadoop2.6/bin/pyspark \
-	  --jars ${HOME}/mjolnir/mjolnir-0.1-jar-with-dependencies.jar \
-	  --driver-class-path ${HOME}/mjolnir/mjolnir-0.1-ja[0/1818]ependencies.jar \
+	  --repositories https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored \
+	  --packages ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0 \
 	  --master yarn \
 	  --files /usr/lib/libhdfs.so.0.0.0 \
 	  --archives 'mjolnir_venv.zip#venv'
@@ -142,9 +142,9 @@ An expanation of the options used:
   jvm, talks to yarn, etc. The pyspark executable specifically stands up an
   interactive python REPL.
 
-* --jars ... - Tells spark about extra jars we want it to provide to the executor nodes
+* --repositories ... - Tells spark where to source jvm dependencies from
 
-* --driver-class-path ... - Tells spark about extra jars we want in the driver application
+* --packages ... - Tells spark what our jvm dependencies are
 
 * --master yarn - Tells spark we will be distributing the work across a cluster.
   Without this option all spark workers will be local within the same JVM
@@ -182,8 +182,8 @@ The commandline for kicking off the data pipeline looks like::
 
 	cd ~/mjolnir
 	PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf spark-2.1.0-bin-hadoop2.6/bin/spark-submit \
-		--jars "${HOME}/mjolnir/mjolnir-0.1-jar-with-dependencies.jar" \
-		--driver-class-path "${HOME}/mjolnir/mjolnir-0.1-jar-with-dependencies.jar" \
+		--repositories https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored \
+		--packages ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0 \
 		--master yarn \
 		--files /usr/lib/libhdfs.so.0.0.0 \
 		--archives 'mjolnir_venv.zip#venv' \
@@ -214,8 +214,8 @@ Running training_pipeline.py
 The commandline for kicking off training looks like::
 
 	PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf ~/spark-2.1.0-bin-hadoop2.6/bin/spark-submit \
-		--jars /home/ebernhardson/mjolnir-0.1-jar-with-dependencies.jar \
-		--driver-class-path /home/ebernhardson/mjolnir-0.1-jar-with-dependencies.jar \
+		--repositories https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored \
+		--packages ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0 \
 		--master yarn --files /usr/lib/libhdfs.so.0.0.0 \
 		--archives 'mjolnir_venv.zip#venv' \
 		--conf spark.dynamicAllocation.maxExecutors=105 \
