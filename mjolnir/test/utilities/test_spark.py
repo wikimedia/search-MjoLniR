@@ -70,7 +70,9 @@ def test_load_config(monkeypatch, test_file, expect_file):
     monkeypatch.setenv('USER', 'pytest')
 
     with open(test_file, 'r') as f:
-        global_config, profiles = mjolnir.utilities.spark.load_config(f, 'marker', {})
+        global_config, profiles = mjolnir.utilities.spark.load_config(f, 'marker', {
+            'mjolnir_dir': '/srv/mjolnir',
+        })
     compare_fixture(expect_file, {
         'global_config': global_config,
         'profiles': profiles

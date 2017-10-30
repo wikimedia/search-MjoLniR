@@ -14,7 +14,7 @@ global_config:
         SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
         USER: pytest
       mjolnir_utility: data_pipeline
-      mjolnir_utility_path: /vagrant/venv/bin/mjolnir-utilities.py
+      mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
       paths:
         dir_exist: !!set
           /etc/spark/conf: null
@@ -22,11 +22,11 @@ global_config:
           /mnt/hdfs/user/pytest/mjolnir/marker: null
         file_exist: !!set
           /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-          /vagrant/mjolnir_venv.zip: null
-          /vagrant/venv/bin/mjolnir-utilities.py: null
+          /srv/mjolnir/mjolnir_venv.zip: null
+          /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
           venv/bin/python: null
       spark_args:
-        archives: /vagrant/mjolnir_venv.zip#venv
+        archives: /srv/mjolnir/mjolnir_venv.zip#venv
         executor-cores: '1'
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
@@ -51,11 +51,11 @@ global_config:
           /etc/spark/conf: null
         file_exist: !!set
           /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-          /vagrant/mjolnir_venv.zip: null
-          /vagrant/venv/bin/mjolnir-utilities.py: null
+          /srv/mjolnir/mjolnir_venv.zip: null
+          /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
           venv/bin/python: null
       spark_args:
-        archives: /vagrant/mjolnir_venv.zip#venv
+        archives: /srv/mjolnir/mjolnir_venv.zip#venv
         executor-cores: '1'
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
@@ -80,11 +80,11 @@ global_config:
           /etc/spark/conf: null
         file_exist: !!set
           /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-          /vagrant/mjolnir_venv.zip: null
-          /vagrant/venv/bin/mjolnir-utilities.py: null
+          /srv/mjolnir/mjolnir_venv.zip: null
+          /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
           venv/bin/python: null
       spark_args:
-        archives: /vagrant/mjolnir_venv.zip#venv
+        archives: /srv/mjolnir/mjolnir_venv.zip#venv
         executor-cores: '4'
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
@@ -108,18 +108,18 @@ global_config:
         SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
         USER: pytest
       mjolnir_utility: training_pipeline
-      mjolnir_utility_path: /vagrant/venv/bin/mjolnir-utilities.py
+      mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
       paths:
         dir_exist: !!set
           /etc/spark/conf: null
           /home/pytest/training_size: null
         file_exist: !!set
           /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-          /vagrant/mjolnir_venv.zip: null
-          /vagrant/venv/bin/mjolnir-utilities.py: null
+          /srv/mjolnir/mjolnir_venv.zip: null
+          /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
           venv/bin/python: null
       spark_args:
-        archives: /vagrant/mjolnir_venv.zip#venv
+        archives: /srv/mjolnir/mjolnir_venv.zip#venv
         driver-memory: 3G
         executor-cores: '1'
         executor-memory: 2G
@@ -153,7 +153,7 @@ profiles:
           SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
           USER: pytest
         mjolnir_utility: data_pipeline
-        mjolnir_utility_path: /vagrant/venv/bin/mjolnir-utilities.py
+        mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
         paths:
           dir_exist: !!set
             /etc/spark/conf: null
@@ -161,11 +161,11 @@ profiles:
             /mnt/hdfs/user/pytest/mjolnir/marker: null
           file_exist: !!set
             /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-            /vagrant/mjolnir_venv.zip: null
-            /vagrant/venv/bin/mjolnir-utilities.py: null
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
             venv/bin/python: null
         spark_args:
-          archives: /vagrant/mjolnir_venv.zip#venv
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
           executor-cores: '1'
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
@@ -190,11 +190,11 @@ profiles:
             /etc/spark/conf: null
           file_exist: !!set
             /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-            /vagrant/mjolnir_venv.zip: null
-            /vagrant/venv/bin/mjolnir-utilities.py: null
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
             venv/bin/python: null
         spark_args:
-          archives: /vagrant/mjolnir_venv.zip#venv
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
           executor-cores: '1'
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
@@ -219,11 +219,11 @@ profiles:
             /etc/spark/conf: null
           file_exist: !!set
             /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-            /vagrant/mjolnir_venv.zip: null
-            /vagrant/venv/bin/mjolnir-utilities.py: null
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
             venv/bin/python: null
         spark_args:
-          archives: /vagrant/mjolnir_venv.zip#venv
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
           executor-cores: '4'
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
@@ -251,18 +251,18 @@ profiles:
           SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
           USER: pytest
         mjolnir_utility: training_pipeline
-        mjolnir_utility_path: /vagrant/venv/bin/mjolnir-utilities.py
+        mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
         paths:
           dir_exist: !!set
             /etc/spark/conf: null
             /home/pytest/training_size: null
           file_exist: !!set
             /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-            /vagrant/mjolnir_venv.zip: null
-            /vagrant/venv/bin/mjolnir-utilities.py: null
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
             venv/bin/python: null
         spark_args:
-          archives: /vagrant/mjolnir_venv.zip#venv
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
           driver-memory: 3G
           executor-cores: '6'
           executor-memory: 3G
@@ -298,7 +298,7 @@ profiles:
           SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
           USER: pytest
         mjolnir_utility: data_pipeline
-        mjolnir_utility_path: /vagrant/venv/bin/mjolnir-utilities.py
+        mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
         paths:
           dir_exist: !!set
             /etc/spark/conf: null
@@ -306,11 +306,11 @@ profiles:
             /mnt/hdfs/user/pytest/mjolnir/marker: null
           file_exist: !!set
             /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-            /vagrant/mjolnir_venv.zip: null
-            /vagrant/venv/bin/mjolnir-utilities.py: null
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
             venv/bin/python: null
         spark_args:
-          archives: /vagrant/mjolnir_venv.zip#venv
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
           executor-cores: '1'
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
@@ -335,11 +335,11 @@ profiles:
             /etc/spark/conf: null
           file_exist: !!set
             /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-            /vagrant/mjolnir_venv.zip: null
-            /vagrant/venv/bin/mjolnir-utilities.py: null
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
             venv/bin/python: null
         spark_args:
-          archives: /vagrant/mjolnir_venv.zip#venv
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
           executor-cores: '1'
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
@@ -364,11 +364,11 @@ profiles:
             /etc/spark/conf: null
           file_exist: !!set
             /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-            /vagrant/mjolnir_venv.zip: null
-            /vagrant/venv/bin/mjolnir-utilities.py: null
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
             venv/bin/python: null
         spark_args:
-          archives: /vagrant/mjolnir_venv.zip#venv
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
           executor-cores: '4'
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
@@ -396,18 +396,18 @@ profiles:
           SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
           USER: pytest
         mjolnir_utility: training_pipeline
-        mjolnir_utility_path: /vagrant/venv/bin/mjolnir-utilities.py
+        mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
         paths:
           dir_exist: !!set
             /etc/spark/conf: null
             /home/pytest/training_size: null
           file_exist: !!set
             /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-            /vagrant/mjolnir_venv.zip: null
-            /vagrant/venv/bin/mjolnir-utilities.py: null
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
             venv/bin/python: null
         spark_args:
-          archives: /vagrant/mjolnir_venv.zip#venv
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
           driver-memory: 3G
           executor-cores: '6'
           executor-memory: 3G
@@ -445,7 +445,7 @@ profiles:
           SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
           USER: pytest
         mjolnir_utility: data_pipeline
-        mjolnir_utility_path: /vagrant/venv/bin/mjolnir-utilities.py
+        mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
         paths:
           dir_exist: !!set
             /etc/spark/conf: null
@@ -453,11 +453,11 @@ profiles:
             /mnt/hdfs/user/pytest/mjolnir/marker: null
           file_exist: !!set
             /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-            /vagrant/mjolnir_venv.zip: null
-            /vagrant/venv/bin/mjolnir-utilities.py: null
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
             venv/bin/python: null
         spark_args:
-          archives: /vagrant/mjolnir_venv.zip#venv
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
           executor-cores: '1'
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
@@ -482,11 +482,11 @@ profiles:
             /etc/spark/conf: null
           file_exist: !!set
             /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-            /vagrant/mjolnir_venv.zip: null
-            /vagrant/venv/bin/mjolnir-utilities.py: null
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
             venv/bin/python: null
         spark_args:
-          archives: /vagrant/mjolnir_venv.zip#venv
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
           executor-cores: '1'
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
@@ -511,11 +511,11 @@ profiles:
             /etc/spark/conf: null
           file_exist: !!set
             /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-            /vagrant/mjolnir_venv.zip: null
-            /vagrant/venv/bin/mjolnir-utilities.py: null
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
             venv/bin/python: null
         spark_args:
-          archives: /vagrant/mjolnir_venv.zip#venv
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
           executor-cores: '4'
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
@@ -543,18 +543,18 @@ profiles:
           SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
           USER: pytest
         mjolnir_utility: training_pipeline
-        mjolnir_utility_path: /vagrant/venv/bin/mjolnir-utilities.py
+        mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
         paths:
           dir_exist: !!set
             /etc/spark/conf: null
             /home/pytest/training_size: null
           file_exist: !!set
             /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
-            /vagrant/mjolnir_venv.zip: null
-            /vagrant/venv/bin/mjolnir-utilities.py: null
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
             venv/bin/python: null
         spark_args:
-          archives: /vagrant/mjolnir_venv.zip#venv
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
           driver-memory: 3G
           executor-cores: '4'
           executor-memory: 2G

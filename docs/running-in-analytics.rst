@@ -295,10 +295,37 @@ go looks like::
 Same as before the final argument is the wiki to limit data collection and
 training to.
 
-Resource usage in the hadoop cluster
-====================================
-TODO
+Resource usage in the hadoop cluster when training
+==================================================
 
+If the training data all fits on a single executor, that is the most efficient
+use of cluster resources. This may not be the fastest way to train individual
+models, but if we are doing hyperparameter tuning we are generally training
+many models in parallel, and the lowest total cpu time used per model comes
+from using a single executor.
+
+Training speed vs core count looks to stay relatively flat up to about 6 cores.
+Less parallelism is again more efficient in terms of total efficiency of the
+cluster, but up to 6 cores has a very minimal decrease. After 6 cores the
+efficiency loss starts to increase at a greater rate.
+
+Overall suggestions:
+
+* Train models with 4 or 6 cores per executor
+* Aim for a single executor if reasonable.
+* Limitation: Cluster has ~2GB of memory per core, so training data (with
+  duplicates, due to spark storage, task data, and xgboost DMatrix copy in CPP)
+  needs to fit in 4*2 or 6*2 GB of memory. This is actually quite reasonable with
+  our current feature size, but may need to be revisited is we dramatically
+  increase the number of features used.
+
+Other:
+
+* Minimum amounts of memory that work fine for training a single model will
+  overrun their memory allocation regularly when used to train in mjolnir with
+  hyperparameter optimization. We need to over provision memory vs what it takes
+  to spin up a spark instance and train a single model. Perhaps this is some sort
+  of leak, or late de-allocation, in xgboost? unsure.
 
 Help! There are exceptions eveywhere!
 =====================================
