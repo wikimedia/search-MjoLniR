@@ -24,7 +24,7 @@ def upload_models(input_dir, wikis):
         if wikis and wiki not in wikis:
             continue
         # Take the portion of the directory name before the first _ as portion of model name
-        name = os.path.dirname(fnames[0]).split('_')[0]
+        name = os.path.basename(os.path.dirname(fname)).split('_')[0]
         # TODO: v1?
         model_name = '%s_%s_v1' % (name, wiki)
 
@@ -86,7 +86,7 @@ def parse_arguments(argv):
 def main(argv=None):
     args = parse_arguments(argv)
     # ???
-    upload_models(*args)
+    upload_models(**args)
 
 
 if __name__ == "__main__":
