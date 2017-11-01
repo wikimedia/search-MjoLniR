@@ -42,6 +42,7 @@ def spark_context(request):
     os.environ['PYSPARK_SUBMIT_ARGS'] = '--repositories %s pyspark-shell' % (
             ','.join(['https://archiva.wikimedia.org/repository/%s' % (repo)
                       for repo in ['releases', 'snapshots', 'mirrored']]))
+
     conf = (
         SparkConf()
         .setMaster("local[2]")
@@ -55,6 +56,9 @@ def spark_context(request):
         # way too many for our small test cases. This cuts execution
         # time of the tests in half.
         .set('spark.sql.shuffle.partitions', 4))
+    if 'XDG_CACHE_HOME' in os.environ:
+        conf.set('spark.jars.ivy', os.path.join(os.environ['XDG_CACHE_HOME'], 'ivy2'))
+
     sc = SparkContext(conf=conf)
     yield sc
     sc.stop()
