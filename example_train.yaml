@@ -1,4 +1,5 @@
 # Configuration shared by all training groups and
+working_dir: /srv/mjolnir
 global:
     environment:
         PYSPARK_PYTHON: venv/bin/python
@@ -9,9 +10,9 @@ global:
         # Path to spark-submit applicatoin
         spark_submit: "%(SPARK_HOME)s/bin/spark-submit"
         # Local path to zip'd virtualenv which will be shipped to executors
-        mjolnir_venv_zip: "%(mjolnir_dir)s/mjolnir_venv.zip"
+        mjolnir_venv_zip: "%(working_dir)s/mjolnir_venv.zip"
         # Local path to python script for running mjolnir utilities
-        mjolnir_utility_path: "%(mjolnir_dir)s/venv/bin/mjolnir-utilities.py"
+        mjolnir_utility_path: "%(working_dir)s/venv/bin/mjolnir-utilities.py"
         # Path inside hdfs to the training data
         training_data_path: "user/%(USER)s/mjolnir/%(marker)s"
         # Fully qualified HDFS path to the training data

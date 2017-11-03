@@ -28,9 +28,6 @@ def test_dict_merge(a, b, expected):
 ])
 def test_build_template_vars(template_vars, environment, expected):
     res = mjolnir.utilities.spark.build_template_vars(template_vars, environment, 'MARKER')
-    print res
-    # This varies depending on the runner, just drop it
-    del res['mjolnir_dir']
     # Not testing this for simplicity
     del res['marker']
     assert res == expected
@@ -70,7 +67,7 @@ def test_load_config(monkeypatch, test_file, expect_file):
     monkeypatch.setenv('USER', 'pytest')
 
     with open(test_file, 'r') as f:
-        global_config, profiles = mjolnir.utilities.spark.load_config(f, 'marker', {
+        working_dir, global_config, profiles = mjolnir.utilities.spark.load_config(f, 'marker', {
             'mjolnir_dir': '/srv/mjolnir',
         })
     compare_fixture(expect_file, {

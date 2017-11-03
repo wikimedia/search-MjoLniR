@@ -1,4 +1,5 @@
 # Most basic test that environment and template vars are available for templating
+working_dir: /srv/mjolnir
 global:
     environment:
         thing: foobar
