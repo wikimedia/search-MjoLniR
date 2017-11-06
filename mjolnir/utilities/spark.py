@@ -10,6 +10,7 @@ defines how to run various spark commands, and a process of templating
 and configuration merging to define how to run those commands. The
 basic structure of the configuration file is:
 
+    working_dir: <path>
     global:
         <config>
         commands:
@@ -26,6 +27,11 @@ basic structure of the configuration file is:
 Configuration at the global level, profile level, and command level are
 merged with precedence given to more specific items. Most notably this
 means that global per-command <config> overrides top-level profile config.
+
+The working_dir needs to be one such that the path to the python interpreter
+inside the virtualenv has the same path on both the driver, where this code is
+called from, and on the executors where a zip file of the virtualenv is
+decompressed via sparks --archive foo.zip#path argument.
 
 This final configuration is then used to define how to call spark. Most of
 the complexity has been pushed to the configuration file where it's hopefully
@@ -95,8 +101,6 @@ def build_template_vars(template_vars, environment, marker):
     """
     template_var_defaults = {
         'marker': marker,
-        # TODO: This is wrong when running via the virtualenv?
-        'mjolnir_dir': os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
     }
 
     # Merge environment into template vars giving precedent to template
@@ -163,6 +167,12 @@ def load_config(stream, marker, template_overrides):
     """
     config = yaml.load(stream)
 
+    if 'working_dir' in config:
+        working_dir = config['working_dir']
+    else:
+        # TODO: This is wrong when running via the virtualenv?
+        working_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+
     global_profile = config['global'].copy()
     # Merge in specific pieces of global environment, preferring actual environment over config
     global_profile['environment'] = dict_merge(global_profile.get('environment', {}), {
@@ -175,10 +185,11 @@ def load_config(stream, marker, template_overrides):
         profile = dict_merge(global_profile, profile)
         # Template vars should not propagate deeper into the stack.
         template_vars = dict_merge(profile.pop('template_vars', {}), template_overrides)
-        # create an explicit profile name var to reference
-        if 'profile_name' in template_vars:
-            raise Exception("profile_name defined externally")
-        template_vars['profile_name'] = name
+        # create an explicit profile name and working_dir var to reference
+        for key, value in [('profile_name', name), ('working_dir', working_dir)]:
+            if key in template_vars:
+                raise Exception("%s defined externally" % (key))
+            template_vars[key] = value
         # Take the commands and wikis. These will be returned, everything else will be merged
         # into the commands
         commands = profile.pop('commands', {})
@@ -201,7 +212,7 @@ def load_config(stream, marker, template_overrides):
     profiles = {name: build_profile(name, profile) for name, profile in config['profiles'].items()}
     global_profile = build_profile('global', global_profile)
 
-    return global_profile, profiles
+    return working_dir, global_profile, profiles
 
 
 def validate_profiles(config):
@@ -507,7 +518,7 @@ def main(argv=None):
     DRY_RUN = args['dry_run']
     # Merge global config with training group config
     with open(args['config'], 'r') as f:
-        global_profile, profiles = load_config(f, args['marker'], args['template_vars'])
+        working_dir, global_profile, profiles = load_config(f, args['marker'], args['template_vars'])
 
     # Filter to selected wikis
     if args['wikis']:
@@ -531,8 +542,7 @@ def main(argv=None):
         # This needs to occur before validation so checks against PYSPARK_PYTHON
         # can verify the correct availability.
         # TODO: This may not be right, and isn't overridable ...
-        mjolnir_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-        os.chdir(mjolnir_dir)
+        os.chdir(working_dir)
 
         # Early-exit if there are configuration problems
         validate_profiles(profiles)

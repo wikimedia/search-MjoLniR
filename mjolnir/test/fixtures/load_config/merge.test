@@ -1,5 +1,6 @@
 # Demonstrate correct merge of data from global
 # to profile and then command.
+working_dir: /srv/mjolnir
 global:
     environment:
         a: global
