@@ -64,11 +64,19 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
         min_sessions_per_query=min_sessions_per_query)
 
     # Sample to some subset of queries per wiki
+    hit_page_id_counts, df_sampled_raw = mjolnir.sampling.sample(
+        df_norm,
+        seed=54321,
+        samples_per_wiki=samples_per_wiki)
+
+    # This should already be cached from sample, but lets be explicit
+    # to prevent future problems with refactoring.
+    df_sampled_raw.cache().count()
+    df_norm.unpersist()
+
+    # Transform our dataframe into the shape expected by the DBN
     df_sampled = (
-        mjolnir.sampling.sample(
-            df_norm,
-            seed=54321,
-            samples_per_wiki=samples_per_wiki)
+        df_sampled_raw
         # Explode source into a row per displayed hit
         .select('*', F.expr("posexplode(hit_page_ids)").alias('hit_position', 'hit_page_id'))
         .drop('hit_page_ids')
@@ -79,11 +87,7 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
 
     # materialize df_sampled and unpersist df_norm
     nb_samples = df_sampled.count()
-    if ((nb_samples / float(len(wikis)*samples_per_wiki)) < samples_size_tolerance):
-        raise ValueError('Collected %d samples this is less than %d%% of the requested sample size %d'
-                         % (nb_samples, samples_size_tolerance*100, samples_per_wiki))
-    print 'Fetched a total of %d samples for %d wikis' % (nb_samples, len(wikis))
-    df_norm.unpersist()
+    df_sampled_raw.unpersist()
 
     # Target around 125k rows per partition. Note that this isn't
     # how many the dbn will see, because it gets collected up. Just
@@ -133,6 +137,23 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     # materialize df_hits and drop df_all_hits
     df_hits.count()
     df_all_hits.unpersist()
+
+    actual_samples_per_wiki = df_hits.groupby('wikiid').agg(F.count(F.lit(1)).alias('n_obs')).collect()
+    actual_samples_per_wiki = {row.wikiid: row.n_obs for row in actual_samples_per_wiki}
+
+    not_enough_samples = []
+    for wiki in wikis:
+        # We cant have more samples than we started with
+        expected = min(samples_per_wiki, hit_page_id_counts[wiki])
+        actual = actual_samples_per_wiki[wiki]
+        if expected / float(actual) < samples_size_tolerance:
+            not_enough_samples.append(
+                'Collected %d samples from %s which is less than %d%% of the requested sample size %d'
+                % (actual, wiki, samples_size_tolerance*100, expected))
+    if not_enough_samples:
+        raise ValueError('\n'.join(not_enough_samples))
+
+    print 'Fetched a total of %d samples for %d wikis' % (sum(actual_samples_per_wiki.values()), len(wikis))
 
     # TODO: Training is per-wiki, should this be as well?
     ndcgAt10 = mjolnir.metrics.ndcg(df_hits, 10, query_cols=['wikiid', 'query'])
@@ -216,7 +237,8 @@ def parse_arguments(argv):
         help='The approximate number of rows in the final result per-wiki.')
     parser.add_argument(
         '-qe', '--sample-size-tolerance', dest='samples_size_tolerance', type=float, default=0.5,
-        help='The tolerance between the --samples-per-wiki set and the actual number of rows fetched.')
+        help='The tolerance between the --samples-per-wiki set and the actual number of rows fetched.'
+             + ' Higher requires closer match.')
     parser.add_argument(
         '-s', '--min-sessions', dest='min_sessions_per_query', type=int, default=10,
         help='The minimum number of sessions per normalized query')
