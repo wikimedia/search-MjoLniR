@@ -9,6 +9,7 @@ from clickmodels.input_reader import InputReader
 import json
 import pyspark.sql
 from pyspark.sql import functions as F
+from pyspark.sql import types as T
 import mjolnir.spark
 
 
@@ -179,7 +180,7 @@ def train(df, dbn_config, num_partitions=200):
         model.train(sessions)
         return _extract_labels_from_dbn(model, reader)
 
-    return (
+    rdd_rel = (
         df
         # group and collect up the hits for individual (wikiid, norm_query_id,
         # session_id) tuples to match how the dbn expects to receive data.
@@ -192,7 +193,14 @@ def train(df, dbn_config, num_partitions=200):
         # of grouping into python, but that could just as well end up worse?
         .repartition(num_partitions, 'wikiid', 'norm_query_id')
         # Run each partition through the DBN to generate relevance scores.
-        .rdd.mapPartitions(train_partition)
-        # Convert the rdd of tuples back into a DataFrame so the fields all
-        # have a name.
-        .toDF(['wikiid', 'norm_query_id', 'hit_page_id', 'relevance']))
+        .rdd.mapPartitions(train_partition))
+
+    # Using toDF() is very slow as it has to run some of the partitions to check their
+    # types, and then run all the partitions later to get the actual data. To prevent
+    # running twice specify the schema we expect.
+    return df.sql_ctx.createDataFrame(rdd_rel, T.StructType([
+        T.StructField('wikiid', T.StringType(), False),
+        T.StructField('norm_query_id', T.LongType(), False),
+        T.StructField('hit_page_id', T.LongType(), False),
+        T.StructField('relevance', T.DoubleType(), False)
+    ]))
