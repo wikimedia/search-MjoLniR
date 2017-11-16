@@ -85,9 +85,14 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     print 'Fetched a total of %d samples for %d wikis' % (nb_samples, len(wikis))
     df_norm.unpersist()
 
+    # Target around 125k rows per partition. Note that this isn't
+    # how many the dbn will see, because it gets collected up. Just
+    # a rough guess.
+    dbn_partitions = int(max(200, min(2000, nb_samples / 125000)))
+
     # Learn relevances
     df_rel = (
-        mjolnir.dbn.train(df_sampled, {
+        mjolnir.dbn.train(df_sampled, num_partitions=dbn_partitions, dbn_config={
             'MAX_ITERATIONS': 40,
             'DEBUG': False,
             'PRETTY_LOG': True,
