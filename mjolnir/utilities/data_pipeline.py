@@ -40,7 +40,7 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     df_clicks = (
         sqlContext.read.parquet(input_dir)
         # Limit to the wikis we are working against
-        .where(mjolnir.sampling._array_contains(F.array(map(F.lit, wikis)), F.col('wikiid')))
+        .where(F.col('wikiid').isin(wikis))
         # Drop requests from 'too busy' IP's. These are plausibly bots, or maybe just proxys.
         .where(F.col('q_by_ip_day') < 50)
         .drop('q_by_ip_day')

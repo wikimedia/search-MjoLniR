@@ -10,40 +10,7 @@ in a single dataframe, but it works well enough for our data sizes.
 from __future__ import absolute_import
 import bisect
 import mjolnir.spark
-import pyspark
 from pyspark.sql import functions as F
-from pyspark.sql.column import Column, _to_java_column
-
-
-def _array_contains(array, value):
-    """Generic version of pyspark.sql.functions.array_contains
-
-    array_contains provided by pyspark only allow checking if a value is inside
-    a column, but the value has to be a literal and not a column from the row.
-    This generalizes the function to allow the value to be a column, checking
-    if a column is within a provided literal array.
-
-    >>> df = sc.parallelize([['foo'], ['bar']]).toDF(['id'])
-    >>> df.select(_array_contains(F.array(map(F.lit, ['this', 'is', 'foo'])), F.col('id'))).collect()
-    [Row(array_contains(array(this,is,foo),id)=True), Row(array_contains(array(this,is,foo),id)=False)]
-
-    Parameters
-    ----------
-    array : pyspark.sql.Column
-    value : pyspark.sql.Column
-
-    Returns
-    -------
-    pyspark.sql.Column
-        Column representing the array_contains expression
-    """
-    j_array_expr = _to_java_column(array).expr()
-    j_value_expr = _to_java_column(value).expr()
-
-    sql = pyspark.SparkContext._active_spark_context._jvm.org.apache.spark.sql
-    j_expr = sql.catalyst.expressions.ArrayContains(j_array_expr, j_value_expr)
-    jc = sql.Column(j_expr)
-    return Column(jc)
 
 
 def _calc_splits(df, num_buckets=100):
