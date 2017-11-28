@@ -165,15 +165,18 @@ def sample(df, seed=None, samples_per_wiki=1000000):
         .agg(F.sum('num_hit_page_ids').alias('num_hit_page_ids'))
         .collect())
 
+    hit_page_id_counts = {row.wikiid: row.num_hit_page_ids for row in hit_page_id_counts}
+
     wiki_percents = {}
     needs_sampling = False
-    for row in hit_page_id_counts:
-        wiki_percents[row.wikiid] = min(1., float(samples_per_wiki) / row.num_hit_page_ids)
-        if wiki_percents[row.wikiid] < 1.:
+
+    for wikiid, num_hit_page_ids in hit_page_id_counts.items():
+        wiki_percents[wikiid] = min(1., float(samples_per_wiki) / num_hit_page_ids)
+        if wiki_percents[wikiid] < 1.:
             needs_sampling = True
 
     if not needs_sampling:
-        return df
+        return hit_page_id_counts, df
 
     # Aggregate down into a unique set of (wikiid, norm_query_id) and add in a
     # count of the number of unique sessions per pair. We will sample per-strata
@@ -184,14 +187,17 @@ def sample(df, seed=None, samples_per_wiki=1000000):
         .agg(F.countDistinct('session_id').alias('num_sessions'))
         # This rdd will be used multiple times through strata generation and
         # sampling. Cache to not duplicate the filtering and aggregation work.
-        # Spark will eventually throw this away in an LRU fashion.
         .cache())
-
-    # materialize df_queries_unique so we can unpersist the input df
-    df_queries_unique.count()
-    df.unpersist()
 
     df_queries_sampled = _sample_queries(df_queries_unique, wiki_percents, seed=seed)
 
     # Select the rows chosen by sampling from the input df
-    return df.join(df_queries_sampled, how='inner', on=['wikiid', 'norm_query_id'])
+    df_sampled = (
+        df
+        .join(df_queries_sampled, how='inner', on=['wikiid', 'norm_query_id'])
+        .cache())
+    df_sampled.count()
+    df.unpersist()
+    df_queries_unique.unpersist()
+
+    return hit_page_id_counts, df_sampled

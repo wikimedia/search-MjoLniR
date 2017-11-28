@@ -20,8 +20,9 @@ def test_sampling_selects_all_if_less_than_samples_per_wiki(spark_context, hive_
         ('foo', 'e', 5, 'eee', list(range(3))),
     ]).toDF(['wikiid', 'query', 'norm_query_id', 'session_id', 'hit_page_ids'])
 
-    sampled = mjolnir.sampling.sample(df, samples_per_wiki=100,
-                                      seed=12345).collect()
+    hit_page_id_counts, df_sampled = mjolnir.sampling.sample(
+        df, samples_per_wiki=100, seed=12345)
+    sampled = df_sampled.collect()
     # The sampling rate should have been chosen as 1.0, so we should have all data
     # regardless of probabilities.
     assert len(sampled) == 5
@@ -60,8 +61,8 @@ def test_sampling_general_approach(spark_context, hive_context):
     # Using a constant seed ensures deterministic testing. Because this code
     # actually relies on the law of large numbers, and we do not have large
     # numbers here, many seeds probably fail.
-    df_sampled = mjolnir.sampling.sample(df, samples_per_wiki=samples_per_wiki,
-                                         seed=12345)
+    hit_page_id_counts, df_sampled = mjolnir.sampling.sample(
+        df, samples_per_wiki=samples_per_wiki, seed=12345)
     sampled = (
         df_sampled
         .select('wikiid', 'query', F.explode('hit_page_ids').alias('hit_page_id'))
