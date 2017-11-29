@@ -459,6 +459,7 @@ def parse_arguments(argv, available_commands):
 
     parser.add_argument(
         '-c', '--config', dest='config', type=str, required=True,
+        default='/etc/mjolnir/spark.yaml',
         help='Path to yaml configuration file.')
     parser.add_argument(
         '-t', '--template-var', dest='template_vars', action=KeyValueAction,
