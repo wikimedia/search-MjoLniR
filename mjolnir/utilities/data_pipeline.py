@@ -145,8 +145,12 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     for wiki in wikis:
         # We cant have more samples than we started with
         expected = min(samples_per_wiki, hit_page_id_counts[wiki])
-        actual = actual_samples_per_wiki[wiki]
-        if expected / float(actual) < samples_size_tolerance:
+        try:
+            actual = actual_samples_per_wiki[wiki]
+        except KeyError:
+            # This will probably still error, but give better messages.
+            actual = 0
+        if actual == 0 or expected / float(actual) < samples_size_tolerance:
             not_enough_samples.append(
                 'Collected %d samples from %s which is less than %d%% of the requested sample size %d'
                 % (actual, wiki, samples_size_tolerance*100, expected))
