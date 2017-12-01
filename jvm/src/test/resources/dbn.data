@@ -1,0 +1,6 @@
+0	12345	foowiki	0	["1111","2222","3333","4444"]	[false,false,false,false]	[false,true,false,false]
+0	12345	foowiki	0	["1111","2222","3333","4444"]	[false,false,false,false]	[true,false,false,false]
+0	12345	foowiki	0	["1111","2222","3333","4444"]	[false,false,false,false]	[true,false,false,false]
+0	23456	foowiki	0	["1111","2222","3333","4444"]	[false,false,false,false]	[false,false,false,true]
+0	23456	foowiki	0	["1111","2222","3333","4444"]	[false,false,false,false]	[false,false,true,true]
+0	23456	foowiki	0	["1111","2222","3333","4444"]	[false,false,false,false]	[false,true,false,false]
