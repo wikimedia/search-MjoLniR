@@ -1,7 +1,9 @@
 package org.wikimedia.search.mjolnir
 
 import org.scalatest.FunSuite
+
 import scala.io.Source
+import scala.util.Random
 
 class DBNSuite extends FunSuite {
   test("create session items") {
@@ -12,6 +14,46 @@ class DBNSuite extends FunSuite {
       Array(false, true, false))
 
     assert(item.isDefined)
+  }
+
+  test("session items are truncated to serpSize") {
+    val serpSize = 20
+    val ir = new InputReader(1, serpSize, true)
+    val urls = (0 to 30).map(_.toString).toArray
+    val clicks = Array.fill(30)(false)
+    clicks(2) = true
+
+    val maybeItem = ir.makeSessionItem("foo", "enwiki", urls, clicks)
+    assert(maybeItem.isDefined)
+    val item = maybeItem.get
+    assert(item.clicks.length == serpSize)
+    assert(item.urlIds.length == serpSize)
+  }
+
+  test("no urls gives no session item") {
+    val ir = new InputReader(1, 2, true)
+    val urls = new Array[String](0)
+    val clicks = new Array[Boolean](0)
+    assert(ir.makeSessionItem("foo", "enwiki", urls, clicks).isEmpty)
+  }
+
+  test("no clicks gives no session item") {
+    val ir = new InputReader(1, 2, true)
+    val urls = Array("a", "b", "c")
+    val clicks = Array(false, false, false)
+    assert(ir.makeSessionItem("foo", "enwiki", urls, clicks).isEmpty)
+  }
+
+  test("clicks are padded with false up to url count") {
+    val ir = new InputReader(1, 5, true)
+    val urls = (0 until 5).map(_.toString).toArray
+    val clicks = Array(false, true)
+    val maybeItem = ir.makeSessionItem("foo", "enwiki", urls, clicks)
+    assert(maybeItem.isDefined)
+    val item = maybeItem.get
+    assert(item.clicks.length == 5)
+    assert(item.clicks(1))
+    assert(item.clicks.map(if (_) 1 else 0).sum == 1)
   }
 
   test("create session item from line") {
@@ -29,7 +71,7 @@ class DBNSuite extends FunSuite {
     val file = Source.fromURL(getClass.getResource("/dbn.data"))
     val ir = new InputReader(1, 20, true)
     val sessions = ir.read(file.getLines())
-    val config = new Config(ir.maxQueryId, 0.5D, 1)
+    val config = ir.config(0.5D, 1)
     val model = new DbnModel(0.9D, config)
     val urlRelevances = model.train(sessions)
     val relevances = ir.toRelevances(urlRelevances)
@@ -61,6 +103,23 @@ class DBNSuite extends FunSuite {
     }
   }
 
+  test("providing more results than expected still works") {
+    val N = 30
+    val clicks = Array.fill(N)(false)
+    clicks(2) = true
+
+    val sessions = Seq(
+      new SessionItem(0, (0 until N).toArray, clicks),
+      new SessionItem(0, (0 until N).toArray, clicks)
+    )
+
+    val config = new Config(0, 0.5D, 2, 20, Array(N))
+    val model = new DbnModel(0.9D, config)
+    model.train(sessions)
+    // no exceptions thrown
+    assert(true)
+  }
+
   test("backwards forwards") {
     val rel = new PositionRel(
       Array.fill(20)(0.5D), Array.fill(20)(0.5D)
@@ -68,9 +127,10 @@ class DBNSuite extends FunSuite {
     val gamma = 0.9D
     val clicks = Array.fill(20)(false)
 
-    val foo = DbnModel.getForwardBackwardEstimates(rel, gamma, clicks)
-    val alpha = foo._1
-    val beta = foo._2
+    val model = new DbnModel(0.5D, new Config(0, 0.5D, 1, 20, Array(20)))
+    model.calcForwardBackwardEstimates(rel, clicks)
+    val alpha = model.alpha
+    val beta = model.beta
     val x = alpha(0)(0) * beta(0)(0) + alpha(0)(1) * beta(0)(1)
 
     val ok: Array[Boolean] = alpha.zip(beta).map { case (a: Array[Double], b: Array[Double]) =>
@@ -84,15 +144,16 @@ class DBNSuite extends FunSuite {
     // Values sourced from python clickmodels implementation
     val rel = new PositionRel(Array.fill(20)(0.5D), Array.fill(20)(0.5D))
     val clicks = Array.fill(20)(false)
+    val model = new DbnModel(0.9D, new Config(0, 0.5D, 1, 20, Array(20)))
 
     clicks(0) = true
-    var sessionEstimate = DbnModel.getSessionEstimate(rel, 0.9D, clicks)
+    var sessionEstimate = model.getSessionEstimate(rel, clicks)
     assert(math.abs(sessionEstimate.a.sum - 10.4370D) < 0.0001D)
     assert(math.abs(sessionEstimate.s.sum - 0.8461D) < 0.0001D)
     assert(math.abs(sessionEstimate.s.sum - sessionEstimate.s(0)) < 0.0001D)
 
     clicks(10) = true
-    sessionEstimate = DbnModel.getSessionEstimate(rel, 0.9D, clicks)
+    sessionEstimate = model.getSessionEstimate(rel, clicks)
     assert(math.abs(sessionEstimate.a.sum - 6.4347D) < 0.0001D)
     assert(math.abs(sessionEstimate.s.sum - 0.8457D) < 0.0001D)
     assert(math.abs(sessionEstimate.s.sum - sessionEstimate.s(0) - sessionEstimate.s(10)) < 0.0001D)
@@ -105,7 +166,7 @@ class DBNSuite extends FunSuite {
     val nIterations = 40
     val nResultsPerQuery = 20
 
-    val r = new scala.util.Random(0)
+    val r = new Random(0)
     val ir = new InputReader(10, 20, true)
     val sessions = (0 until nQueries).flatMap { query =>
       val urls: Array[String] = (0 until nResultsPerQuery).map { _ => r.nextInt.toString }.toArray
@@ -121,12 +182,14 @@ class DBNSuite extends FunSuite {
 
     assert(sessions.length == nQueries * nSessionsPerQuery)
 
-    val config = new Config(ir.maxQueryId, 0.5D, nIterations)
+    val config = ir.config(0.5D, nIterations)
     val dbn = new DbnModel(0.9D, config)
-    val start = System.nanoTime()
-    dbn.train(sessions)
-    val took = System.nanoTime() - start
-    println(s"Took ${took/1000000}ms")
+    (0 until 5).foreach { _ =>
+      val start = System.nanoTime()
+      dbn.train(sessions)
+      val took = System.nanoTime() - start
+      println(s"Took ${took / 1000000}ms")
+    }
 
     // Create a datafile that python clickmodels can read in to have fair comparison
     //import java.io.File
