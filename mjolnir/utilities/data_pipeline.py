@@ -69,11 +69,6 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
         seed=54321,
         samples_per_wiki=samples_per_wiki)
 
-    # This should already be cached from sample, but lets be explicit
-    # to prevent future problems with refactoring.
-    df_sampled_raw.cache().count()
-    df_norm.unpersist()
-
     # Transform our dataframe into the shape expected by the DBN
     df_sampled = (
         df_sampled_raw
@@ -85,13 +80,10 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
         .drop('click_page_ids')
         .cache())
 
-    # materialize df_sampled and unpersist df_norm
-    nb_samples = df_sampled.count()
-    df_sampled_raw.unpersist()
-
     # Target around 125k rows per partition. Note that this isn't
     # how many the dbn will see, because it gets collected up. Just
     # a rough guess.
+    nb_samples = df_sampled.count()
     dbn_partitions = int(max(200, min(2000, nb_samples / 125000)))
 
     # Learn relevances
@@ -114,10 +106,6 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
         .join(df_rel, how='inner', on=['wikiid', 'norm_query_id', 'hit_page_id'])
         .cache())
 
-    # materialize df_all_hits and drop df_sampled, df_norm
-    df_all_hits.count()
-    df_sampled.unpersist()
-
     # TODO: Training is per-wiki, should this be as well?
     weightedNdcgAt10 = mjolnir.metrics.ndcg(df_all_hits, 10, query_cols=['wikiid', 'query', 'session_id'])
     print 'weighted ndcg@10: %.4f' % (weightedNdcgAt10)
@@ -133,10 +121,6 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
              F.first('label').alias('label'),
              F.first('relevance').alias('relevance'))
         .cache())
-
-    # materialize df_hits and drop df_all_hits
-    df_hits.count()
-    df_all_hits.unpersist()
 
     actual_samples_per_wiki = df_hits.groupby('wikiid').agg(F.count(F.lit(1)).alias('n_obs')).collect()
     actual_samples_per_wiki = {row.wikiid: row.n_obs for row in actual_samples_per_wiki}

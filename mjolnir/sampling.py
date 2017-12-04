@@ -196,8 +196,5 @@ def sample(df, seed=None, samples_per_wiki=1000000):
         df
         .join(df_queries_sampled, how='inner', on=['wikiid', 'norm_query_id'])
         .cache())
-    df_sampled.count()
-    df.unpersist()
-    df_queries_unique.unpersist()
 
     return hit_page_id_counts, df_sampled
