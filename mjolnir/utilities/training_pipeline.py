@@ -51,7 +51,7 @@ def summarize_training_df(df, data_size):
 
 
 def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_num_trees,
-                 num_workers, num_cv_jobs, num_folds, test_dir, zero_features):
+                 num_workers, num_cv_jobs, num_folds, test_dir, zero_features, use_external_memory):
     for wiki in wikis:
         print 'Training wiki: %s' % (wiki)
         df_hits_with_features = (
@@ -98,7 +98,8 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees
         df_grouped, j_groups = mjolnir.training.xgboost.prep_training(
             df_hits_with_features, num_workers)
         best_params['groupData'] = j_groups
-        model = mjolnir.training.xgboost.train(df_grouped, best_params)
+        model = mjolnir.training.xgboost.train(
+                df_grouped, best_params, use_external_memory=use_external_memory)
 
         tune_results['metrics']['train'] = model.eval(df_grouped, j_groups)
         df_grouped.unpersist()
@@ -143,6 +144,15 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees
         print ''
 
 
+def str_to_bool(value):
+    if value.lower() in ['true', 'yes', '1']:
+        return True
+    elif value.lower() in ['false', 'no', '0']:
+        return False
+    else:
+        raise ValueError("Unknown boolean string: " + value)
+
+
 def parse_arguments(argv):
     parser = argparse.ArgumentParser(description='Train XGBoost ranking models')
     parser.add_argument(
@@ -167,6 +177,9 @@ def parse_arguments(argv):
     parser.add_argument(
         '--initial-trees', dest='initial_num_trees', default=100, type=int,
         help='Number of trees to perform hyperparamter tuning with.  (Default: 100)')
+    parser.add_argument(
+        '-e', '--use-external-memory', dest='use_external_memory', default=False,
+        type=str_to_bool, help='Use external memory for feature matrix')
     parser.add_argument(
         '--final-trees', dest='final_num_trees', default=None, type=int,
         help='Number of trees in the final ensemble. If not provided the value from '

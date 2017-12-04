@@ -108,7 +108,7 @@ def _coerce_params(params):
     return retval
 
 
-def train(df, params, num_workers=None):
+def train(df, params, num_workers=None, use_external_memory=False):
     """Train a single xgboost ranking model.
 
     df : pyspark.sql.DataFrame
@@ -168,6 +168,7 @@ def train(df, params, num_workers=None):
     try:
         return XGBoostModel.trainWithDataFrame(df_grouped, params, num_rounds,
                                                num_workers, feature_col='features',
+                                               use_external_memory=use_external_memory,
                                                label_col='label')
     finally:
         if unpersist:
