@@ -243,6 +243,7 @@ profiles:
           folds: '3'
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
           output: /home/pytest/training_size/marker_large
+          use-external-memory: 'True'
           workers: '3'
         environment:
           HOME: /home/pytest
@@ -265,7 +266,7 @@ profiles:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
           driver-memory: 3G
           executor-cores: '6'
-          executor-memory: 3G
+          executor-memory: 4G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
           packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0

@@ -120,7 +120,7 @@ global:
 profiles:
     large:
         # 12M to 30M observations. 4M to 12M per executor.
-        # Approximately 63 executors, 378 cores, 756GB memory
+        # Approximately 63 executors, 378 cores, 838GB memory
         wikis:
             - enwiki
             - dewiki
@@ -129,7 +129,7 @@ profiles:
                 template_vars:
                     cores_per_executor: 6
                     cores_per_task: 6
-                    executor_memory: 3G
+                    executor_memory: 4G
                     executor_memory_overhead: 9216
                 spark_conf:
                     spark.dynamicAllocation.maxExecutors: 65
@@ -138,6 +138,7 @@ profiles:
                     cv-jobs: 22
                     folds: 3
                     final-trees: 100
+                    use-external-memory: yes
 
     medium:
         # 4M to 12M observations per executor.
