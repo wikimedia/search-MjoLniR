@@ -57,7 +57,9 @@ class AtLeastNDistinct extends UserDefinedAggregateFunction {
   }
 
   override def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {
-    if (!buffer1.getAs[Boolean](buffer_reached)) {
+    if (buffer2.getAs[Boolean](buffer_reached)) {
+      buffer1(buffer_reached) = true
+    } else if (!buffer1.getAs[Boolean](buffer_reached)) {
       getSet(buffer1) ++= getSet(buffer2)
       checkReached(buffer1)
     }
