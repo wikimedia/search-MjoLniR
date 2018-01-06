@@ -226,6 +226,16 @@ def validate_profiles(config):
             'commands': {
                 'pyspark': ['spark_command'],
                 'data_pipeline': ['spark_command', 'mjolnir_utility_path', 'mjolnir_utility'],
+                'make_folds': {
+                    'spark_command': [],
+                    'mjolnir_utility_path': [],
+                    'mjolnir_utility': [],
+                    'spark_conf': [
+                        'spark.yarn.executor.memoryOverhead',
+                    ],
+                    'spark_args': [],
+                    'cmd_args': ['num-workers', 'num-folds']
+                },
                 'training_pipeline': {
                     # Using an empty array requires the key exists, even if it doesn't
                     # contain sub-properties.
@@ -238,7 +248,7 @@ def validate_profiles(config):
                         'spark.task.cpus'
                     ],
                     'spark_args': ['executor-memory', 'executor-cores'],
-                    'cmd_args': ['workers', 'cv-jobs', 'folds', 'final-trees']
+                    'cmd_args': ['cv-jobs', 'final-trees']
                 }
             }
         })
@@ -406,6 +416,13 @@ def collect(global_profile, profiles):
     subprocess_check_call(cmd, env=config['environment'])
 
 
+def make_folds(global_profile, profiles):
+    for name, profile in profiles.items():
+        config = profile['commands']['make_folds']
+        cmd = build_spark_command(config) + build_mjolnir_utility(config) + profile['wikis']
+        subprocess_check_call(cmd, env=config['environment'])
+
+
 def train(global_profile, profiles):
     """Run mjolnir training pipeline"""
     for name, profile in profiles.items():
@@ -497,9 +514,13 @@ def main(argv=None):
             'func': train,
             'needed': ['training_pipeline'],
         },
+        'make_folds': {
+            'func': make_folds,
+            'needed': ['make_folds'],
+        },
         'collect_and_train': {
             'func': collect_and_train,
-            'needed': ['data_pipeline', 'training_pipeline'],
+            'needed': ['data_pipeline', 'make_folds', 'training_pipeline'],
         },
         'shell': {
             'func': lambda x, y: shell('pyspark', x, y),

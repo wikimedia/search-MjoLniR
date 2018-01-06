@@ -20,6 +20,10 @@ global:
         hdfs_training_data_path: "hdfs://analytics-hadoop/%(training_data_path)s"
         # Fully qualified local path to the training data
         local_training_data_path: "/mnt/hdfs/%(training_data_path)s"
+        # Fully qualified HDFS path to pre-folded data
+        fold_data_path: "user/%(USER)s/mjolnir/%(marker)s-folds_%(profile_name)s"
+        hdfs_fold_data_path: "hdfs://analytics-hadoop/%(fold_data_path)s"
+        local_fold_data_path: "/mnt/hdfs/%(training_data_path)s"
         # Base directory used to build path to write training output to
         base_training_output_dir: "%(HOME)s/training_size"
         # Number of cpu cores to assign per task. Must be a multiple of
@@ -60,7 +64,7 @@ global:
         executor-memory: "%(executor_memory)s"
         # Source our jvm dependencies from archiva. 
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:%(spark_version)s
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:%(spark_version)s
     spark_conf:
         spark.task.cpus: "%(cores_per_task)s"
         spark.yarn.executor.memoryOverhead: "%(executor_memory_overhead)s"
@@ -76,7 +80,6 @@ global:
             template_vars:
                 cores_per_executor: 4
                 cores_per_task: 4
-                executor_memory: 2G
                 executor_memory_overhead: 6144
         data_pipeline:
             spark_command: "%(SPARK_HOME)s/bin/spark-submit"
@@ -93,6 +96,19 @@ global:
                 samples-per-wiki: 35000000
                 search-cluster: codfw
                 min-sessions: "%(min_sessions_per_query)s"
+        make_folds:
+            spark_command: "%(SPARK_HOME)s/bin/spark-submit"
+            mjolnir_utility_path: "%(mjolnir_utility_path)s"
+            mjolnir_utility: make_folds
+            spark_conf:
+                spark.locality.wait: 0
+                spark.dynamicAllocation.maxExecutors: 100
+            cmd_args:
+                input: "%(hdfs_training_data_path)s"
+                output-dir: "%(hdfs_fold_data_path)s"
+                num-folds: 5
+                num-workers: 1
+                max-executors: 50
         training_pipeline:
             spark_command: "%(SPARK_HOME)s/bin/spark-submit"
             mjolnir_utility_path: "%(mjolnir_utility_path)s"
@@ -106,38 +122,42 @@ global:
             spark_args:
                 driver-memory: 3G
             spark_conf:
-                # Disabling auto broadcast join prevents memory explosion when spark
-                # mis-predicts the size of a dataframe. (where does this happen?)
-                spark.sql.autoBroadcastJoinThreshold: -1
                 # Adjusting up executor idle timeout from 60s to 180s is a bit greedy,
                 # but prevents a whole bunch of log spam from spark killing executors
                 # between CV runs
                 spark.dynamicAllocation.executorIdleTimeout: 180s
             cmd_args:
-                input: "%(hdfs_training_data_path)s"
-                output: "%(base_training_output_dir)s/%(marker)s_%(profile_name)s"
+                input: "%(hdfs_fold_data_path)s"
+                output: "%(base_training_output_dir)s/%(marker)s-folds_%(profile_name)s"
 
 # Individual training groups
 profiles:
     large:
-        # 12M to 30M observations. 4M to 12M per executor.
-        # Approximately 63 executors, 378 cores, 838GB memory
+        # 12M to 30M observations.
+        # Approximately 80 executors, 480 cores, 480GB memory
+        # 8-11 min per enwiki model @ 6 cores = 48 to 66 cpu minutes
+        # 2h40min to final model training
         wikis:
             - enwiki
             - dewiki
         commands:
+            make_folds:
+                template_vars:
+                    # enough space to load datasets into c++
+                    executor_memory_overhead: 5120
+                cmd_args:
+                    num-folds: 3
             training_pipeline:
                 template_vars:
                     cores_per_executor: 6
                     cores_per_task: 6
-                    executor_memory: 4G
-                    executor_memory_overhead: 9216
+                    #  4096 fails with matrix of 350-400M floats
+                    # cv-test-dcg@10: 0.8619
+                    executor_memory_overhead: 6144
                 spark_conf:
-                    spark.dynamicAllocation.maxExecutors: 65
+                    spark.dynamicAllocation.maxExecutors: 85
                 cmd_args:
-                    workers: 3
-                    cv-jobs: 22
-                    folds: 3
+                    cv-jobs: 80
                     final-trees: 100
 
     medium:
@@ -149,18 +169,19 @@ profiles:
             - frwiki
             - ruwiki
         commands:
+            make_folds:
+                template_vars:
+                    # enough space to load datasets into c++
+                    executor_memory_overhead: 1536
             training_pipeline:
                 template_vars:
-                    cores_per_executor: 6
-                    cores_per_task: 6
-                    executor_memory: 3G
-                    executor_memory_overhead: 9216
+                    cores_per_executor: 4
+                    cores_per_task: 4
+                    executor_memory_overhead: 2048
                 spark_conf:
-                    spark.dynamicAllocation.maxExecutors: 75
+                    spark.dynamicAllocation.maxExecutors: 130
                 cmd_args:
-                    workers: 1
-                    cv-jobs: 70
-                    folds: 5
+                    cv-jobs: 125
                     final-trees: 100
 
     small:
@@ -177,21 +198,21 @@ profiles:
             - fiwiki
             - jawiki
             - arwiki
-            - itwiki
             - nlwiki
             - zhwiki
             - plwiki
         commands:
+            make_folds:
+                template_vars:
+                    # enough space to load datasets into c++
+                    executor_memory_overhead: 1024
             training_pipeline:
                 template_vars:
                     cores_per_executor: 4
                     cores_per_task: 4
-                    executor_memory: 2G
-                    executor_memory_overhead: 6144
+                    executor_memory_overhead: 1024
                 spark_conf:
-                    spark.dynamicAllocation.maxExecutors: 105
+                    spark.dynamicAllocation.maxExecutors: 130
                 cmd_args:
-                    workers: 1
-                    cv-jobs: 100
-                    folds: 5
+                    cv-jobs: 125
                     final-trees: 500

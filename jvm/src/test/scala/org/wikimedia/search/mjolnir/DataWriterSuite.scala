@@ -26,6 +26,10 @@ class DataWriterSuite extends SharedSparkContext {
       .withColumn("features", randVec(5)())
       .withColumn("fold", randLong(numFolds)().as("fold", meta))
       .withColumn("query", randString(queries)())
+      // Must have more partitions than numFolds above
+      // or coalesce won't do anything.
+      .repartition(numFolds * 2, F.col("query"))
+      .sortWithinPartitions("query")
   }
 
   test("Write out various standard fold configs as text files") {
@@ -42,7 +46,7 @@ class DataWriterSuite extends SharedSparkContext {
         val pattern = s"$testDir/%s-fold-%s-partition-%d"
         val writer = new DataWriter(spark.sparkContext)
         val folds = writer.write(df, numWorkers, pattern, foldCol)
-        // We only wrote an "all" fold, so top level should have a single item
+
         assert(folds.length == expectedFolds)
         folds.foreach { fold =>
           assert(fold.length == numWorkers)
@@ -52,6 +56,7 @@ class DataWriterSuite extends SharedSparkContext {
             // Items expected but not in partition
             assert(expectedSplits.diff(partition.keySet).isEmpty)
             partition.values.foreach { path =>
+              // Paths should actually exist
               assert(Files.exists(Paths.get(path.substring("file:".length))))
             }
           }

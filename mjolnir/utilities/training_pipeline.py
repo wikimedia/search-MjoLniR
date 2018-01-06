@@ -8,69 +8,65 @@ To run:
         --artifacts 'mjolnir_venv.zip#venv' \
         path/to/training_pipeline.py
 """
-
 from __future__ import absolute_import
 import argparse
-import collections
 import datetime
 import glob
+import json
 import logging
 import mjolnir.feature_engineering
 import mjolnir.training.xgboost
+from mjolnir.utils import hdfs_open_read
 import os
 import pickle
-import sys
 from pyspark import SparkContext
 from pyspark.sql import HiveContext
-from pyspark.sql import functions as F
+import sys
 
 
-def summarize_training_df(df, data_size):
-    """Generate a summary of min/max/stddev/mean of data frame
+def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_num_trees, num_cv_jobs):
+    with hdfs_open_read(os.path.join(input_dir, 'stats.json')) as f:
+        stats = json.loads(f.read())
 
-    Parameters
-    ----------
-    df : pyspark.sql.DataFrame
-        DataFrame used for training
-    data_size : int
-        Number of rows in df
+    wikis_available = set(stats['wikis'].keys())
+    if wikis:
+        missing = set(wikis).difference(wikis_available)
+        if missing:
+            raise Exception("Wikis not available: " + ", ".join(missing))
+        wikis = wikis_available.intersection(wikis)
+    else:
+        wikis = stats['wikis'].keys()
+    if not wikis:
+        raise Exception("No wikis provided")
 
-    Returns
-    -------
-    dict
-        Map from field name to a map of statistics about the field
-    """
-    if data_size > 10000000:
-        df = df.repartition(200)
-    summary = collections.defaultdict(dict)
-    for row in mjolnir.feature_engineering.explode_features(df).describe().collect():
-        statistic = row.summary
-        for field, value in (x for x in row.asDict().items() if x[0] != 'summary'):
-            summary[field][statistic] = value
-    return dict(summary)
-
-
-def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_num_trees,
-                 num_workers, num_cv_jobs, num_folds, zero_features):
     for wiki in wikis:
+        config = stats['wikis'][wiki]
+
         print 'Training wiki: %s' % (wiki)
-        df_hits_with_features = (
-            sqlContext.read.parquet(input_dir)
-            .where(F.col('wikiid') == wiki))
+        num_folds = config['num_folds']
+        if num_cv_jobs is None:
+            num_cv_jobs = num_folds
 
-        data_size = df_hits_with_features.count()
-        if data_size == 0:
-            print 'No data found.' % (wiki)
-            print ''
-            continue
+        # Add extension matching training type
+        extension = ".xgb"
 
-        if zero_features:
-            df_hits_with_features = mjolnir.feature_engineering.zero_features(
-                    df_hits_with_features, zero_features)
+        # Add file extensions to all the folds
+        folds = config['folds']
+        for fold in folds:
+            for partition in fold:
+                for name, path in partition.items():
+                    partition[name] = path + extension
+
+        # "all" data with no splits
+        all_paths = config['all']
+        for partition in all_paths:
+            for name, path in partition.items():
+                partition[name] = path + extension
 
         tune_results = mjolnir.training.xgboost.tune(
-            df_hits_with_features, num_folds=num_folds,
-            num_cv_jobs=num_cv_jobs, num_workers=num_workers,
+            folds, config['stats'],
+            num_cv_jobs=num_cv_jobs,
+            train_matrix="train",
             initial_num_trees=initial_num_trees,
             final_num_trees=final_num_trees)
 
@@ -81,29 +77,21 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees
             'wiki': wiki,
             'input_dir': input_dir,
             'training_datetime': datetime.datetime.now().isoformat(),
-            'num_observations': data_size,
-            'num_queries': df_hits_with_features.select('query').drop_duplicates().count(),
-            'num_norm_queries': df_hits_with_features.select('norm_query_id').drop_duplicates().count(),
-            'features': df_hits_with_features.schema['features'].metadata['features'],
-            'summary': summarize_training_df(df_hits_with_features, data_size)
+            'dataset': config['stats'],
         }
 
-        # Train a model over all data with best params. Use a copy
-        # so j_groups doesn't end up inside tune_results and prevent
-        # pickle from serializing it.
+        # Train a model over all data with best params.
         best_params = tune_results['params'].copy()
         print 'Best parameters:'
         for param, value in best_params.items():
             print '\t%20s: %s' % (param, value)
-        df_grouped, j_groups = mjolnir.training.xgboost.prep_training(
-            df_hits_with_features, num_workers)
-        best_params['groupData'] = j_groups
         model = mjolnir.training.xgboost.train(
-                df_grouped, best_params)
+            all_paths, best_params, train_matrix="all")
 
-        tune_results['metrics']['train'] = model.eval(df_grouped, j_groups)
-        df_grouped.unpersist()
-        print 'train-ndcg@10: %.5f' % (tune_results['metrics']['train'])
+        tune_results['metrics'] = {
+            'train': model.summary().train()
+        }
+        print 'train-ndcg@10: %.5f' % (tune_results['metrics']['train'][-1])
 
         # Save the tune results somewhere for later analysis. Use pickle
         # to maintain the hyperopt.Trials objects as is. It might be nice
@@ -120,26 +108,17 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees
 
         # Generate a feature map so xgboost can include feature names in the dump.
         # The final `q` indicates all features are quantitative values (floats).
-        features = df_hits_with_features.schema['features'].metadata['features']
+        features = config['stats']['features']
         json_model_output = os.path.join(output_dir, 'model_%s.json' % (wiki))
         with open(json_model_output, 'wb') as f:
             f.write(model.dump(features))
             print 'Wrote xgboost json model to %s' % (json_model_output)
         # Write out the xgboost binary format as well, so it can be re-loaded
         # and evaluated
-        xgb_model_output = os.path.join(output_dir, 'model_%s.xgb' % (wiki))
-        model.saveModelAsLocalFile(xgb_model_output)
-        print 'Wrote xgboost binary model to %s' % (xgb_model_output)
+        model_output = os.path.join(output_dir, 'model_%s.xgb' % (wiki))
+        model.saveModelAsLocalFile(model_output)
+        print 'Wrote xgboost binary model to %s' % (model_output)
         print ''
-
-
-def str_to_bool(value):
-    if value.lower() in ['true', 'yes', '1']:
-        return True
-    elif value.lower() in ['false', 'no', '0']:
-        return False
-    else:
-        raise ValueError("Unknown boolean string: " + value)
 
 
 def parse_arguments(argv):
@@ -152,17 +131,10 @@ def parse_arguments(argv):
         help='Path, on local filesystem, to directory to store the results of '
              'model training to.')
     parser.add_argument(
-        '-w', '--workers', dest='num_workers', default=10, type=int,
-        help='Number of workers to train each individual model with. The total number '
-             + 'of executors required is workers * cv-jobs. (Default: 10)')
-    parser.add_argument(
         '-c', '--cv-jobs', dest='num_cv_jobs', default=None, type=int,
         help='Number of cross validation folds to perform in parallel. Defaults to number '
              + 'of folds, to run all in parallel. If this is a multiple of the number '
              + 'of folds multiple cross validations will run in parallel.')
-    parser.add_argument(
-        '-f', '--folds', dest='num_folds', default=5, type=int,
-        help='Number of cross validation folds to use. (Default: 5)')
     parser.add_argument(
         '--initial-trees', dest='initial_num_trees', default=100, type=int,
         help='Number of trees to perform hyperparamter tuning with.  (Default: 100)')
@@ -171,21 +143,16 @@ def parse_arguments(argv):
         help='Number of trees in the final ensemble. If not provided the value from '
              + '--initial-trees will be used.  (Default: None)')
     parser.add_argument(
-        '-z', '--zero-feature', dest='zero_features', type=str, nargs='+',
-        help='Zero out feature in input')
-    parser.add_argument(
         '-v', '--verbose', dest='verbose', default=False, action='store_true',
         help='Increase logging to INFO')
     parser.add_argument(
         '-vv', '--very-verbose', dest='very_verbose', default=False, action='store_true',
         help='Increase logging to DEBUG')
     parser.add_argument(
-        'wikis', metavar='wiki', type=str, nargs='+',
+        'wikis', metavar='wiki', type=str, nargs='*',
         help='A wiki to perform model training for.')
 
     args = parser.parse_args(argv)
-    if args.num_cv_jobs is None:
-        args.num_cv_jobs = args.num_folds
     return dict(vars(args))
 
 
@@ -202,7 +169,8 @@ def main(argv=None):
     # TODO: Set spark configuration? Some can't actually be set here though, so best might be to set all of it
     # on the command line for consistency.
     app_name = "MLR: training pipeline xgboost"
-    app_name += ': ' + ', '.join(args['wikis'])
+    if args['wikis']:
+        app_name += ': ' + ', '.join(args['wikis'])
     sc = SparkContext(appName=app_name)
     sc.setLogLevel('WARN')
     sqlContext = HiveContext(sc)

@@ -9,6 +9,9 @@ requirements = [
     'kafka',
     'pyyaml',
     'hyperopt',
+    # python xgboost is only used for building
+    # binary datasets. Primary usage is from jvm.
+    'xgboost',
     # hyperopt requires networkx < 2.0, but doesn't say so
     'networkx<2.0',
     # pyspark requirements

@@ -80,13 +80,13 @@ class ThreadingTrials(hyperopt.Trials):
         return state
 
 
-def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
-             num_folds=5, num_workers=5, cv_pool=None, trials_pool=None):
+def minimize(folds, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
+             cv_pool=None, trials_pool=None):
     """Perform cross validated hyperparameter optimization of train_func
 
     Parameters
     ----------
-    df : pyspark.sql.DataFrame
+    folds : list of dict each with two keys, train and test
         Features and Labels to optimize over
     train_func : callable
         Function to use for training individual models
@@ -97,10 +97,6 @@ def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
     algo : callable
         The algorithm to use with hyperopt. See docs of hyperopt.fmin for more
         details.
-    num_folds : int
-        Number of folds to split df into for cross validation
-    num_workers : int
-        Number of executors to use for each model training
     cv_pool : multiprocessing.dummy.Pool or None
         Controls the number of models to run in parallel. If None models
         are trained sequentially.
@@ -117,13 +113,13 @@ def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
     """
 
     def objective(params):
-        scores = mjolnir.training.tuning._cross_validate(
-            folds, train_func, params, num_workers=num_workers,
-            pool=cv_pool)
+        scores = mjolnir.training.tuning.cross_validate(
+            folds, train_func, params, pool=cv_pool)
         # For now the only metric is NDCG, and hyperopt is a minimizer
-        # so return the negative NDCG
-        loss = [-s['test'] for s in scores]
-        true_loss = [s['train'] - s['test'] for s in scores]
+        # so return the negative NDCG. Also makes the bold assumption
+        # we had at least two pieces of the fold named 'test' and 'train'
+        loss = [-s['test'][-1] for s in scores]
+        true_loss = [s['train'][-1] - s['test'][-1] for s in scores]
         num_failures = sum([math.isnan(s) for s in loss])
         if num_failures > 1:
             return {
@@ -141,21 +137,13 @@ def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
             'true_loss_variance': np.var(true_loss),
         }
 
-    folds = mjolnir.training.tuning._make_folds(
-        df, num_folds=num_folds, num_workers=num_workers, pool=cv_pool)
+    if trials_pool is None:
+        trials = hyperopt.Trials()
+    else:
+        trials = ThreadingTrials(trials_pool)
 
-    try:
-        if trials_pool is None:
-            trials = hyperopt.Trials()
-        else:
-            trials = ThreadingTrials(trials_pool)
-        best = hyperopt.fmin(objective, space, algo=algo,
-                             max_evals=max_evals, trials=trials)
-    finally:
-        for fold in folds:
-            fold['train'].unpersist()
-            fold['test'].unpersist()
-
+    best = hyperopt.fmin(objective, space, algo=algo,
+                         max_evals=max_evals, trials=trials)
     # hyperopt only returns the non-constant parameters in best. It seems
     # more convenient to return all of them.
     best_merged = space.copy()

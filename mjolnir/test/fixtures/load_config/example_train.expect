@@ -31,12 +31,51 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
       spark_command: /usr/lib/spark2/bin/spark-submit
       spark_conf:
         spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
           -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+        spark.task.cpus: '1'
+        spark.yarn.executor.memoryOverhead: '512'
+    make_folds:
+      cmd_args:
+        input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
+        max-executors: '50'
+        num-folds: '5'
+        num-workers: '1'
+        output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds_global
+      environment:
+        HOME: /home/pytest
+        PYSPARK_PYTHON: venv/bin/python
+        SPARK_CONF_DIR: /etc/spark2/conf
+        SPARK_HOME: /usr/lib/spark2
+        USER: pytest
+      mjolnir_utility: make_folds
+      mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
+      paths:
+        dir_exist: !!set
+          /etc/spark2/conf: null
+        file_exist: !!set
+          /srv/mjolnir/mjolnir_venv.zip: null
+          /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+          /usr/lib/spark2/bin/spark-submit: null
+          venv/bin/python: null
+      spark_args:
+        archives: /srv/mjolnir/mjolnir_venv.zip#venv
+        executor-cores: '1'
+        executor-memory: 2G
+        files: /usr/lib/libhdfs.so.0.0.0
+        master: yarn
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+        repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
+      spark_command: /usr/lib/spark2/bin/spark-submit
+      spark_conf:
+        spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
+          -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+        spark.dynamicAllocation.maxExecutors: '100'
+        spark.locality.wait: '0'
         spark.task.cpus: '1'
         spark.yarn.executor.memoryOverhead: '512'
     pyspark:
@@ -60,7 +99,7 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
       spark_command: /usr/lib/spark2/bin/pyspark
       spark_conf:
@@ -89,7 +128,7 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
       spark_command: /usr/lib/spark2/bin/pyspark
       spark_conf:
@@ -99,8 +138,8 @@ global_config:
         spark.yarn.executor.memoryOverhead: '6144'
     training_pipeline:
       cmd_args:
-        input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
-        output: /home/pytest/training_size/marker_global
+        input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds_global
+        output: /home/pytest/training_size/marker-folds_global
       environment:
         HOME: /home/pytest
         PYSPARK_PYTHON: venv/bin/python
@@ -125,14 +164,13 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
       spark_command: /usr/lib/spark2/bin/spark-submit
       spark_conf:
         spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
           -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
         spark.dynamicAllocation.executorIdleTimeout: 180s
-        spark.sql.autoBroadcastJoinThreshold: '-1'
         spark.task.cpus: '1'
         spark.yarn.executor.memoryOverhead: '512'
   wikis: []
@@ -170,7 +208,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -178,6 +216,45 @@ profiles:
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.task.cpus: '1'
           spark.yarn.executor.memoryOverhead: '512'
+      make_folds:
+        cmd_args:
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
+          max-executors: '50'
+          num-folds: '3'
+          num-workers: '1'
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds_large
+        environment:
+          HOME: /home/pytest
+          PYSPARK_PYTHON: venv/bin/python
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
+          USER: pytest
+        mjolnir_utility: make_folds
+        mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
+        paths:
+          dir_exist: !!set
+            /etc/spark2/conf: null
+          file_exist: !!set
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
+            venv/bin/python: null
+        spark_args:
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
+          executor-cores: '1'
+          executor-memory: 2G
+          files: /usr/lib/libhdfs.so.0.0.0
+          master: yarn
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
+        spark_command: /usr/lib/spark2/bin/spark-submit
+        spark_conf:
+          spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
+            -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.dynamicAllocation.maxExecutors: '100'
+          spark.locality.wait: '0'
+          spark.task.cpus: '1'
+          spark.yarn.executor.memoryOverhead: '5120'
       pyspark:
         environment:
           HOME: /home/pytest
@@ -199,7 +276,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
@@ -228,7 +305,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
@@ -238,12 +315,10 @@ profiles:
           spark.yarn.executor.memoryOverhead: '6144'
       training_pipeline:
         cmd_args:
-          cv-jobs: '22'
+          cv-jobs: '80'
           final-trees: '100'
-          folds: '3'
-          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
-          output: /home/pytest/training_size/marker_large
-          workers: '3'
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds_large
+          output: /home/pytest/training_size/marker-folds_large
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -265,20 +340,19 @@ profiles:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
           driver-memory: 3G
           executor-cores: '6'
-          executor-memory: 4G
+          executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.dynamicAllocation.executorIdleTimeout: 180s
-          spark.dynamicAllocation.maxExecutors: '65'
-          spark.sql.autoBroadcastJoinThreshold: '-1'
+          spark.dynamicAllocation.maxExecutors: '85'
           spark.task.cpus: '6'
-          spark.yarn.executor.memoryOverhead: '9216'
+          spark.yarn.executor.memoryOverhead: '6144'
     wikis:
     - enwiki
     - dewiki
@@ -315,7 +389,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -323,6 +397,45 @@ profiles:
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.task.cpus: '1'
           spark.yarn.executor.memoryOverhead: '512'
+      make_folds:
+        cmd_args:
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
+          max-executors: '50'
+          num-folds: '5'
+          num-workers: '1'
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds_medium
+        environment:
+          HOME: /home/pytest
+          PYSPARK_PYTHON: venv/bin/python
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
+          USER: pytest
+        mjolnir_utility: make_folds
+        mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
+        paths:
+          dir_exist: !!set
+            /etc/spark2/conf: null
+          file_exist: !!set
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
+            venv/bin/python: null
+        spark_args:
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
+          executor-cores: '1'
+          executor-memory: 2G
+          files: /usr/lib/libhdfs.so.0.0.0
+          master: yarn
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
+        spark_command: /usr/lib/spark2/bin/spark-submit
+        spark_conf:
+          spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
+            -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.dynamicAllocation.maxExecutors: '100'
+          spark.locality.wait: '0'
+          spark.task.cpus: '1'
+          spark.yarn.executor.memoryOverhead: '1536'
       pyspark:
         environment:
           HOME: /home/pytest
@@ -344,7 +457,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
@@ -373,7 +486,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
@@ -383,12 +496,10 @@ profiles:
           spark.yarn.executor.memoryOverhead: '6144'
       training_pipeline:
         cmd_args:
-          cv-jobs: '70'
+          cv-jobs: '125'
           final-trees: '100'
-          folds: '5'
-          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
-          output: /home/pytest/training_size/marker_medium
-          workers: '1'
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds_medium
+          output: /home/pytest/training_size/marker-folds_medium
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -409,21 +520,20 @@ profiles:
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
           driver-memory: 3G
-          executor-cores: '6'
-          executor-memory: 3G
+          executor-cores: '4'
+          executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.dynamicAllocation.executorIdleTimeout: 180s
-          spark.dynamicAllocation.maxExecutors: '75'
-          spark.sql.autoBroadcastJoinThreshold: '-1'
-          spark.task.cpus: '6'
-          spark.yarn.executor.memoryOverhead: '9216'
+          spark.dynamicAllocation.maxExecutors: '130'
+          spark.task.cpus: '4'
+          spark.yarn.executor.memoryOverhead: '2048'
     wikis:
     - itwiki
     - ptwiki
@@ -462,7 +572,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -470,6 +580,45 @@ profiles:
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.task.cpus: '1'
           spark.yarn.executor.memoryOverhead: '512'
+      make_folds:
+        cmd_args:
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
+          max-executors: '50'
+          num-folds: '5'
+          num-workers: '1'
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds_small
+        environment:
+          HOME: /home/pytest
+          PYSPARK_PYTHON: venv/bin/python
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
+          USER: pytest
+        mjolnir_utility: make_folds
+        mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
+        paths:
+          dir_exist: !!set
+            /etc/spark2/conf: null
+          file_exist: !!set
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
+            venv/bin/python: null
+        spark_args:
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
+          executor-cores: '1'
+          executor-memory: 2G
+          files: /usr/lib/libhdfs.so.0.0.0
+          master: yarn
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
+        spark_command: /usr/lib/spark2/bin/spark-submit
+        spark_conf:
+          spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
+            -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.dynamicAllocation.maxExecutors: '100'
+          spark.locality.wait: '0'
+          spark.task.cpus: '1'
+          spark.yarn.executor.memoryOverhead: '1024'
       pyspark:
         environment:
           HOME: /home/pytest
@@ -491,7 +640,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
@@ -520,7 +669,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
@@ -530,12 +679,10 @@ profiles:
           spark.yarn.executor.memoryOverhead: '6144'
       training_pipeline:
         cmd_args:
-          cv-jobs: '100'
+          cv-jobs: '125'
           final-trees: '500'
-          folds: '5'
-          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
-          output: /home/pytest/training_size/marker_small
-          workers: '1'
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds_small
+          output: /home/pytest/training_size/marker-folds_small
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -560,17 +707,16 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.dynamicAllocation.executorIdleTimeout: 180s
-          spark.dynamicAllocation.maxExecutors: '105'
-          spark.sql.autoBroadcastJoinThreshold: '-1'
+          spark.dynamicAllocation.maxExecutors: '130'
           spark.task.cpus: '4'
-          spark.yarn.executor.memoryOverhead: '6144'
+          spark.yarn.executor.memoryOverhead: '1024'
     wikis:
     - svwiki
     - fawiki
@@ -582,7 +728,6 @@ profiles:
     - fiwiki
     - jawiki
     - arwiki
-    - itwiki
     - nlwiki
     - zhwiki
     - plwiki

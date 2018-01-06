@@ -138,7 +138,8 @@ class DataWriter(
 
   /**
     * @param df         Output from data_pipeline. Must have be repartitioned on query and sorted by query
-    *                   within partitions.
+    *                   within partitions. This should have a large number of partitions or later coalesce
+    *                   will be imbalanced.
     * @param numWorkers The number of partitions each data file will be emitted as
     * @param pathFormat Format for hdfs paths. Params are %s: name, %s: fold, %d: partition
     * @param foldCol    Long column to source which fold a row belongs to
@@ -146,13 +147,15 @@ class DataWriter(
     *         from split name to hdfs path for that partition.
     */
   def write(
-             df: DataFrame,
-             numWorkers: Int,
-             pathFormat: String,
-             foldCol: Option[String]
-           ): Array[Array[Map[String, String]]] = {
+    df: DataFrame,
+    numWorkers: Int,
+    pathFormat: String,
+    foldCol: Option[String]
+  ): Array[Array[Map[String, String]]] = {
     val rdd = df.rdd.mapPartitions(formatPartition(df.schema, foldCol))
-
+    if (rdd.getNumPartitions < numWorkers) {
+      throw new java.io.IOException("Cannot have fewer partitions in input than output")
+    }
     val numFolds = foldCol.map { name => df.schema(name).metadata.getLong("num_folds").toInt }.getOrElse(1)
 
     try {

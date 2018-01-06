@@ -47,14 +47,12 @@ def df_train(spark_context, hive_context):
     ).toDF(['wikiid', 'norm_query_id', 'query', 'label', 'features'])
 
 
-def test_cross_validate_plain_df(df_train):
+def test_cross_validate_plain_df(folds_a):
     scores = mjolnir.training.tuning.cross_validate(
-        df_train,
+        folds_a,
         mjolnir.training.xgboost.train,
         {'objective': 'rank:ndcg', 'eval_metric': 'ndcg@3', 'num_rounds': 1},
-        # xgboost needs all jobs to have a worker assigned before it will
-        # finish a round of training, so we have to be careful not to use
-        # too many workers
-        num_folds=2, num_workers=1, pool=None)
+        pool=None)
     # one score for each fold
-    assert len(scores) == 2
+    for fold, score in zip(folds_a, scores):
+        assert fold[0].keys() == score.keys()

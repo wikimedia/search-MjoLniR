@@ -24,6 +24,27 @@ def fixtures_dir():
     return os.path.join(cur_dir, 'fixtures')
 
 
+@pytest.fixture
+def folds_a(fixtures_dir):
+    fixtures_dir = os.path.join(fixtures_dir, 'datasets')
+    return [
+        [{"train": os.path.join(fixtures_dir, "train.xgb"), "test": os.path.join(fixtures_dir, "test.xgb")}]
+    ]
+
+
+@pytest.fixture
+def folds_b(fixtures_dir):
+    fixtures_dir = os.path.join(fixtures_dir, 'datasets')
+
+    def f(path):
+        return os.path.join(fixtures_dir, path + ".xgb")
+
+    return [
+        [{"train": f("train.f0.p0")}, {"train": f("train.f0.p1")}],
+        [{"train": f("train.f1.p0")}, {"train": f("train.f1.p1")}]
+    ]
+
+
 @pytest.fixture(scope="session")
 def spark_context(request):
     """Fixture for creating a spark context.
@@ -49,8 +70,8 @@ def spark_context(request):
         .setAppName("pytest-pyspark-local-testing")
         # Maven coordinates of jvm dependencies
         .set('spark.jars.packages', ','.join([
-            'ml.dmlc:xgboost4j-spark:0.7-wmf-1',
-            'org.wikimedia.search:mjolnir:0.2',
+            'ml.dmlc:xgboost4j-spark:0.8-wmf-1',
+            'org.wikimedia.search:mjolnir:0.3',
             'org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0']))
         # By default spark will shuffle to 200 partitions, which is
         # way too many for our small test cases. This cuts execution

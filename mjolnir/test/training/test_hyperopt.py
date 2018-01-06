@@ -20,7 +20,7 @@ def df_train(spark_context, hive_context):
     ).toDF(['wikiid', 'norm_query_id', 'query', 'label', 'features'])
 
 
-def test_minimize(df_train):
+def test_minimize(folds_b):
     "Not an amazing test...basically sees if the happy path doesnt blow up"
     space = {
         'num_rounds': 50,
@@ -31,8 +31,7 @@ def test_minimize(df_train):
     # xgboost is separately tested. Instead of going all the way into xgboost
     # mock it out w/MockModel.
     best_params, trails = mjolnir.training.hyperopt.minimize(
-        df_train, MockModel, space, max_evals=5, num_folds=2,
-        num_workers=1)
+        folds_b, MockModel, space, max_evals=5)
     assert isinstance(best_params, dict)
     # num_rounds should have been unchanged
     assert 'num_rounds' in best_params
@@ -41,13 +40,23 @@ def test_minimize(df_train):
     assert len(trails.trials) == 5
 
 
+class MockSummary(object):
+    def train(self):
+        return [1.]
+
+    def test(self):
+        return [1.]
+
+
 class MockModel(object):
-    def __init__(self, df, params, num_workers):
+    def __init__(self, df, params, train_matrix=None):
         # Params that were passed to hyperopt
         assert isinstance(params, dict)
         assert 'max_depth' in params
         assert params['num_rounds'] == 50
-        assert num_workers == 1
 
     def eval(self, df_test, j_groups=None, feature_col='features', label_col='label'):
         return 1.0
+
+    def summary(self):
+        return MockSummary()

@@ -46,14 +46,14 @@ private class MlrXGBoost(asLocalFile: AsLocalFile) extends Serializable {
   }
 
   private[mjolnir] def buildDistributedBoosters(
-      rdds: RDD[Map[String, String]],
+      rdd: RDD[Map[String, String]],
       trainMatrix: String,
       params: Map[String, Any],
       rabitEnv: Option[java.util.Map[String, String]],
       numRounds: Int,
       earlyStoppingRound: Int = 0
   ): RDD[(Array[Byte], Map[String, Array[Float]])] =
-    rdds.mapPartitions({ rows=>
+    rdd.mapPartitions({ rows=>
       // XGBoost refuses to load our binary format if rabit has been
       // initialized, so we do it early. This make the odd situation
       // where we need to dispose of them before rabit is shutdown.

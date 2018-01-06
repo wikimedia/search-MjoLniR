@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *~
 /jvm/target
+/jvm/mjolnir.iml
 
 # Distribution / packaging
 venv/

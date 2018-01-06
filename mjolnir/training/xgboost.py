@@ -1,29 +1,22 @@
 from __future__ import absolute_import
+import functools
 import hyperopt
 import math
 import mjolnir.spark
 import mjolnir.training.hyperopt
 from multiprocessing.dummy import Pool
 import numpy as np
+import pyspark
 import pyspark.sql
 from pyspark.sql import functions as F
 import tempfile
 
-# Example Command line:
-# PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf ~/spark-2.1.0-bin-hadoop2.6/bin/pyspark \
-#     --master yarn \
-#     --jars ~/mjolnir_2.11-1.0.jar \
-#     --driver-class-path ~/mjolnir_2.11-1.0.jar \
-#     --archives 'mjolnir_venv.zip#venv' \
-#     --files /usr/lib/libhdfs.so.0.0.0 \
-#     --executor-cores 4 \
-#     --executor-memory 4G \
-#     --conf spark.dynamicAllocation.maxExecutors=40 \
-#     --conf spark.task.cpus=4
-
 
 def prep_training(df, num_partitions=None):
     """Prepare a dataframe for training
+
+    This is no longer used for training. It can stlil be used to run predictions
+    or evaluations on a model. Training uses make_fold utility now.
 
     Ranking models in XGBoost require rows for the same query to be provided
     consequtively within a single partition. It additionally requires a
@@ -106,70 +99,62 @@ def _coerce_params(params):
     return retval
 
 
-def train(df, params, num_workers=None):
+def train(fold, params, train_matrix=None):
     """Train a single xgboost ranking model.
 
-    df : pyspark.sql.DataFrame
-        Training data
+    fold: dict
+        map from split names to list of data partitions
     params : dict
         parameters to pass on to xgboost
-    num_workers : int, optional
-        The number of executors to train with. If not provided then
-        'groupData' *must* be present in params and num_workers will
-        be set to the number of partitions in df.
 
     Returns
     -------
     XGBoostModel
         Trained xgboost model
     """
-
     # hyperparameter tuning may have given us floats where we need
     # ints, so this gets all the types right for Java. Also makes
     # a copy of params so we don't modifying the incoming dict.
     params = _coerce_params(params)
     # TODO: Maybe num_rounds should just be external? But it's easier
     # to do hyperparameter optimization with a consistent dict interface
-    num_rounds = params['num_rounds']
-    del params['num_rounds']
+    kwargs = {
+        'num_rounds': 100,
+        'early_stopping_round': 0,
+    }
+    if 'num_rounds' in params:
+        kwargs['num_rounds'] = params['num_rounds']
+        del params['num_rounds']
+    if 'early_stopping_round' in params:
+        kwargs['early_stopping_round'] = params['early_stopping_round']
+        del params['early_stopping_round']
+
     # Set some sane defaults for ranking tasks
     if 'objective' not in params:
         params['objective'] = 'rank:ndcg'
     if 'eval_metric' not in params:
         params['eval_metric'] = 'ndcg@10'
 
-    unpersist = False
-    if num_workers is None:
-        num_workers = df.rdd.getNumPartitions()
-        if 'groupData' in params:
-            assert params['groupData'].length() == num_workers
-            df_grouped = df
+    # Convenience for some situations, but typically be explicit
+    # about the name of the matrix to train against.
+    if train_matrix is None:
+        train_matrix = "all" if "all" in fold else "train"
+
+    return XGBoostModel.trainWithFiles(fold, train_matrix, params, **kwargs)
+
+
+class XGBoostSummary(object):
+    def __init__(self, j_xgb_summary):
+        self._j_xgb_summary = j_xgb_summary
+
+    def train(self):
+        return list(self._j_xgb_summary.trainObjectiveHistory())
+
+    def test(self):
+        if self._j_xgb_summary.testObjectiveHistory().isEmpty():
+            return None
         else:
-            df_grouped, j_groups = prep_training(df, num_workers)
-            unpersist = True
-            params['groupData'] = j_groups
-    elif 'groupData' in params:
-        df_grouped = df
-    else:
-        df_grouped, j_groups = prep_training(df, num_workers)
-        unpersist = True
-        params['groupData'] = j_groups
-
-    # We must have the same number of partitions here as workers the model will
-    # be trained with, or xgboost4j-spark will repartition and the c++ library
-    # will throw an exception. It's much cleaner to fail-fast here rather than
-    # figuring out c++ errors through JNI from remote workers.
-    assert df_grouped.rdd.getNumPartitions() == num_workers
-    assert 'groupData' in params
-    assert params['groupData'].length() == num_workers
-
-    try:
-        return XGBoostModel.trainWithDataFrame(df_grouped, params, num_rounds,
-                                               num_workers, feature_col='features',
-                                               label_col='label')
-    finally:
-        if unpersist:
-            df_grouped.unpersist()
+            return list(self._j_xgb_summary.testObjectiveHistory().get())
 
 
 class XGBoostModel(object):
@@ -177,9 +162,8 @@ class XGBoostModel(object):
         self._j_xgb_model = j_xgb_model
 
     @staticmethod
-    def trainWithDataFrame(trainingData, params, num_rounds, num_workers, objective=None,
-                           eval_metric=None, missing=float('nan'),
-                           feature_col='features', label_col='label'):
+    def trainWithFiles(fold, train_matrix, params, num_rounds=100,
+                       early_stopping_round=0):
         """Wrapper around scala XGBoostModel.trainWithRDD
 
         This intentionally forwards to trainWithRDD, rather than
@@ -188,39 +172,34 @@ class XGBoostModel(object):
 
         Parameters
         ----------
-        trainingData : pyspark.sql.DataFrame
+        fold: dict
+            map from string name to list of data files for the split
+        train_matrix: str
+            name of split in fold to train against
         params : dict
+            XGBoost training parameters
         num_rounds : int
-        num_workers : int
-        objective : py4j.java_gateway.JavaObject, optional
-            Allows providing custom objective implementation. (Default: None)
-        eval_metric : py4j.java_gateway.JavaObject, optional
-            Allows providing a custom evaluation metric implementation.
-            (Default: None)
-        missing : float, optional
-            The value representing the missing value in the dataset. features with
-            this value will be removed and the vectors treated as sparse. (Default: nan)
-        feature_col : string, optional
-            The dataframe column holding feature vectors. (Default: features)
-        label_col : string, optional
-            The dataframe column holding labels. (Default: label)
+            Maximum number of boosting rounds to perform
+        early_stopping_round : int, optional
+            Quit training after this many rounds with no improvement in
+            test set eval. 0 disables behaviour. (Default: 0)
 
         Returns
         -------
         mjolnir.training.xgboost.XGBoostModel
             trained xgboost ranking model
         """
-        sc = trainingData._sc
+        sc = pyspark.SparkContext.getOrCreate()
+        # Type is Seq[Map[String, String]]
+        j_fold = sc._jvm.PythonUtils.toSeq([sc._jvm.PythonUtils.toScalaMap(x) for x in fold])
+        # Type is Map[String, Any]
         j_params = sc._jvm.scala.collection.immutable.HashMap()
         for k, v in params.items():
             j_params = j_params.updated(k, v)
 
-        j_rdd = sc._jvm.org.wikimedia.search.mjolnir.PythonUtils.toLabeledPoints(
-            trainingData._jdf, feature_col, label_col)
-
-        j_xgb_model = sc._jvm.ml.dmlc.xgboost4j.scala.spark.XGBoost.trainWithRDD(
-            j_rdd, j_params, num_rounds, num_workers,
-            objective, eval_metric, False, missing)
+        j_xgb_model = sc._jvm.org.wikimedia.search.mjolnir.MlrXGBoost.trainWithFiles(
+            sc._jsc, j_fold, train_matrix, j_params, num_rounds,
+            early_stopping_round)
         return XGBoostModel(j_xgb_model)
 
     def transform(self, df_test):
@@ -312,6 +291,9 @@ class XGBoostModel(object):
         score = self._j_xgb_model.eval(j_rdd, 'test', None, 0, False, j_groups)
         return float(score.split('=')[1].strip())
 
+    def summary(self):
+        return XGBoostSummary(self._j_xgb_model.summary())
+
     def saveModelAsHadoopFile(self, sc, path):
         j_sc = sc._jvm.org.apache.spark.api.java.JavaSparkContext.toSparkContext(sc._jsc)
         self._j_xgb_model.saveModelAsHadoopFile(path, j_sc)
@@ -333,7 +315,7 @@ class XGBoostModel(object):
         return XGBoostModel(j_xgb_model)
 
 
-def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, initial_num_trees=100, final_num_trees=500):
+def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final_num_trees=500):
     """Find appropriate hyperparameters for training df
 
     This is far from perfect, hyperparameter tuning is a bit of a black art
@@ -352,16 +334,11 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, initial_num_trees=100, f
 
     Parameters
     ----------
-    df : pyspark.sql.DataFrame
-    num_folds : int, optional
-        The number of cross validation folds to use while tuning. (Default: 5)
+    folds : list of dict containing train and test keys
+    stats : dict
+        stats about the fold from the make_folds utility script
     num_cv_jobs : int, optional
         The number of cross validation folds to train in parallel. (Default: 5)
-    num_workers : int, optional
-        The number of spark executors to use per fold for training. The total
-        number of executors used will be (num_cv_jobs * num_workers). Generally
-        prefer executors with more cpu's over a higher number of workers where
-        possible. (Default: 5)
     initial_num_trees: int, optional
         The number of trees to do most of the hyperparameter tuning with. This
         should be large enough to be resonably representative of the final
@@ -379,26 +356,33 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, initial_num_trees=100, f
         performed, each containing a hyperopt.Trials object recording what
         happened.
     """
+    cv_pool = None
+    if num_cv_jobs > 1:
+        cv_pool = Pool(num_cv_jobs)
 
-    cv_pool = Pool(num_cv_jobs)
-    trials_pool_size = int(math.floor(num_cv_jobs / num_folds))
+    # Configure the trials pool large enough to keep cv_pool full
+    num_folds = len(folds)
+    num_workers = len(folds[0])
+    trials_pool_size = int(math.floor(num_cv_jobs / (num_folds * num_workers)))
     if trials_pool_size > 1:
         print 'Running %d cross validations in parallel' % (trials_pool_size)
         trials_pool = Pool(trials_pool_size)
     else:
         trials_pool = None
 
+    train_func = functools.partial(train, train_matrix=train_matrix)
+
     def eval_space(space, max_evals):
         """Eval a space using standard hyperopt"""
         best, trials = mjolnir.training.hyperopt.minimize(
-            df, train, space, max_evals=max_evals, num_folds=num_folds,
-            num_workers=num_workers, cv_pool=cv_pool, trials_pool=trials_pool)
+            folds, train_func, space, max_evals=max_evals,
+            cv_pool=cv_pool, trials_pool=trials_pool)
         for k, v in space.items():
             if not np.isscalar(v):
                 print 'best %s: %f' % (k, best[k])
         return best, trials
 
-    num_obs = df.count()
+    num_obs = stats['num_observations']
 
     if num_obs > 8000000:
         dataset_size = 'xlarge'

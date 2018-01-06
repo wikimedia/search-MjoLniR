@@ -93,6 +93,7 @@ def group_k_fold(df, num_folds, output_column='fold'):
     ----------
     df : pyspark.sql.DataFrame
     num_folds : int
+    output_column : str, optional
 
     Yields
     ------
@@ -103,71 +104,6 @@ def group_k_fold(df, num_folds, output_column='fold'):
         .withColumn(output_column, mjolnir.spark.add_meta(df._sc, F.col(output_column), {
             'num_folds': num_folds,
         })))
-
-
-def _make_folds(df, num_folds, num_workers, pool):
-    """Transform a DataFrame with assigned folds into many dataframes.
-
-    The results of split and group_k_fold emit a single dataframe with folds
-    marked on the individual rows. To do the resulting training we need individual
-    dataframes for each test/train split within the folds. If the data has
-    not already had folds assigned they will be assigned based on the 'num_folds'
-    key in params. If not present 5 folds will be used.
-
-    Also generates the appropriate group data for xgboost. This doesn't
-    necessarily belong here, but it is relatively expensive to calculate, so we
-    benefit significantly by doing it once before hyperparameter tuning, as
-    opposed to doing it for each iteration.
-
-    Parameters
-    ----------
-    df : pyspark.sql.DataFrame
-        Input dataframe with a 'fold' column indicating which fold each row
-        belongs to.
-    num_folds : int
-        Number of folds to create. If a 'fold' column already exists in df
-        this will be ignored.
-    num_workers : int
-        Number of workers used to train each model. This is passed onto
-        xgboost.prep_training to prepare each fold.
-    pool : multiprocessing.dummy.Pool or None
-        Used to prepare folds in parallel. If not provided folds will be
-        generated sequentially.
-
-    Returns
-    -------
-    list
-        Generates a list of dicts, one for each fold. Each dict contains
-        train and test keys containing DataFrames, along with j_train_groups
-        and j_test_groups keys which contain py4j JavaObject instances
-        corresponding to group data needed by xgboost for train/eval. The train
-        and test dataframes have been persisted, so should be unpersisted
-        when no longer needed.
-    """
-    if 'fold' in df.columns:
-        assert num_folds == df.schema['fold'].metadata['num_folds']
-        df_folds = df
-    else:
-        df_folds = group_k_fold(df, num_folds)
-
-    def job(fold):
-        condition = F.col('fold') == fold
-        # TODO: de-couple xgboost from cv generation.
-        df_train, j_train_groups = mjolnir.training.xgboost.prep_training(
-                df_folds.where(~condition), num_workers)
-        df_test, j_test_groups = mjolnir.training.xgboost.prep_training(
-                df_folds.where(condition), num_workers)
-        return {
-            'train': df_train,
-            'test': df_test,
-            'j_train_groups': j_train_groups,
-            'j_test_groups': j_test_groups
-        }
-
-    if pool is None:
-        return map(job, range(num_folds))
-    else:
-        return pool.map(job, range(num_folds))
 
 
 def _py4j_retry(fn, default_retval):
@@ -190,15 +126,14 @@ def _py4j_retry(fn, default_retval):
     return with_retry
 
 
-def _cross_validate(folds, train_func, params, num_workers, pool):
+def cross_validate(folds, train_func, params, pool):
     """Perform cross validation of the provided folds
 
     Parameters
     ----------
-    folds : list
+    folds : list of dict containing train and test keys
     train_func : callable
     params : dict
-    num_workers : int
     pool : multiprocessing.dummy.Pool or None
 
     Returns
@@ -206,55 +141,19 @@ def _cross_validate(folds, train_func, params, num_workers, pool):
     list
     """
     def job(fold):
-        local_params = params.copy()
-        local_params['groupData'] = fold['j_train_groups']
-        model = train_func(fold['train'], local_params, num_workers=num_workers)
+        model = train_func(fold, params)
+        # TODO: Summary is hardcodeed to train/test
         return {
-            'train': model.eval(fold['train'], fold['j_train_groups']),
-            'test': model.eval(fold['test'], fold['j_test_groups']),
+            "train": model.summary().train(),
+            "test": model.summary().test(),
         }
 
     job_w_retry = _py4j_retry(job, {
-        'train': float('nan'),
-        'test': float('nan'),
+        "train": [float('nan')],
+        "test": [float('nan')],
     })
 
     if pool is None:
         return map(job_w_retry, folds)
     else:
         return pool.map(job_w_retry, folds)
-
-
-def cross_validate(df, train_func, params, num_folds=5, num_workers=5, pool=None):
-    """Perform cross-validation of the dataframe
-
-    Parameters
-    ----------
-    df : pyspark.sql.DataFrame or list
-    train_func : callable
-        Function used to train a model. Must return a model that
-        implements an eval method
-    params : dict
-        parameters to pass on to train_func
-    num_folds : int
-        Number of folds to split df into for cross validation
-    num_workers : int
-        Number of executors to use for each model training
-    pool : multiprocessing.dummy.Pool, optional
-        Used to prepare folds and run cross validations in parallel. If
-        not provided all work will be done sequentially.
-
-    Returns
-    -------
-    list
-        List of dicts, each dict containing a train and test key. The values
-        correspond the the model evaluation metric for the train and test
-        data frames.
-    """
-    folds = _make_folds(df, num_folds, num_workers, pool)
-    try:
-        return _cross_validate(folds, train_func, params, num_workers=num_workers, pool=pool)
-    finally:
-        for fold in folds:
-            fold['train'].unpersist()
-            fold['test'].unpersist()
