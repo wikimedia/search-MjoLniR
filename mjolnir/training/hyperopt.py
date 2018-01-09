@@ -5,7 +5,6 @@ from __future__ import absolute_import
 import hyperopt
 import hyperopt.pyll.base
 from hyperopt.utils import coarse_utcnow
-import itertools
 import math
 import mjolnir.training.tuning
 import numpy as np
@@ -79,43 +78,6 @@ class ThreadingTrials(hyperopt.Trials):
         except KeyError:
             pass
         return state
-
-
-class _GridSearchAlgo(object):
-    def __init__(self, space):
-        foo = {}
-        for k, v in space.items():
-            if not isinstance(v, hyperopt.pyll.base.Apply):
-                continue
-            literals = v.pos_args[1:]
-            if not all([isinstance(l, hyperopt.pyll.base.Literal) for l in literals]):
-                raise ValueError('GridSearch only works with hp.choice')
-            foo[k] = range(len(literals))
-        self.grid_keys = foo.keys()
-        self.grids = list(itertools.product(*foo.values()))
-        self.max_evals = len(self.grids)
-
-    def __call__(self, new_ids, domain, trials, seed):
-        rval = []
-        for ii, new_id in enumerate(new_ids):
-            vals = dict(zip(self.grid_keys, [[v] for v in self.grids.pop()]))
-            new_result = domain.new_result()
-            new_misc = dict(tid=new_id, cmd=domain.cmd, workdir=domain.workdir,
-                            idxs=dict(zip(self.grid_keys, [[new_id]] * len(vals))),
-                            vals=vals)
-            rval.extend(trials.new_trial_docs([new_id],
-                        [None], [new_result], [new_misc]))
-        return rval
-
-
-def grid_search(df, train_func, space, num_folds=5, num_workers=5,
-                cv_pool=None, trials_pool=None):
-    # TODO: While this tried to look simple, hyperopt is a bit odd to integrate
-    # with this directly. Perhaps implement naive gridsearch directly instead
-    # of through hyperopt.
-    algo = _GridSearchAlgo(space)
-    return minimize(df, train_func, space, algo.max_evals, algo, num_folds,
-                    num_workers, cv_pool, trials_pool)
 
 
 def minimize(df, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,

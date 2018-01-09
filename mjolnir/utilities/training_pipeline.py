@@ -4,7 +4,7 @@ This is mostly to demonstrate how everything ties together
 
 To run:
     PYSPARK_PYTHON=venv/bin/python spark-submit \
-        --jars /path/to/mjolnir-with-dependencies.jar
+        --jars /path/to/mjolnir-with-dependencies.jar \
         --artifacts 'mjolnir_venv.zip#venv' \
         path/to/training_pipeline.py
 """
@@ -51,7 +51,7 @@ def summarize_training_df(df, data_size):
 
 
 def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_num_trees,
-                 num_workers, num_cv_jobs, num_folds, test_dir, zero_features, use_external_memory):
+                 num_workers, num_cv_jobs, num_folds, zero_features):
     for wiki in wikis:
         print 'Training wiki: %s' % (wiki)
         df_hits_with_features = (
@@ -99,21 +99,11 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees
             df_hits_with_features, num_workers)
         best_params['groupData'] = j_groups
         model = mjolnir.training.xgboost.train(
-                df_grouped, best_params, use_external_memory=use_external_memory)
+                df_grouped, best_params)
 
         tune_results['metrics']['train'] = model.eval(df_grouped, j_groups)
         df_grouped.unpersist()
         print 'train-ndcg@10: %.5f' % (tune_results['metrics']['train'])
-
-        if test_dir is not None:
-            try:
-                df_test = sqlContext.read.parquet(test_dir)
-                tune_results['metrics']['test'] = model.eval(df_test)
-                print 'test-ndcg@10: %.5f' % (tune_results['metrics']['test'])
-            except:  # noqa: E722
-                # It has probably taken some time to get this far. Don't bail
-                # because the user input an invalid test dir.
-                logging.exception('Could not evaluate test_dir: %s' % (test_dir))
 
         # Save the tune results somewhere for later analysis. Use pickle
         # to maintain the hyperopt.Trials objects as is. It might be nice
@@ -131,10 +121,9 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees
         # Generate a feature map so xgboost can include feature names in the dump.
         # The final `q` indicates all features are quantitative values (floats).
         features = df_hits_with_features.schema['features'].metadata['features']
-        feat_map = ["%d %s q" % (i, fname) for i, fname in enumerate(features)]
         json_model_output = os.path.join(output_dir, 'model_%s.json' % (wiki))
         with open(json_model_output, 'wb') as f:
-            f.write(model.dump("\n".join(feat_map)))
+            f.write(model.dump(features))
             print 'Wrote xgboost json model to %s' % (json_model_output)
         # Write out the xgboost binary format as well, so it can be re-loaded
         # and evaluated
@@ -178,15 +167,9 @@ def parse_arguments(argv):
         '--initial-trees', dest='initial_num_trees', default=100, type=int,
         help='Number of trees to perform hyperparamter tuning with.  (Default: 100)')
     parser.add_argument(
-        '-e', '--use-external-memory', dest='use_external_memory', default=False,
-        type=str_to_bool, help='Use external memory for feature matrix')
-    parser.add_argument(
         '--final-trees', dest='final_num_trees', default=None, type=int,
         help='Number of trees in the final ensemble. If not provided the value from '
              + '--initial-trees will be used.  (Default: None)')
-    parser.add_argument(
-        '-t', '--test-path', dest='test_dir', type=str, required=False, default=None,
-        help='A holdout test set to evaluate the final model against')
     parser.add_argument(
         '-z', '--zero-feature', dest='zero_features', type=str, nargs='+',
         help='Zero out feature in input')
@@ -218,7 +201,9 @@ def main(argv=None):
     del args['very_verbose']
     # TODO: Set spark configuration? Some can't actually be set here though, so best might be to set all of it
     # on the command line for consistency.
-    sc = SparkContext(appName="MLR: training pipeline")
+    app_name = "MLR: training pipeline xgboost"
+    app_name += ': ' + ', '.join(args['wikis'])
+    sc = SparkContext(appName=app_name)
     sc.setLogLevel('WARN')
     sqlContext = HiveContext(sc)
 

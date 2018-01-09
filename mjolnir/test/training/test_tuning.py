@@ -16,7 +16,7 @@ def test_split(spark_context, hive_context):
         .select(F.lit('foowiki').alias('wikiid'),
                 (F.col('id')/100).cast('int').alias('norm_query_id')))
 
-    with_folds = mjolnir.training.tuning.split(df, (0.8, 0.2), num_partitions=4).collect()
+    with_folds = mjolnir.training.tuning.split(df, (0.8, 0.2)).collect()
 
     fold_0 = [row for row in with_folds if row.fold == 0]
     fold_1 = [row for row in with_folds if row.fold == 1]

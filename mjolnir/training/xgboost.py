@@ -5,11 +5,9 @@ import mjolnir.spark
 import mjolnir.training.hyperopt
 from multiprocessing.dummy import Pool
 import numpy as np
-import pprint
 import pyspark.sql
 from pyspark.sql import functions as F
 import tempfile
-import scipy.sparse
 
 # Example Command line:
 # PYSPARK_PYTHON=venv/bin/python SPARK_CONF_DIR=/etc/spark/conf ~/spark-2.1.0-bin-hadoop2.6/bin/pyspark \
@@ -108,7 +106,7 @@ def _coerce_params(params):
     return retval
 
 
-def train(df, params, num_workers=None, use_external_memory=False):
+def train(df, params, num_workers=None):
     """Train a single xgboost ranking model.
 
     df : pyspark.sql.DataFrame
@@ -168,7 +166,6 @@ def train(df, params, num_workers=None, use_external_memory=False):
     try:
         return XGBoostModel.trainWithDataFrame(df_grouped, params, num_rounds,
                                                num_workers, feature_col='features',
-                                               use_external_memory=use_external_memory,
                                                label_col='label')
     finally:
         if unpersist:
@@ -181,7 +178,7 @@ class XGBoostModel(object):
 
     @staticmethod
     def trainWithDataFrame(trainingData, params, num_rounds, num_workers, objective=None,
-                           eval_metric=None, use_external_memory=False, missing=float('nan'),
+                           eval_metric=None, missing=float('nan'),
                            feature_col='features', label_col='label'):
         """Wrapper around scala XGBoostModel.trainWithRDD
 
@@ -200,11 +197,6 @@ class XGBoostModel(object):
         eval_metric : py4j.java_gateway.JavaObject, optional
             Allows providing a custom evaluation metric implementation.
             (Default: None)
-        use_external_memory : bool, optional
-            indicate whether to use external memory cache, by setting this flag
-            as true, the user may save the RAM cost for running XGBoost within
-            spark.  Essentially this puts the data on local disk, and takes
-            advantage of the kernel disk cache(maybe?). (Default: False)
         missing : float, optional
             The value representing the missing value in the dataset. features with
             this value will be removed and the vectors treated as sparse. (Default: nan)
@@ -227,8 +219,8 @@ class XGBoostModel(object):
             trainingData._jdf, feature_col, label_col)
 
         j_xgb_model = sc._jvm.ml.dmlc.xgboost4j.scala.spark.XGBoost.trainWithRDD(
-            j_rdd, j_params, num_rounds, num_workers, objective, eval_metric,
-            use_external_memory, missing)
+            j_rdd, j_params, num_rounds, num_workers,
+            objective, eval_metric, False, missing)
         return XGBoostModel(j_xgb_model)
 
     def transform(self, df_test):
@@ -249,13 +241,13 @@ class XGBoostModel(object):
         j_df = self._j_xgb_model.transform(df_test._jdf)
         return pyspark.sql.DataFrame(j_df, df_test.sql_ctx)
 
-    def dump(self, feature_map=None, with_stats=False, format="json"):
+    def dump(self, features=None, with_stats=False, format="json"):
         """Dumps the xgboost model
 
         Parameters
         ----------
-        featureMap : str or None, optional
-            Formatted as per xgboost documentation for featmap.txt.
+        features : list of str or None, optional
+            list of features names, or None for no feature names in dump.
             (Default: None)
         withStats : bool, optional
             Should various additional statistics be included? These are not
@@ -270,13 +262,14 @@ class XGBoostModel(object):
         """
         # Annoyingly the xgboost api doesn't take the feature map as a string, but
         # instead as a filename. Write the feature map out to a file if necessary.
-        if feature_map is None:
-            fmap_path = None
-        else:
+        if features:
+            feat_map = "\n".join(["%d %s q" % (i, fname) for i, fname in enumerate(features)])
             fmap_f = tempfile.NamedTemporaryFile()
-            fmap_f.write(feature_map)
+            fmap_f.write(feat_map)
             fmap_f.flush()
             fmap_path = fmap_f.name
+        else:
+            fmap_path = None
         # returns an Array[String] from scala, where each element of the array
         # is a json string representing a single tree.
         j_dump = self._j_xgb_model.booster().getModelDump(fmap_path, with_stats, format)
@@ -338,70 +331,6 @@ class XGBoostModel(object):
         j_xgb_booster = sc._jvm.ml.dmlc.xgboost4j.scala.XGBoost.loadModel(path)
         j_xgb_model = sc._jvm.ml.dmlc.xgboost4j.scala.spark.XGBoostRegressionModel(j_xgb_booster)
         return XGBoostModel(j_xgb_model)
-
-
-# from https://gist.github.com/hernamesbarbara/7238736
-def _loess_predict(X, y_tr, X_pred, bandwidth):
-    X_tr = np.column_stack((np.ones_like(X), X))
-    X_te = np.column_stack((np.ones_like(X_pred), X_pred))
-    y_te = []
-    for x in X_te:
-        ws = np.exp(-np.sum((X_tr - x)**2, axis=1) / (2 * bandwidth**2))
-        W = scipy.sparse.dia_matrix((ws, 0), shape=(X_tr.shape[0],) * 2)
-        theta = np.linalg.pinv(X_tr.T.dot(W.dot(X_tr))).dot(X_tr.T.dot(W.dot(y_tr)))
-        y_te.append(np.dot(x, theta))
-    return np.array(y_te)
-
-
-def _estimate_best_eta(trials, source_etas, length=1e4):
-    """Estimate the best eta from a small sample of trials
-
-    The final stage of training can take quite some time, at 10 to 15 minutes
-    or more per model evaluated. The relationship between eta and ndcg@10 along
-    with eta and true loss is fairly stable, so instead of searching the whole space
-    evaluate a few evenly spaced points and then try to fit a line to determine
-    the best eta.
-
-    Best eta is chosen by finding where the derivative of ndcg@10 vs true loss first
-    transitions from >1 to <=1
-
-    Parameters
-    ----------
-    trials : hyperopt.Trials
-        Trials object that was used to tune only eta
-    source_etas : list of float
-        For some reason hyperopt.hp.choice doesn't include the actual value in
-        the trials object, only the index. The results as indexed into this
-        list to get the actual eta tested.
-    length : int
-        Number of eta points to estimate
-
-    Returns
-    -------
-    float
-        Estimated best ETA
-    """
-
-    ndcg10 = np.asarray([-l for l in trials.losses()])
-    true_loss = np.asarray([r.get('true_loss') for r in trials.results])
-    eta = np.asarray([source_etas[v] for v in trials.vals['eta']])
-
-    # Range of predictions we want to make
-    eta_pred = np.arange(np.min(eta), np.max(eta), (np.max(eta) - np.min(eta)) / length)
-    # Predicted ndcg@10 values for eta_pred
-    # TODO: Can 0.02 not be magic? Was chosen by hand on one sample
-    ndcg10_pred = _loess_predict(eta, ndcg10, eta_pred, 0.02)
-    # Predicted true loss for eta_pred
-    # TODO: Can 0.03 not be magic? Was chosen by hand on one sample
-    true_loss_pred = _loess_predict(eta, true_loss, eta_pred, 0.03)
-
-    # Find the first point where derivative transitions from > 1 to <= 1.
-    # TODO: What if the sample is from too narrow a range, and doesn't capture this?
-    derivative = np.diff(ndcg10_pred) / np.diff(true_loss_pred)
-    idx = (np.abs(derivative-1)).argmin()
-
-    # eta for point closest to transition of derivative from >1 to <=1>
-    return eta_pred[idx]
 
 
 def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, initial_num_trees=100, final_num_trees=500):
@@ -469,16 +398,6 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, initial_num_trees=100, f
                 print 'best %s: %f' % (k, best[k])
         return best, trials
 
-    def eval_space_grid(space):
-        """Eval all points in the space via a grid search"""
-        best, trials = mjolnir.training.hyperopt.grid_search(
-            df, train, space, num_folds=num_folds,
-            num_workers=num_workers, cv_pool=cv_pool, trials_pool=trials_pool)
-        for k, v in space.items():
-            if not np.isscalar(v):
-                print 'best %s: %f' % (k, best[k])
-        return best, trials
-
     num_obs = df.count()
 
     if num_obs > 8000000:
@@ -491,36 +410,52 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, initial_num_trees=100, f
         dataset_size = 'small'
 
     # Setup different tuning profiles for different sizes of datasets.
-    tune_space = {
-        'xlarge': {
-            # This is intentionally a numpy space for grid search, as xlarge
-            # datasets get slightly different handling here.
-            'eta': np.linspace(0.3, 0.8, 30),
-            # Have seen values of 7 and 10 as best on roughly same size
-            # datasets from different wikis. It really just depends.
-            'max_depth': hyperopt.hp.quniform('max_depth', 6, 11, 1),
-            'min_child_weight': hyperopt.hp.qloguniform(
-                'min_child_weight', np.log(10), np.log(500), 10),
-        },
-        'large': {
-            'eta': hyperopt.hp.uniform('eta', 0.3, 0.6),
-            'max_depth': hyperopt.hp.quniform('max_depth', 5, 9, 1),
-            'min_child_weight': hyperopt.hp.qloguniform(
-                'min_child_weight', np.log(10), np.log(300), 10),
-        },
-        'med': {
-            'eta': hyperopt.hp.uniform('eta', 0.1, 0.6),
-            'max_depth': hyperopt.hp.quniform('max_depth', 4, 7, 1),
-            'min_child_weight': hyperopt.hp.qloguniform(
-                'min_child_weight', np.log(10), np.log(300), 10),
-        },
-        'small': {
-            'eta': hyperopt.hp.uniform('eta', 0.1, 0.4),
-            'max_depth': hyperopt.hp.quniform('max_depth', 3, 6, 1),
-            'min_child_weight': hyperopt.hp.qloguniform(
-                'min_child_weight', np.log(10), np.log(100), 10),
-        }
-    }
+    tune_spaces = [
+        ('initial', {
+            'iterations': 150,
+            'space': {
+                'xlarge': {
+                    'eta': hyperopt.hp.uniform('eta', 0.3, 0.8),
+                    # Have seen values of 7 and 10 as best on roughly same size
+                    # datasets from different wikis. It really just depends.
+                    'max_depth': hyperopt.hp.quniform('max_depth', 6, 11, 1),
+                    'min_child_weight': hyperopt.hp.qloguniform(
+                        'min_child_weight', np.log(10), np.log(500), 10),
+                    # % of features to use for each tree. helps prevent overfit
+                    'colsample_bytree': hyperopt.hp.quniform('colsample_bytree', 0.8, 1, .01),
+                },
+                'large': {
+                    'eta': hyperopt.hp.uniform('eta', 0.3, 0.6),
+                    'max_depth': hyperopt.hp.quniform('max_depth', 5, 9, 1),
+                    'min_child_weight': hyperopt.hp.qloguniform(
+                        'min_child_weight', np.log(10), np.log(300), 10),
+                    'colsample_bytree': hyperopt.hp.quniform('colsample_bytree', 0.8, 1, .01),
+                },
+                'med': {
+                    'eta': hyperopt.hp.uniform('eta', 0.1, 0.6),
+                    'max_depth': hyperopt.hp.quniform('max_depth', 4, 7, 1),
+                    'min_child_weight': hyperopt.hp.qloguniform(
+                        'min_child_weight', np.log(10), np.log(300), 10),
+                    'colsample_bytree': hyperopt.hp.quniform('colsample_bytree', 0.8, 1, .01),
+                },
+                'small': {
+                    'eta': hyperopt.hp.uniform('eta', 0.1, 0.4),
+                    'max_depth': hyperopt.hp.quniform('max_depth', 3, 6, 1),
+                    'min_child_weight': hyperopt.hp.qloguniform(
+                        'min_child_weight', np.log(10), np.log(100), 10),
+                    'colsample_bytree': hyperopt.hp.quniform('colsample_bytree', 0.8, 1, .01),
+                }
+            }[dataset_size]
+        }),
+        ('trees', {
+            'iterations': 30,
+            'condition': lambda: final_num_trees is not None and final_num_trees != initial_num_trees,
+            'space': {
+                'num_rounds': final_num_trees,
+                'eta': hyperopt.hp.uniform('eta', 0.1, 0.4),
+            }
+        })
+    ]
 
     # Baseline parameters to start with. Roughly tuned by what has worked in
     # the past. These vary though depending on number of training samples. These
@@ -531,117 +466,37 @@ def tune(df, num_folds=5, num_cv_jobs=5, num_workers=5, initial_num_trees=100, f
         'eval_metric': 'ndcg@10',
         'num_rounds': initial_num_trees,
         'min_child_weight': 200,
-        'max_depth': 4,
+        'max_depth': {
+            'xlarge': 7,
+            'large': 6,
+            'med': 5,
+            'small': 4,
+        }[dataset_size],
         'gamma': 0,
         'subsample': 1.0,
         'colsample_bytree': 0.8,
     }
 
-    # Overrides for the first round of training when tuning eta.
-    space_overrides = {
-        'xlarge': {
-            'max_depth': 7,
-        },
-        'large': {
-            'max_depth': 6,
-        },
-        'med': {
-            'max_depth': 5,
-        },
-        'small': {}
-    }
+    stages = []
+    for name, stage_params in tune_spaces:
+        if 'condition' in stage_params and not stage_params['condition']():
+            continue
+        tune_space = stage_params['space']
+        for name, dist in tune_space.items():
+            space[name] = dist
+        best, trials = eval_space(space, stage_params['iterations'])
+        for name in tune_space.keys():
+            space[name] = best[name]
+        stages.append((name, trials))
 
-    for k, v in space_overrides[dataset_size].items():
-        space[k] = v
-
-    # Find an eta that gives good results with only 100 trees. This is done
-    # so most of the tuning is relatively quick. A final step will re-tune
-    # eta with more trees.
-    # This estimate only seems to work well for xlarge datasets. On smaller
-    # datasets the shape of the graph is much less consistent and doesn't
-    # match the builtin expectation of an L shaped graph.
-    if dataset_size == 'xlarge':
-        etas = tune_space[dataset_size]['eta']
-        space['eta'] = hyperopt.hp.choice('eta', etas)
-        best_eta, trials_eta = eval_space_grid(space)
-        space['eta'] = _estimate_best_eta(trials_eta, etas)
-    else:
-        space['eta'] = tune_space[dataset_size]['eta']
-        best_eta, trials_eta = eval_space(space, 50)
-        space['eta'] = best_eta['eta']
-    pprint.pprint(space)
-
-    # Determines the size of each tree. Larger trees increase model complexity
-    # and make it more likely to overfit the training data. Larger trees also
-    # do a better job at capturing interactions between features. Larger training
-    # sets support deeper trees. Not all trees will be this depth, min_child_weight
-    # gamma, and regularization all push back on this.
-    space['max_depth'] = tune_space[dataset_size]['max_depth']
-    # The minimum number of samples that must be in each leaf node. This pushes
-    # back against tree depth, preventing the tree from growing if a potential
-    # split applies to too few samples. ndcg@10 on the test set increases linearly
-    # with smaller min_child_weight, but true_loss also increases.
-    space['min_child_weight'] = tune_space[dataset_size]['min_child_weight']
-
-    # TODO: Somewhat similar to eta, as min_child_weight decreases the
-    # true_loss increases. Need to figure out how to choose the max_depth that
-    # provides best ndcg@10 without losing generalizability.
-    best_complexity, trials_complexity = eval_space(space, 50)
-    space['max_depth'] = int(best_complexity['max_depth'])
-    space['min_child_weight'] = int(best_complexity['min_child_weight'])
-    pprint.pprint(space)
-
-    # subsample helps make the model more robust to noisy data. For each update to
-    # a tree only this % of samples are considered.
-    space['subsample'] = hyperopt.hp.quniform('subsample', 0.8, 1, .01)
-    # colsample also helps make the model more robust to noise. For each update
-    # to a tree only this % of features are considered.
-    space['colsample_bytree'] = hyperopt.hp.quniform('colsample_bytree', 0.8, 1, .01)
-
-    # With a high min_child_weight subsampling of any kind gives a linear decrease
-    # in quality. But with a relatively low min_child_weight it can give some benefits,
-    # pushing back against over fitting due to small amounts of data per leaf.
-    # colsample is less clear, with 0.8 and 1.0 having similar results.
-    best_noise, trials_noise = eval_space(space, 50)
-    space['subsample'] = best_noise['subsample']
-    space['colsample_bytree'] = best_noise['colsample_bytree']
-    pprint.pprint(space)
-
-    # Finally increase the number of trees to our target, if it was requested.
-    if final_num_trees is None or final_num_trees == initial_num_trees:
-        trials_trees = None
-        trials_final = trials_noise
-    else:
-        space['num_rounds'] = final_num_trees
-        # TODO: Is 30 steps right amount? too many? too few? This generally
-        # uses a large number of trees which takes 10 to 20 minutes per evaluation
-        # on large training sets.That means evaluating 15 points is 2.5 to 5 hours.
-        # TODO: The appropriate space here really depends on the amount of data and
-        # the number of trees. A small wiki with 300k observations and 500 trees needs
-        # to search a very different space than a large wiki with 30M observations
-        # and the same 500 trees.
-        if dataset_size == 'xlarge':
-            etas = np.linspace(0.2, 0.7, 30)
-            space['eta'] = hyperopt.hp.choice('eta', etas)
-            best_trees, trials_trees = eval_space_grid(space)
-            space['eta'] = _estimate_best_eta(trials_trees, etas)
-        else:
-            space['eta'] = hyperopt.hp.uniform('eta', 0.01, 0.5)
-            best_trees, trials_trees = eval_space(space, 30)
-            space['eta'] = best_trees['eta']
-        trials_final = trials_trees
-        pprint.pprint(space)
-
-    best_trial = np.argmin(trials_final.losses())
-    loss = trials_final.losses()[best_trial]
-    true_loss = trials_final.results[best_trial].get('true_loss')
+    trials = stages[-1][1]
+    best_trial = np.argmin(trials.losses())
+    loss = trials.losses()[best_trial]
+    true_loss = trials.results[best_trial].get('true_loss')
 
     return {
         'trials': {
-            'initial': trials_eta,
-            'complexity': trials_complexity,
-            'noise': trials_noise,
-            'trees': trials_trees,
+            'initial': trials,
         },
         'params': space,
         'metrics': {

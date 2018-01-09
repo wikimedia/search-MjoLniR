@@ -8,7 +8,7 @@ import py4j.protocol
 from pyspark.sql import functions as F
 
 
-def split(df, splits, output_column='fold', num_partitions=100):
+def split(df, splits, output_column='fold'):
     """Assign splits to a dataframe of search results
 
     Individual hits from the same normalized query are not independent,
@@ -31,10 +31,6 @@ def split(df, splits, output_column='fold', num_partitions=100):
         into.
     output_column : str, optional
         Name of the new column indicating the split
-    num_partitions : int, optional
-        Sets the number of partitions to split with. Each partition needs
-        to be some minimum size for averages to work out to an evenly split
-        final set. (Default: 100)
 
     Returns
     -------
@@ -88,7 +84,7 @@ def split(df, splits, output_column='fold', num_partitions=100):
     return df.join(df_splits, how='inner', on=['wikiid', 'norm_query_id'])
 
 
-def group_k_fold(df, num_folds, num_partitions=100, output_column='fold'):
+def group_k_fold(df, num_folds, output_column='fold'):
     """
     Generates group k-fold splits. The fold a row belongs to is
     assigned to the column identified by the output_column parameter.
@@ -97,16 +93,13 @@ def group_k_fold(df, num_folds, num_partitions=100, output_column='fold'):
     ----------
     df : pyspark.sql.DataFrame
     num_folds : int
-    test_folds : int, optional
-    vali_folds : int, optional
-    num_partitions : int, optional
 
     Yields
     ------
     dict
     """
     return (
-        split(df, [1. / num_folds] * num_folds, output_column, num_partitions)
+        split(df, [1. / num_folds] * num_folds, output_column)
         .withColumn(output_column, mjolnir.spark.add_meta(df._sc, F.col(output_column), {
             'num_folds': num_folds,
         })))

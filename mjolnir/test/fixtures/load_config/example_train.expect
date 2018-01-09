@@ -243,7 +243,6 @@ profiles:
           folds: '3'
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
           output: /home/pytest/training_size/marker_large
-          use-external-memory: 'True'
           workers: '3'
         environment:
           HOME: /home/pytest

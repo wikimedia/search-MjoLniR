@@ -138,7 +138,6 @@ profiles:
                     cv-jobs: 22
                     folds: 3
                     final-trees: 100
-                    use-external-memory: yes
 
     medium:
         # 4M to 12M observations per executor.

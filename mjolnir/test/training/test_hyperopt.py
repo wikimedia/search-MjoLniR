@@ -41,38 +41,6 @@ def test_minimize(df_train):
     assert len(trails.trials) == 5
 
 
-def test_gridsearch(df_train):
-    space = {
-        'num_rounds': 50,
-        'max_depth': hyperopt.hp.choice('max_depth', [10, 20, 30]),
-    }
-
-    gen = MockModelGen()
-    best_params, trials = mjolnir.training.hyperopt.grid_search(
-        df_train, gen, space, num_folds=2,
-        num_workers=1)
-    assert isinstance(best_params, dict)
-    assert 'num_rounds' in best_params
-    # num rounds should be unchanged
-    assert best_params['num_rounds'] == 50
-    # should have 3 iterations for the 3 max depth's
-    assert len(trials.trials) == 3
-    param_depths = sorted([param['max_depth'] for param in gen.params])
-    # TODO: Why is this called 2x as many times as expected?
-    # For some reason the correct number of trials is still
-    # returned though.
-    assert [10, 10, 20, 20, 30, 30] == param_depths
-
-
-class MockModelGen(object):
-    def __init__(self):
-        self.params = []
-
-    def __call__(self, df, params, num_workers):
-        self.params.append(params)
-        return MockModel(df, params, num_workers)
-
-
 class MockModel(object):
     def __init__(self, df, params, num_workers):
         # Params that were passed to hyperopt
