@@ -3,10 +3,11 @@ working_dir: /srv/mjolnir
 global:
     environment:
         PYSPARK_PYTHON: venv/bin/python
-        SPARK_CONF_DIR: /etc/spark/conf
-        SPARK_HOME: "%(HOME)s/spark-%(spark_version)s-bin-hadoop2.6"
+        SPARK_CONF_DIR: /etc/spark2/conf
+        SPARK_HOME: "/usr/lib/spark2"
     template_vars:
-        spark_version: 2.1.0
+        spark_version: 2.1.2
+        master: yarn
         # Path to spark-submit applicatoin
         spark_submit: "%(SPARK_HOME)s/bin/spark-submit"
         # Local path to zip'd virtualenv which will be shipped to executors
@@ -50,7 +51,7 @@ global:
             ? "%(spark_submit)s"
             ? "%(PYSPARK_PYTHON)s"
     spark_args:
-        master: yarn
+        master: "%(master)s"
         # TODO: When is this necessary?
         files: /usr/lib/libhdfs.so.0.0.0
         # Ship the mjolnir virtualenv to executors and decompress it to ./venv

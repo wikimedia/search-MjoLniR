@@ -10,20 +10,20 @@ global_config:
       environment:
         HOME: /home/pytest
         PYSPARK_PYTHON: venv/bin/python
-        SPARK_CONF_DIR: /etc/spark/conf
-        SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+        SPARK_CONF_DIR: /etc/spark2/conf
+        SPARK_HOME: /usr/lib/spark2
         USER: pytest
       mjolnir_utility: data_pipeline
       mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
       paths:
         dir_exist: !!set
-          /etc/spark/conf: null
+          /etc/spark2/conf: null
         dir_not_exist: !!set
           /mnt/hdfs/user/pytest/mjolnir/marker: null
         file_exist: !!set
-          /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
           /srv/mjolnir/mjolnir_venv.zip: null
           /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+          /usr/lib/spark2/bin/spark-submit: null
           venv/bin/python: null
       spark_args:
         archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -31,9 +31,9 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-      spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit
+      spark_command: /usr/lib/spark2/bin/spark-submit
       spark_conf:
         spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
           -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -43,16 +43,16 @@ global_config:
       environment:
         HOME: /home/pytest
         PYSPARK_PYTHON: venv/bin/python
-        SPARK_CONF_DIR: /etc/spark/conf
-        SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+        SPARK_CONF_DIR: /etc/spark2/conf
+        SPARK_HOME: /usr/lib/spark2
         USER: pytest
       paths:
         dir_exist: !!set
-          /etc/spark/conf: null
+          /etc/spark2/conf: null
         file_exist: !!set
-          /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
           /srv/mjolnir/mjolnir_venv.zip: null
           /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+          /usr/lib/spark2/bin/spark-submit: null
           venv/bin/python: null
       spark_args:
         archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -60,9 +60,9 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-      spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/pyspark
+      spark_command: /usr/lib/spark2/bin/pyspark
       spark_conf:
         spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
           -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -72,16 +72,16 @@ global_config:
       environment:
         HOME: /home/pytest
         PYSPARK_PYTHON: venv/bin/python
-        SPARK_CONF_DIR: /etc/spark/conf
-        SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+        SPARK_CONF_DIR: /etc/spark2/conf
+        SPARK_HOME: /usr/lib/spark2
         USER: pytest
       paths:
         dir_exist: !!set
-          /etc/spark/conf: null
+          /etc/spark2/conf: null
         file_exist: !!set
-          /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
           /srv/mjolnir/mjolnir_venv.zip: null
           /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+          /usr/lib/spark2/bin/spark-submit: null
           venv/bin/python: null
       spark_args:
         archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -89,9 +89,9 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-      spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/pyspark
+      spark_command: /usr/lib/spark2/bin/pyspark
       spark_conf:
         spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
           -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -104,19 +104,19 @@ global_config:
       environment:
         HOME: /home/pytest
         PYSPARK_PYTHON: venv/bin/python
-        SPARK_CONF_DIR: /etc/spark/conf
-        SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+        SPARK_CONF_DIR: /etc/spark2/conf
+        SPARK_HOME: /usr/lib/spark2
         USER: pytest
       mjolnir_utility: training_pipeline
       mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
       paths:
         dir_exist: !!set
-          /etc/spark/conf: null
+          /etc/spark2/conf: null
           /home/pytest/training_size: null
         file_exist: !!set
-          /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
           /srv/mjolnir/mjolnir_venv.zip: null
           /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+          /usr/lib/spark2/bin/spark-submit: null
           venv/bin/python: null
       spark_args:
         archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -125,9 +125,9 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+        packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-      spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit
+      spark_command: /usr/lib/spark2/bin/spark-submit
       spark_conf:
         spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
           -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -149,20 +149,20 @@ profiles:
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
-          SPARK_CONF_DIR: /etc/spark/conf
-          SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
           USER: pytest
         mjolnir_utility: data_pipeline
         mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
         paths:
           dir_exist: !!set
-            /etc/spark/conf: null
+            /etc/spark2/conf: null
           dir_not_exist: !!set
             /mnt/hdfs/user/pytest/mjolnir/marker: null
           file_exist: !!set
-            /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
             venv/bin/python: null
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -170,9 +170,9 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit
+        spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -182,16 +182,16 @@ profiles:
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
-          SPARK_CONF_DIR: /etc/spark/conf
-          SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
           USER: pytest
         paths:
           dir_exist: !!set
-            /etc/spark/conf: null
+            /etc/spark2/conf: null
           file_exist: !!set
-            /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
             venv/bin/python: null
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -199,9 +199,9 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/pyspark
+        spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -211,16 +211,16 @@ profiles:
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
-          SPARK_CONF_DIR: /etc/spark/conf
-          SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
           USER: pytest
         paths:
           dir_exist: !!set
-            /etc/spark/conf: null
+            /etc/spark2/conf: null
           file_exist: !!set
-            /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
             venv/bin/python: null
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -228,9 +228,9 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/pyspark
+        spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -247,19 +247,19 @@ profiles:
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
-          SPARK_CONF_DIR: /etc/spark/conf
-          SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
           USER: pytest
         mjolnir_utility: training_pipeline
         mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
         paths:
           dir_exist: !!set
-            /etc/spark/conf: null
+            /etc/spark2/conf: null
             /home/pytest/training_size: null
           file_exist: !!set
-            /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
             venv/bin/python: null
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -268,9 +268,9 @@ profiles:
           executor-memory: 4G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit
+        spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -294,20 +294,20 @@ profiles:
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
-          SPARK_CONF_DIR: /etc/spark/conf
-          SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
           USER: pytest
         mjolnir_utility: data_pipeline
         mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
         paths:
           dir_exist: !!set
-            /etc/spark/conf: null
+            /etc/spark2/conf: null
           dir_not_exist: !!set
             /mnt/hdfs/user/pytest/mjolnir/marker: null
           file_exist: !!set
-            /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
             venv/bin/python: null
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -315,9 +315,9 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit
+        spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -327,16 +327,16 @@ profiles:
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
-          SPARK_CONF_DIR: /etc/spark/conf
-          SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
           USER: pytest
         paths:
           dir_exist: !!set
-            /etc/spark/conf: null
+            /etc/spark2/conf: null
           file_exist: !!set
-            /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
             venv/bin/python: null
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -344,9 +344,9 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/pyspark
+        spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -356,16 +356,16 @@ profiles:
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
-          SPARK_CONF_DIR: /etc/spark/conf
-          SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
           USER: pytest
         paths:
           dir_exist: !!set
-            /etc/spark/conf: null
+            /etc/spark2/conf: null
           file_exist: !!set
-            /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
             venv/bin/python: null
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -373,9 +373,9 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/pyspark
+        spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -392,19 +392,19 @@ profiles:
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
-          SPARK_CONF_DIR: /etc/spark/conf
-          SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
           USER: pytest
         mjolnir_utility: training_pipeline
         mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
         paths:
           dir_exist: !!set
-            /etc/spark/conf: null
+            /etc/spark2/conf: null
             /home/pytest/training_size: null
           file_exist: !!set
-            /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
             venv/bin/python: null
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -413,9 +413,9 @@ profiles:
           executor-memory: 3G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit
+        spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -441,20 +441,20 @@ profiles:
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
-          SPARK_CONF_DIR: /etc/spark/conf
-          SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
           USER: pytest
         mjolnir_utility: data_pipeline
         mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
         paths:
           dir_exist: !!set
-            /etc/spark/conf: null
+            /etc/spark2/conf: null
           dir_not_exist: !!set
             /mnt/hdfs/user/pytest/mjolnir/marker: null
           file_exist: !!set
-            /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
             venv/bin/python: null
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -462,9 +462,9 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit
+        spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -474,16 +474,16 @@ profiles:
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
-          SPARK_CONF_DIR: /etc/spark/conf
-          SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
           USER: pytest
         paths:
           dir_exist: !!set
-            /etc/spark/conf: null
+            /etc/spark2/conf: null
           file_exist: !!set
-            /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
             venv/bin/python: null
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -491,9 +491,9 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/pyspark
+        spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -503,16 +503,16 @@ profiles:
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
-          SPARK_CONF_DIR: /etc/spark/conf
-          SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
           USER: pytest
         paths:
           dir_exist: !!set
-            /etc/spark/conf: null
+            /etc/spark2/conf: null
           file_exist: !!set
-            /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
             venv/bin/python: null
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -520,9 +520,9 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/pyspark
+        spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
@@ -539,19 +539,19 @@ profiles:
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
-          SPARK_CONF_DIR: /etc/spark/conf
-          SPARK_HOME: /home/pytest/spark-2.1.0-bin-hadoop2.6
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
           USER: pytest
         mjolnir_utility: training_pipeline
         mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
         paths:
           dir_exist: !!set
-            /etc/spark/conf: null
+            /etc/spark2/conf: null
             /home/pytest/training_size: null
           file_exist: !!set
-            /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit: null
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
             venv/bin/python: null
         spark_args:
           archives: /srv/mjolnir/mjolnir_venv.zip#venv
@@ -560,9 +560,9 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0
+          packages: ml.dmlc:xgboost4j-spark:0.7-wmf-1,org.wikimedia.search:mjolnir:0.2,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        spark_command: /home/pytest/spark-2.1.0-bin-hadoop2.6/bin/spark-submit
+        spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
