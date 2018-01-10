@@ -14,7 +14,7 @@
         <spark.version>2.1.0</spark.version>
         <scala.version>2.11.8</scala.version>
         <scala.binary.version>2.11</scala.binary.version>
-        <xgboost.version>0.7-wmf-1</xgboost.version>
+        <xgboost.version>0.8-wmf-1-SNAPSHOT</xgboost.version>
     </properties>
 
     <scm>
@@ -145,6 +145,16 @@
             <groupId>com.fasterxml.jackson.module</groupId>
             <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
             <version>2.6.5</version>
+        </dependency>
+        <dependency>
+            <groupId>ml.dmlc</groupId>
+            <artifactId>xgboost4j-spark</artifactId>
+            <version>${xgboost.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>ml.dmlc</groupId>
+            <artifactId>xgboost4j</artifactId>
+            <version>${xgboost.version}</version>
         </dependency>
     </dependencies>
     <repositories>

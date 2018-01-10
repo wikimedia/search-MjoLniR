@@ -6,7 +6,7 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 trait SharedSparkContext extends FunSuite with BeforeAndAfter with BeforeAndAfterAll
   with Serializable {
 
-  @transient protected implicit var spark: SparkSession = null
+  @transient protected implicit var spark: SparkSession = _
 
   override def beforeAll() {
     spark = SparkSession.builder()

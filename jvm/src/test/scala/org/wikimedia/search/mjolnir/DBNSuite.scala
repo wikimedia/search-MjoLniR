@@ -159,7 +159,7 @@ class DBNSuite extends FunSuite {
     assert(math.abs(sessionEstimate.s.sum - sessionEstimate.s(0) - sessionEstimate.s(10)) < 0.0001D)
   }
 
-  // Takes ~3.5s on my laptop versus 90 seconds in python
+  // Takes ~1.5s on my laptop versus 90 seconds in python
   test("basic benchmark") {
     val nQueries = 5000
     val nSessionsPerQuery = 20

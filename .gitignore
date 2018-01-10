@@ -27,6 +27,7 @@ coverage.xml
 # Editor temporary files
 .*.sw[po]
 /jvm/.idea
+/jvm/mjolnir.iml
 
 # Vagrant, and cdh stuff in vagrant
 .vagrant
