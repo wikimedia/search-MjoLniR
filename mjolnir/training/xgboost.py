@@ -2,7 +2,7 @@ from __future__ import absolute_import
 import hyperopt
 import mjolnir.spark
 import mjolnir.training.hyperopt
-from mjolnir.training.tuning import ModelSelection
+from mjolnir.training.tuning import make_cv_objective, ModelSelection
 import numpy as np
 import pyspark
 import pyspark.sql
@@ -410,16 +410,17 @@ def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final
                     'colsample_bytree': hyperopt.hp.quniform('colsample_bytree', 0.8, 1, .01),
                 }
             }[dataset_size]
-        }),
-        ('trees', {
+        })
+    ]
+
+    if final_num_trees is not None and final_num_trees != initial_num_trees:
+        tune_spaces.append(('trees', {
             'iterations': 30,
-            'condition': lambda: final_num_trees is not None and final_num_trees != initial_num_trees,
             'space': {
                 'num_rounds': final_num_trees,
                 'eta': hyperopt.hp.uniform('eta', 0.1, 0.4),
             }
-        })
-    ]
+        }))
 
     # Baseline parameters to start with. Roughly tuned by what has worked in
     # the past. These vary though depending on number of training samples. These
@@ -441,7 +442,7 @@ def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final
         'colsample_bytree': 0.8,
     }
 
-    tuner = ModelSelection(space, tune_spaces, cv_transformer)
-    train_func = tuner.make_cv_objective(train, folds, num_cv_jobs, train_matrix=train_matrix)
+    tuner = ModelSelection(space, tune_spaces)
+    train_func = make_cv_objective(train, folds, num_cv_jobs, cv_transformer, train_matrix=train_matrix)
     trials_pool = tuner.build_pool(folds, num_cv_jobs)
     return tuner(train_func, trials_pool)

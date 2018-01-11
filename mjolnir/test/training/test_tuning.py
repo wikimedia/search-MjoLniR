@@ -46,7 +46,7 @@ def run_model_selection(tune_stages, f=None, num_cv_jobs=1, **kwargs):
             }
 
     tuner = mjolnir.training.tuning.ModelSelection(initial_space, tune_stages)
-    train_func = tuner.make_cv_objective(f, folds, num_cv_jobs, **kwargs)
+    train_func = mjolnir.training.tuning.make_cv_objective(f, folds, num_cv_jobs, **kwargs)
     trials_pool = tuner.build_pool(folds, num_cv_jobs)
     result = tuner(train_func, trials_pool)
     return result, stats['called']
@@ -80,39 +80,14 @@ def test_ModelSelection():
     assert result['params']['baz'] == 0
 
 
-def test_ModelSelection_stage_condition():
-    num_iterations = 3
-    result, called = run_model_selection([
-        ('a', {
-            'condition': lambda: False,
-            'iterations': num_iterations,
-            'space': {
-                'foo': hyperopt.hp.uniform('foo', 1, 9),
-            }
-        }),
-        ('b', {
-            'iterations': num_iterations,
-            'space': {
-                'bar': hyperopt.hp.uniform('bar', 1, 9),
-            }
-        }),
-    ])
-    # iterations * folds
-    assert called == num_iterations * 2
-    assert result['params']['foo'] == 10
-    assert 1 <= result['params']['bar'] <= 9
-    assert result['params']['baz'] == 0
-
-
 def test_ModelSelection_kwargs_pass_thru():
-    tuner = mjolnir.training.tuning.ModelSelection(None, None)
     expected_kwargs = {'hi': 5, 'there': 'test'}
 
     def f(fold, params, **kwargs):
         assert kwargs == expected_kwargs
         return {'test': [fold[0]], 'train': [fold[0]]}
 
-    obj = tuner.make_cv_objective(f, [[1], [2]], 1, **expected_kwargs)
+    obj = mjolnir.training.tuning.make_cv_objective(f, [[1], [2]], 1, **expected_kwargs)
 
     res = obj(None)
     assert res == [
@@ -144,3 +119,23 @@ def test_ModelSelection_build_pool(num_folds, num_workers, num_cv_jobs, expect_p
     folds = [[1] * num_workers for i in range(num_folds)]
     pool = tuner.build_pool(folds, num_cv_jobs)
     assert (pool is not None) == expect_pool
+
+
+def test_ModelSelection_transformer():
+    stats = {'called': 0}
+
+    def transformer(result, params):
+        assert 'foo' in result
+        assert result['foo'] == 'bar'
+        assert params == 'some params'
+        stats['called'] += 1
+        return 'baz'
+
+    def f(fold, params):
+        assert params == 'some params'
+        return {'foo': 'bar'}
+
+    folds = [[1, 2, 3], [4, 5, 6]]
+    obj = mjolnir.training.tuning.make_cv_objective(f, folds, 1, transformer)
+    assert obj('some params') == ['baz', 'baz']
+    assert stats['called'] == 2

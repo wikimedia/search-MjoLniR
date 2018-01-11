@@ -63,6 +63,7 @@ def as_local_path(path, with_query=False):
     else:
         # TODO: Untested
         with tempfile.NamedTemporaryFile() as local:
+            os.unlink(local.name)
             subprocess.check_call(['hdfs', 'dfs', '-copyToLocal', path, local.name])
             if with_query:
                 try:

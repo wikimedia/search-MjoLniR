@@ -133,11 +133,48 @@ def _py4j_retry(fn, default_retval):
     return with_retry
 
 
+def make_cv_objective(train_func, folds, num_cv_jobs, transformer=None, **kwargs):
+    """Create a cross-validation objective function
+
+    Parameters
+    ----------
+    train_func : callable
+        Function accepting a fold and hyperparameters to perform training
+    num_cv_jobs : int
+        The total number of folds to train in parallel
+    transformer : callable or None, optional
+        Function accepting output of train_func and hyperparameters to
+        return stats about the individual fold train/test performance
+
+    Returns
+    -------
+    callable
+        Accepts a set of hyperparameters as only argument and returns
+        list of per-fold train/test performance.
+    """
+    train_func = _py4j_retry(train_func, None)
+    if num_cv_jobs > 1:
+        cv_pool = Pool(num_cv_jobs)
+        cv_mapper = cv_pool.map
+    else:
+        cv_mapper = map
+
+    def f(params):
+        def inner(fold):
+            return train_func(fold, params, **kwargs)
+
+        return cv_mapper(inner, folds)
+
+    if transformer is None:
+        return f
+    else:
+        return lambda params: [transformer(scores, params) for scores in f(params)]
+
+
 class ModelSelection(object):
-    def __init__(self, initial_space, tune_stages, transformer=None):
+    def __init__(self, initial_space, tune_stages):
         self.initial_space = initial_space
         self.tune_stages = tune_stages
-        self.transformer = transformer
 
     def build_pool(self, folds, num_cv_jobs):
         num_folds = len(folds)
@@ -148,31 +185,7 @@ class ModelSelection(object):
         else:
             return None
 
-    def make_cv_objective(self, train_func, folds, num_cv_jobs, **kwargs):
-        train_func = _py4j_retry(train_func, None)
-        if num_cv_jobs > 1:
-            cv_pool = Pool(num_cv_jobs)
-            cv_mapper = cv_pool.map
-        else:
-            cv_mapper = map
-
-        def f(params):
-            def inner(fold):
-                return train_func(fold, params, **kwargs)
-
-            return cv_mapper(inner, folds)
-
-        if not self.transformer:
-            return f
-
-        def g(params):
-            return [self.transformer(scores, params) for scores in f(params)]
-
-        return g
-
     def eval_stage(self, train_func, stage, space, pool):
-        if 'condition' in stage and not stage['condition']():
-            return space, None
         # Override current space with new space
         merged = dict(space, **stage['space'])
         best, trials = mjolnir.training.hyperopt.maximize(
@@ -190,8 +203,7 @@ class ModelSelection(object):
         stages = []
         for stage_name, stage in self.tune_stages:
             space, trials = self.eval_stage(train_func, stage, space, pool)
-            if trials is not None:
-                stages.append((stage_name, trials))
+            stages.append((stage_name, trials))
 
         trials_final = stages[-1][1]
         best_trial = np.argmin(trials_final.losses())
