@@ -1,10 +1,8 @@
 from __future__ import absolute_import
-import functools
 import hyperopt
-import math
 import mjolnir.spark
 import mjolnir.training.hyperopt
-from multiprocessing.dummy import Pool
+from mjolnir.training.tuning import ModelSelection
 import numpy as np
 import pyspark
 import pyspark.sql
@@ -160,6 +158,7 @@ class XGBoostSummary(object):
 class XGBoostModel(object):
     def __init__(self, j_xgb_model):
         self._j_xgb_model = j_xgb_model
+        self.summary = XGBoostSummary(self._j_xgb_model.summary())
 
     @staticmethod
     def trainWithFiles(fold, train_matrix, params, num_rounds=100,
@@ -315,6 +314,13 @@ class XGBoostModel(object):
         return XGBoostModel(j_xgb_model)
 
 
+def cv_transformer(model, params):
+    return {
+        "train": model.summary.train(),
+        "test": model.summary.test(),
+    }
+
+
 def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final_num_trees=500):
     """Find appropriate hyperparameters for training df
 
@@ -356,32 +362,6 @@ def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final
         performed, each containing a hyperopt.Trials object recording what
         happened.
     """
-    cv_pool = None
-    if num_cv_jobs > 1:
-        cv_pool = Pool(num_cv_jobs)
-
-    # Configure the trials pool large enough to keep cv_pool full
-    num_folds = len(folds)
-    num_workers = len(folds[0])
-    trials_pool_size = int(math.floor(num_cv_jobs / (num_folds * num_workers)))
-    if trials_pool_size > 1:
-        print 'Running %d cross validations in parallel' % (trials_pool_size)
-        trials_pool = Pool(trials_pool_size)
-    else:
-        trials_pool = None
-
-    train_func = functools.partial(train, train_matrix=train_matrix)
-
-    def eval_space(space, max_evals):
-        """Eval a space using standard hyperopt"""
-        best, trials = mjolnir.training.hyperopt.minimize(
-            folds, train_func, space, max_evals=max_evals,
-            cv_pool=cv_pool, trials_pool=trials_pool)
-        for k, v in space.items():
-            if not np.isscalar(v):
-                print 'best %s: %f' % (k, best[k])
-        return best, trials
-
     num_obs = stats['num_observations']
 
     if num_obs > 8000000:
@@ -461,30 +441,7 @@ def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final
         'colsample_bytree': 0.8,
     }
 
-    stages = []
-    for name, stage_params in tune_spaces:
-        if 'condition' in stage_params and not stage_params['condition']():
-            continue
-        tune_space = stage_params['space']
-        for name, dist in tune_space.items():
-            space[name] = dist
-        best, trials = eval_space(space, stage_params['iterations'])
-        for name in tune_space.keys():
-            space[name] = best[name]
-        stages.append((name, trials))
-
-    trials = stages[-1][1]
-    best_trial = np.argmin(trials.losses())
-    loss = trials.losses()[best_trial]
-    true_loss = trials.results[best_trial].get('true_loss')
-
-    return {
-        'trials': {
-            'initial': trials,
-        },
-        'params': space,
-        'metrics': {
-            'cv-test': -loss,
-            'cv-train': -loss + true_loss
-        }
-    }
+    tuner = ModelSelection(space, tune_spaces, cv_transformer)
+    train_func = tuner.make_cv_objective(train, folds, num_cv_jobs, train_matrix=train_matrix)
+    trials_pool = tuner.build_pool(folds, num_cv_jobs)
+    return tuner(train_func, trials_pool)

@@ -5,8 +5,6 @@ from __future__ import absolute_import
 import hyperopt
 import hyperopt.pyll.base
 from hyperopt.utils import coarse_utcnow
-import math
-import mjolnir.training.tuning
 import numpy as np
 
 
@@ -80,26 +78,22 @@ class ThreadingTrials(hyperopt.Trials):
         return state
 
 
-def minimize(folds, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
-             cv_pool=None, trials_pool=None):
-    """Perform cross validated hyperparameter optimization of train_func
+def maximize(f, space, max_evals=50, algo=hyperopt.tpe.suggest,
+             trials_pool=None):
+    """Maximize the loss of f over the provided space
 
     Parameters
     ----------
-    folds : list of dict each with two keys, train and test
-        Features and Labels to optimize over
-    train_func : callable
-        Function to use for training individual models
+    f : callable
+        Function to maximize. Will be provided with a dict and expected
+        to return a list of dicts each containing test and train keys
     space : dict
-        Hyperparameter space to search over.
+        Hyperparameter space to search over, from hyperopt.hp.*.
     max_evals : int
         Maximum iterations of hyperparameter tuning to perform.
     algo : callable
         The algorithm to use with hyperopt. See docs of hyperopt.fmin for more
         details.
-    cv_pool : multiprocessing.dummy.Pool or None
-        Controls the number of models to run in parallel. If None models
-        are trained sequentially.
     trials_pool : multiprocessing.dummy.Pool or None
         Controls the number of hyperopt trials run in parallel. If None trials
         are run sequentially.
@@ -113,28 +107,24 @@ def minimize(folds, train_func, space, max_evals=50, algo=hyperopt.tpe.suggest,
     """
 
     def objective(params):
-        scores = mjolnir.training.tuning.cross_validate(
-            folds, train_func, params, pool=cv_pool)
+        scores = f(params)
+        if scores is None:
+            return {
+                'status': hyperopt.STATUS_FAIL,
+                'failure': 'Complete failure, no score returned'
+            }
         # For now the only metric is NDCG, and hyperopt is a minimizer
         # so return the negative NDCG. Also makes the bold assumption
         # we had at least two pieces of the fold named 'test' and 'train'
         loss = [-s['test'][-1] for s in scores]
         true_loss = [s['train'][-1] - s['test'][-1] for s in scores]
-        num_failures = sum([math.isnan(s) for s in loss])
-        if num_failures > 1:
-            return {
-                'status': hyperopt.STATUS_FAIL,
-                'failure': 'Too many failures: %d' % (num_failures)
-            }
-        else:
-            loss = [s for s in loss if not math.isnan(s)]
-            true_loss = [s for s in true_loss if not math.isnan(s)]
         return {
             'status': hyperopt.STATUS_OK,
             'loss': sum(loss) / float(len(loss)),
             'loss_variance': np.var(loss),
             'true_loss': sum(true_loss) / float(len(true_loss)),
             'true_loss_variance': np.var(true_loss),
+            'scores': scores,
         }
 
     if trials_pool is None:

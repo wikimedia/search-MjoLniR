@@ -89,7 +89,7 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees
             all_paths, best_params, train_matrix="all")
 
         tune_results['metrics'] = {
-            'train': model.summary().train()
+            'train': model.summary.train()
         }
         print 'train-ndcg@10: %.5f' % (tune_results['metrics']['train'][-1])
 

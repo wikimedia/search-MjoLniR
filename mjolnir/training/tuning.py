@@ -1,11 +1,16 @@
 """
-Support for making test/train or k-fold splits
+Support for choosing model parameters.
+
+Includes dataset splitting, cross validation and model selection
 """
 from __future__ import absolute_import
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import mjolnir.spark
 import py4j.protocol
 from pyspark.sql import functions as F
+import math
+from multiprocessing.dummy import Pool
+import numpy as np
 
 
 def split(df, splits, output_column='fold'):
@@ -95,9 +100,11 @@ def group_k_fold(df, num_folds, output_column='fold'):
     num_folds : int
     output_column : str, optional
 
-    Yields
+    Returns
     ------
-    dict
+    pyspark.sql.DataFrame
+        Input data frame with a 'fold' column indicating fold membership.
+        Normalized queries are equally distributed to each fold.
     """
     return (
         split(df, [1. / num_folds] * num_folds, output_column)
@@ -126,34 +133,76 @@ def _py4j_retry(fn, default_retval):
     return with_retry
 
 
-def cross_validate(folds, train_func, params, pool):
-    """Perform cross validation of the provided folds
+class ModelSelection(object):
+    def __init__(self, initial_space, tune_stages, transformer=None):
+        self.initial_space = initial_space
+        self.tune_stages = tune_stages
+        self.transformer = transformer
 
-    Parameters
-    ----------
-    folds : list of dict containing train and test keys
-    train_func : callable
-    params : dict
-    pool : multiprocessing.dummy.Pool or None
+    def build_pool(self, folds, num_cv_jobs):
+        num_folds = len(folds)
+        num_workers = len(folds[0])
+        trials_pool_size = int(math.floor(num_cv_jobs / (num_workers * num_folds)))
+        if trials_pool_size > 1:
+            return Pool(trials_pool_size)
+        else:
+            return None
 
-    Returns
-    -------
-    list
-    """
-    def job(fold):
-        model = train_func(fold, params)
-        # TODO: Summary is hardcodeed to train/test
+    def make_cv_objective(self, train_func, folds, num_cv_jobs, **kwargs):
+        train_func = _py4j_retry(train_func, None)
+        if num_cv_jobs > 1:
+            cv_pool = Pool(num_cv_jobs)
+            cv_mapper = cv_pool.map
+        else:
+            cv_mapper = map
+
+        def f(params):
+            def inner(fold):
+                return train_func(fold, params, **kwargs)
+
+            return cv_mapper(inner, folds)
+
+        if not self.transformer:
+            return f
+
+        def g(params):
+            return [self.transformer(scores, params) for scores in f(params)]
+
+        return g
+
+    def eval_stage(self, train_func, stage, space, pool):
+        if 'condition' in stage and not stage['condition']():
+            return space, None
+        # Override current space with new space
+        merged = dict(space, **stage['space'])
+        best, trials = mjolnir.training.hyperopt.maximize(
+            train_func, merged, max_evals=stage['iterations'], trials_pool=pool)
+        # Override space with best parameters
+        # We don't have a guarantee that the name in tune_space and the
+        # name in best are the same. best gets named from the name
+        # parameter of the hyperopt.hp.* call. Would be nice to assert but
+        # couldn't figure out how.
+        merged.update(best)
+        return merged, trials
+
+    def __call__(self, train_func, pool):
+        space = self.initial_space
+        stages = []
+        for stage_name, stage in self.tune_stages:
+            space, trials = self.eval_stage(train_func, stage, space, pool)
+            if trials is not None:
+                stages.append((stage_name, trials))
+
+        trials_final = stages[-1][1]
+        best_trial = np.argmin(trials_final.losses())
+        loss = trials_final.losses()[best_trial]
+        true_loss = trials_final.results[best_trial].get('true_loss')
+
         return {
-            "train": model.summary().train(),
-            "test": model.summary().test(),
+            'trials': OrderedDict(stages),
+            'params': space,
+            'metrics': {
+                'cv-test': -loss,
+                'cv-train': -loss + true_loss
+            }
         }
-
-    job_w_retry = _py4j_retry(job, {
-        "train": [float('nan')],
-        "test": [float('nan')],
-    })
-
-    if pool is None:
-        return map(job_w_retry, folds)
-    else:
-        return pool.map(job_w_retry, folds)
