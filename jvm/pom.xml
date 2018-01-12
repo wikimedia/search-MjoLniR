@@ -4,7 +4,7 @@
 
     <groupId>org.wikimedia.search</groupId>
     <artifactId>mjolnir</artifactId>
-    <version>0.3-SNAPSHOT</version>
+    <version>0.3</version>
     <packaging>jar</packaging>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -20,7 +20,7 @@
     <scm>
         <connection>scm:git:https://gerrit.wikimedia.org/r/search/MjoLniR</connection>
         <developerConnection>scm:git:ssh://gerrit.wikimedia.org:29418/search/MjoLniR</developerConnection>
-        <tag>HEAD</tag>
+        <tag>mjolnir-0.3</tag>
         <url>https://gerrit.wikimedia.org/r/#/admin/projects/search/MjoLniR</url>
     </scm>
 
@@ -149,12 +149,12 @@
         <dependency>
             <groupId>ml.dmlc</groupId>
             <artifactId>xgboost4j-spark</artifactId>
-            <version>${xgboost.version}</version>
+            <version>0.8-wmf-1</version>
         </dependency>
         <dependency>
             <groupId>ml.dmlc</groupId>
             <artifactId>xgboost4j</artifactId>
-            <version>${xgboost.version}</version>
+            <version>0.8-wmf-1</version>
         </dependency>
     </dependencies>
     <repositories>
