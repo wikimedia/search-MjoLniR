@@ -4,7 +4,7 @@
 
     <groupId>org.wikimedia.search</groupId>
     <artifactId>mjolnir</artifactId>
-    <version>0.3</version>
+    <version>0.4-SNAPSHOT</version>
     <packaging>jar</packaging>
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -20,7 +20,7 @@
     <scm>
         <connection>scm:git:https://gerrit.wikimedia.org/r/search/MjoLniR</connection>
         <developerConnection>scm:git:ssh://gerrit.wikimedia.org:29418/search/MjoLniR</developerConnection>
-        <tag>mjolnir-0.3</tag>
+        <tag>HEAD</tag>
         <url>https://gerrit.wikimedia.org/r/#/admin/projects/search/MjoLniR</url>
     </scm>
 
