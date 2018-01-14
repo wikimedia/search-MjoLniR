@@ -4,7 +4,6 @@ from setuptools import find_packages, setup
 
 requirements = [
     # mjolnir requirements
-    'clickmodels',
     'requests',
     'kafka',
     'pyyaml',

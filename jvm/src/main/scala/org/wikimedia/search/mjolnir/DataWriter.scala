@@ -43,9 +43,9 @@ class DataWriter(
   // may contain gigabytes of data so this should do as little work
   // as possible per-row.
   private def writeOneFold(
-                            pathFormatter: (String, Int) => HDFSPath,
-                            config: Array[String]
-                          )(partitionId: Int, rows: Iterator[OutputRow]): Iterator[Map[String, String]] = {
+    pathFormatter: (String, Int) => HDFSPath,
+    config: Array[String]
+  )(partitionId: Int, rows: Iterator[OutputRow]): Iterator[Map[String, String]] = {
     // .toSet.toVector gives us a unique list, but feels like hax
     val paths = config.toSet.toVector.map { name: String =>
       name -> pathFormatter(name, partitionId)

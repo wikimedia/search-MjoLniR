@@ -44,7 +44,7 @@ class DataWriterSuite extends SharedSparkContext {
       try {
         val df = makeData()
         val pattern = s"$testDir/%s-fold-%s-partition-%d"
-        val writer = new DataWriter(spark.sparkContext, false)
+        val writer = new DataWriter(spark.sparkContext, sparse = false)
         val folds = writer.write(df, numWorkers, pattern, foldCol)
 
         assert(folds.length == expectedFolds)

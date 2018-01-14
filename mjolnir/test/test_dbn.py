@@ -3,26 +3,23 @@ import os
 import mjolnir.dbn
 
 
-def test_dbn_train(hive_context):
-    df = hive_context.read.json(os.path.join(os.path.dirname(__file__), "fixtures/dbn_input.json"))
+def test_dbn_train(hive_context, fixtures_dir):
+    df = hive_context.read.json(os.path.join(fixtures_dir, "dbn_input.json"))
     labeled = mjolnir.dbn.train(df, {
         # Don't use this config for prod, it's specifically for small testing
-        'MAX_ITERATIONS': 1,
-        'DEBUG': False,
-        'PRETTY_LOG': True,
         'MIN_DOCS_PER_QUERY': 1,
         'MAX_DOCS_PER_QUERY': 4,
-        'SERP_SIZE': 4,
-        'QUERY_INDEPENDENT_PAGER': False,
         'DEFAULT_REL': 0.5,
-    }, num_partitions=20)
+        'MAX_ITERATIONS': 1,
+        'GAMMA': 0.9,
+    })
     assert len(labeled.columns) == 4
     assert 'wikiid' in labeled.columns
     assert 'norm_query_id' in labeled.columns
     assert 'hit_page_id' in labeled.columns
     assert 'relevance' in labeled.columns
 
-    # Make sure we didn't drop data somewhere
+    # Make sure we didn't add/drop data somewhere
     data = labeled.collect()
     assert len(data) == 8, "Expecting 4 relevance labels * 2 queries in fixtures"
 

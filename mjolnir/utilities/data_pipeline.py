@@ -80,23 +80,14 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
         .drop('click_page_ids')
         .cache())
 
-    # Target around 125k rows per partition. Note that this isn't
-    # how many the dbn will see, because it gets collected up. Just
-    # a rough guess.
-    nb_samples = df_sampled.count()
-    dbn_partitions = int(max(200, min(2000, nb_samples / 125000)))
-
     # Learn relevances
     df_rel = (
-        mjolnir.dbn.train(df_sampled, num_partitions=dbn_partitions, dbn_config={
+        mjolnir.dbn.train(df_sampled, dbn_config={
             'MAX_ITERATIONS': 40,
-            'DEBUG': False,
-            'PRETTY_LOG': True,
             'MIN_DOCS_PER_QUERY': 10,
             'MAX_DOCS_PER_QUERY': 20,
-            'SERP_SIZE': 20,
-            'QUERY_INDEPENDENT_PAGER': False,
-            'DEFAULT_REL': 0.5})
+            'DEFAULT_REL': 0.5,
+            'GAMMA': 0.9})
         # naive conversion of relevance % into a label
         .withColumn('label', (F.col('relevance') * 10).cast('int')))
 

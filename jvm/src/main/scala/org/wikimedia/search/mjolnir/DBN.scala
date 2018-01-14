@@ -13,23 +13,28 @@ package org.wikimedia.search.mjolnir
   * implementation was ported from python clickmodels by Aleksandr Chuklin and the
   * notes on math were added in an attempt to understand why the implementation works.
   */
+import org.apache.spark.rdd.RDD
+
 import scala.collection.mutable
+import org.apache.spark.sql.{DataFrame, Row, functions => F}
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.{types => T}
 import org.json4s.{JArray, JBool, JString}
 import org.json4s.jackson.JsonMethods
 
 class SessionItem(val queryId: Int, val urlIds: Array[Int], val clicks: Array[Boolean])
 class RelevanceResult(val query: String, val region: String, val url: String, val relevance: Double)
 
-class InputReader(minDocsPerQuery: Int, serpSize: Int, discardNoClicks: Boolean) {
+class InputReader(minDocsPerQuery: Int, maxDocsPerQuery: Int, discardNoClicks: Boolean) {
 
-  // This bit maps input queryies/results to array indexes to be used while calculating
+  // This bit maps input queries/results to array indexes to be used while calculating
   private val queryIdToNextUrlId: mutable.Map[Int, Int] = mutable.Map()
   private val queryIdToUrlToIdMap: mutable.Map[Int, mutable.Map[String, Int]] = mutable.Map()
 
   def urlToId(queryId: Int, url: String): Int = {
     val urlToIdMap = queryIdToUrlToIdMap.getOrElseUpdate(queryId, { mutable.Map() })
     urlToIdMap.getOrElseUpdate(url, {
-      var nextUrlId = queryIdToNextUrlId.getOrElse(queryId, 0)
+      val nextUrlId = queryIdToNextUrlId.getOrElse(queryId, 0)
       queryIdToNextUrlId(queryId) = nextUrlId + 1
       nextUrlId
     })
@@ -69,7 +74,7 @@ class InputReader(minDocsPerQuery: Int, serpSize: Int, discardNoClicks: Boolean)
   }
 
   def makeSessionItem(query: String, region: String, urls: Array[String], clicks: Array[Boolean]): Option[SessionItem] = {
-    val n = math.min(serpSize, urls.length)
+    val n = math.min(maxDocsPerQuery, urls.length)
     val allClicks: Array[Boolean] = if (clicks.length >= n) {
       clicks.take(n)
     } else {
@@ -79,7 +84,7 @@ class InputReader(minDocsPerQuery: Int, serpSize: Int, discardNoClicks: Boolean)
       c
     }
 
-    val hasClicks = allClicks.take(n).exists { x => x}
+    val hasClicks = allClicks.exists { x => x }
     if (urls.length < minDocsPerQuery ||
         (discardNoClicks && !hasClicks)
     ) {
@@ -138,11 +143,11 @@ class InputReader(minDocsPerQuery: Int, serpSize: Int, discardNoClicks: Boolean)
     val maxUrlIds: Array[Int] = (0 until nextQueryId).map { queryId =>
       queryIdToNextUrlId(queryId) - 1
     }.toArray
-    new Config(nextQueryId - 1, defaultRel, maxIterations, serpSize, maxUrlIds)
+    new Config(nextQueryId - 1, defaultRel, maxIterations, maxDocsPerQuery, maxUrlIds)
   }
 }
 
-class Config(val maxQueryId: Int, val defaultRel: Double, val maxIterations: Int, val serpSize: Int, val maxUrlIds: Array[Int]) {
+class Config(val maxQueryId: Int, val defaultRel: Double, val maxIterations: Int, val maxDocsPerQuery: Int, val maxUrlIds: Array[Int]) {
   val maxUrlId: Int = maxUrlIds.max
 }
 
@@ -185,20 +190,14 @@ class UrlRelFrac(var a: Array[Double], var s: Array[Double])
 // attractiveness and satisfaction values for each position
 class PositionRel(var a: Array[Double], var s: Array[Double])
 
-case class SessionEstimate(
-  a: (Double, Double), s: (Double, Double),
-  e: Array[(Double, Double)], C: Double,
-  clicks: Array[Double])
-
-
 class DbnModel(gamma: Double, config: Config) {
   val invGamma: Double = 1D - gamma
 
   def train(sessions: Seq[SessionItem]): Array[Array[UrlRel]] = {
     // This is basically a multi-dimensional array with queryId in the first
-    // dimension and urlId in the second dimension. Because queries only reference
-    // a subset of the known urls we use a map at the second level instead of
-    // creating the entire matrix.
+    // dimension and urlId in the second dimension. InputReader guarantees
+    // that queryId starts at 0 and is continuous, and that per-query id urlId
+    // also starts at 0 and is continuous, allowing static sized arrays to be used.
     val urlRelevances: Array[Array[UrlRel]] = (0 to config.maxQueryId).map { queryId =>
       (0 to config.maxUrlIds(queryId)).map { _ => new UrlRel(config.defaultRel, config.defaultRel) }.toArray
     }.toArray
@@ -235,7 +234,7 @@ class DbnModel(gamma: Double, config: Config) {
     urlRelevances
   }
 
-  val positionRelevances = new PositionRel(new Array[Double](config.serpSize), new Array[Double](config.serpSize))
+  val positionRelevances = new PositionRel(new Array[Double](config.maxDocsPerQuery), new Array[Double](config.maxDocsPerQuery))
   // By pre-allocating we only have to fill the maps on the first iteration. After that we avoid
   // allocation and reuse what we already know we need. It's important that the train method reset these
   // to 1D after each iteration.
@@ -255,7 +254,7 @@ class DbnModel(gamma: Double, config: Config) {
       val s = sessions(sidx)
       var i = 0
       val urlRelQuery = urlRelevances(s.queryId)
-      val N = Math.min(config.serpSize, s.urlIds.length)
+      val N = Math.min(config.maxDocsPerQuery, s.urlIds.length)
       while (i < N) {
         val urlRel = urlRelQuery(s.urlIds(i))
         positionRelevances.a(i) = urlRel.a
@@ -267,7 +266,7 @@ class DbnModel(gamma: Double, config: Config) {
       val queryUrlRelFrac = urlRelFractions(s.queryId)
       i = 0
       while (i < N) {
-        var urlId = s.urlIds(i)
+        val urlId = s.urlIds(i)
         // update attraction
         val rel = queryUrlRelFrac(urlId)
         val estA = sessionEstimate.a(i)
@@ -290,12 +289,12 @@ class DbnModel(gamma: Double, config: Config) {
   // arrays at the largest size that might be needed. We must be careful to
   // never calculate based on the length of this, but instead of the lengths
   // of the input.
-  val updateMatrix: Array[Array[Array[Double]]] = Array.ofDim(config.serpSize, 2, 2)
+  val updateMatrix: Array[Array[Array[Double]]] = Array.ofDim(config.maxDocsPerQuery, 2, 2)
   // alpha(i)(e) = P(C_1,...C_{i-1},E_i=e|a_u,s_u,G) calculated forwards for C_1, then C_1,C_2, ...
-  val alpha:Array[Array[Double]] = Array.ofDim(config.serpSize + 1, 2)
+  val alpha:Array[Array[Double]] = Array.ofDim(config.maxDocsPerQuery + 1, 2)
   // beta(i)(e) = P(C_{i+1},...C_N|E_i=e,a_u,s_u,G) calculated backwards for C_10, then C_9, C_10, ...
-  val beta: Array[Array[Double]] = Array.ofDim(config.serpSize + 1, 2)
-  val varphi: Array[Double] = new Array(config.serpSize + 1)
+  val beta: Array[Array[Double]] = Array.ofDim(config.maxDocsPerQuery + 1, 2)
+  val varphi: Array[Double] = new Array(config.maxDocsPerQuery + 1)
 
   /**
     * The forward-backward algorithm is used to to compute the posterior probabilities of the hidden variables.
@@ -361,7 +360,7 @@ class DbnModel(gamma: Double, config: Config) {
     * P(E_{i+1}=1|E_i=0,S_i=1) = 0 (5g)
     */
   def calcForwardBackwardEstimates(rel: PositionRel, clicks: Array[Boolean]): Unit = {
-    val N = Math.min(config.serpSize, clicks.length)
+    val N = Math.min(config.maxDocsPerQuery, clicks.length)
 
     //always 0: alpha(0)(0) = 0D
     alpha(0)(1) = 1D
@@ -410,12 +409,12 @@ class DbnModel(gamma: Double, config: Config) {
     // (alpha, beta)
   }
 
-  var sessionEstimate = new PositionRel(new Array[Double](config.serpSize), new Array[Double](config.serpSize))
+  val sessionEstimate = new PositionRel(new Array[Double](config.maxDocsPerQuery), new Array[Double](config.maxDocsPerQuery))
   // Returns
   //  a: P(A_i|C_i,G) - Probability of attractiveness at position i conditioned on clicked and gamma
   //  s: P(S_i|C_i,G) - Probability of satisfaction at position i conditioned on clicked and gamma
   def getSessionEstimate(rel: PositionRel, clicks: Array[Boolean]): PositionRel = {
-    val N = Math.min(config.serpSize, clicks.length)
+    val N = Math.min(config.maxDocsPerQuery, clicks.length)
 
     // This sets the instance variables alpha/beta
     // alpha(i)(e) is P(C_1,...,C_{k-1},E_i=e|a_u,s_u,G)
@@ -461,4 +460,96 @@ class DbnModel(gamma: Double, config: Config) {
   }
 }
 
+private class DbnHitPage(val hitPageId: Int, val hitPosition: Double, val clicked: Boolean)
 
+/**
+  * Predict relevance of query/page pairs from individual user search sessions.
+  */
+object DBN {
+  // TODO: These should all be configurable? Perhaps
+  // also simplified somehow...
+  private val CLICKED = "clicked"
+  private val HITS = "hits"
+  private val HIT_PAGE_ID = "hit_page_id"
+  private val HIT_POSITION = "hit_position"
+  private val NORM_QUERY_ID = "norm_query_id"
+  private val RELEVANCE = "relevance"
+  private val SESSION_ID = "session_id"
+  private val WIKI_ID = "wikiid"
+
+  /**
+    * Given a sequence of rows representing multiple searches
+    * for a single normalized query from a single session aggregate
+    * hits into their average position and tag if it was clicked or not
+    *
+    * @param sessionHits Sequence of rows representing searches
+    *                    for a single normalized query and session.
+    * @return
+    */
+  private def deduplicateHits(sessionHits: Seq[Row]): (Array[String], Array[Boolean]) = {
+    val deduped = sessionHits.groupBy(_.getAs[Int](HIT_PAGE_ID))
+      .map { case (hitPageId, hits) =>
+        val hitPositions = hits.map(_.getAs[Int](HIT_POSITION))
+        val clicked = hits.exists(_.getAs[Boolean](CLICKED))
+        val avgHitPosition = hitPositions.sum.toDouble / hitPositions.length.toDouble
+        new DbnHitPage(hitPageId, avgHitPosition, clicked)
+      }
+      .toSeq.sortBy(_.hitPosition)
+    val urls = deduped.map(_.hitPageId.toString).toArray
+    val clicked = deduped.map(_.clicked).toArray
+    (urls, clicked)
+  }
+
+  val trainOutputSchema = T.StructType(
+    T.StructField(WIKI_ID, T.StringType) ::
+    T.StructField(NORM_QUERY_ID, T.LongType) ::
+    T.StructField(HIT_PAGE_ID, T.IntegerType) ::
+    T.StructField(RELEVANCE, T.DoubleType) :: Nil)
+
+  def train(df: DataFrame, dbnConfig: Map[String, String]): DataFrame = {
+    val minDocsPerQuery = dbnConfig.getOrElse("MIN_DOCS_PER_QUERY", "10").toInt
+    val maxDocsPerQuery = dbnConfig.getOrElse("MAX_DOCS_PER_QUERY", "10").toInt
+    val defaultRel = dbnConfig.getOrElse("DEFAULT_REL", "0.9").toFloat
+    val maxIterations = dbnConfig.getOrElse("MAX_ITERATIONS", "40").toInt
+    val gamma = dbnConfig.getOrElse("GAMMA", "0.9").toFloat
+
+    val dfGrouped = df
+      // norm query id comes from monotonicallyIncreasingId, and as such is 64bit
+      .withColumn(NORM_QUERY_ID, F.col(NORM_QUERY_ID).cast(T.LongType))
+      .withColumn(HIT_PAGE_ID, F.col(HIT_PAGE_ID).cast(T.IntegerType))
+      .withColumn(HIT_POSITION, F.col(HIT_POSITION).cast(T.IntegerType))
+      .groupBy(WIKI_ID, NORM_QUERY_ID, SESSION_ID)
+      .agg(F.collect_list(F.struct(HIT_POSITION, HIT_PAGE_ID, CLICKED)).alias(HITS))
+      .repartition(F.col(WIKI_ID), F.col(NORM_QUERY_ID))
+
+    val hitsIndex = dfGrouped.schema.fieldIndex(HITS)
+    val normQueryIndex = dfGrouped.schema.fieldIndex(NORM_QUERY_ID)
+    val wikiidIndex = dfGrouped.schema.fieldIndex(WIKI_ID)
+
+    val rdd: RDD[Row] = dfGrouped
+      .rdd.mapPartitions { rows: Iterator[Row] =>
+        val reader = new InputReader(minDocsPerQuery, maxDocsPerQuery, discardNoClicks = true)
+        val items = rows.flatMap { row =>
+          // Sorts lowest to highest
+          val (urls, clicked) = deduplicateHits(row.getSeq[Row](hitsIndex))
+          val query = row.getLong(normQueryIndex).toString
+          val region = row.getString(wikiidIndex)
+          reader.makeSessionItem(query, region, urls, clicked)
+        }.toSeq
+        if (items.isEmpty) {
+          Iterator()
+        } else {
+          // When we get a lazy seq from the iterator ensure its materialized
+          // before creating config with the mutable state.
+          items.length
+          val config = reader.config(defaultRel, maxIterations)
+          val model = new DbnModel(gamma, config)
+          reader.toRelevances(model.train(items)).map { rel =>
+            new GenericRowWithSchema(Array(rel.region, rel.query.toLong, rel.url.toInt, rel.relevance), trainOutputSchema)
+          }.toIterator
+        }
+      }
+
+    df.sqlContext.createDataFrame(rdd, trainOutputSchema)
+  }
+}

@@ -1,11 +1,12 @@
 package org.wikimedia.search.mjolnir
 
-import org.scalatest.FunSuite
+import org.apache.spark.sql.{Row, types => T}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
 
 import scala.io.Source
 import scala.util.Random
 
-class DBNSuite extends FunSuite {
+class DBNSuite extends SharedSparkContext {
   test("create session items") {
     val ir = new InputReader(1, 20, true)
     val item = ir.makeSessionItem(
@@ -206,5 +207,63 @@ class DBNSuite extends FunSuite {
     //  writer.write(s"0\t${s.queryId}\tregion\t0\t$urls\t$layout\t$clicks\n")
     //}
     //writer.close()
+  }
+
+  private val nextSessionId: () => String = {
+    var current: Int = 0;
+    { () =>
+      current += 1
+      current.toString
+    }
+  }
+
+  private def makeSession(nHits: Integer): Seq[(Row, (Long, Int))] = {
+    val sessionId = nextSessionId()
+    val nQueries = Random.nextInt(2) + 1
+    (0 until nQueries).flatMap { _ =>
+      val normQueryId = Math.abs(Random.nextLong() % 10)
+      (0 until nHits).map { k =>
+        val pageId = Random.nextInt(100)
+        // Guarantee sessions all have at least one click
+        val clicked = if (k == 0) true else Random.nextFloat() * (k + 1) < 0.5
+        val row = new GenericRow(Array(
+          "testwiki", normQueryId, sessionId, k, pageId, clicked
+        ))
+        val pair = (normQueryId, pageId)
+        (row, pair)
+      }
+    }
+  }
+
+  private val schema = T.StructType(
+    T.StructField("wikiid", T.StringType) ::
+    T.StructField("norm_query_id", T.LongType) ::
+    T.StructField("session_id", T.StringType) ::
+    T.StructField("hit_position", T.IntegerType) ::
+    T.StructField("hit_page_id", T.IntegerType) ::
+    T.StructField("clicked", T.BooleanType) ::
+    Nil)
+
+  test("train from a dataframe should not fail on simple query") {
+    val (rows, _) = (makeSession(20) ++ makeSession(20)).unzip
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
+    DBN.train(df, Map()).collect()
+  }
+
+  test("empty partitions should not fail") {
+    val rows: Seq[Row] = Seq()
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
+    DBN.train(df, Map()).collect()
+  }
+
+  test("multiple observations of the same wiki+query+page id should only be returned once") {
+    val (oneSessionRows, pairs) = makeSession(20).unzip
+    val rows = (0 to 5).flatMap { _ => oneSessionRows }
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Random.shuffle(rows), 42), schema)
+    val res = DBN.train(df, Map(
+      "MAX_DOCS_PER_QUERY" -> "20"
+    )).collect()
+    val expected = pairs.groupBy(_._1).map { x => Math.min(x._2.toSet.size, 20) }.sum
+    assert(res.length == expected)
   }
 }
