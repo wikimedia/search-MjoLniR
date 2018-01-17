@@ -4,6 +4,7 @@ import mjolnir.spark
 import mjolnir.training.hyperopt
 from mjolnir.training.tuning import make_cv_objective, ModelSelection
 import numpy as np
+import py4j
 import pyspark
 import pyspark.sql
 from pyspark.sql import functions as F
@@ -114,6 +115,8 @@ def train(fold, params, train_matrix=None):
     # ints, so this gets all the types right for Java. Also makes
     # a copy of params so we don't modifying the incoming dict.
     params = _coerce_params(params)
+    # Histogram doesn't work with distributed training
+    params['tree_method'] = 'hist' if len(fold) == 1 else 'approx'
     # TODO: Maybe num_rounds should just be external? But it's easier
     # to do hyperparameter optimization with a consistent dict interface
     kwargs = {
@@ -158,7 +161,10 @@ class XGBoostSummary(object):
 class XGBoostModel(object):
     def __init__(self, j_xgb_model):
         self._j_xgb_model = j_xgb_model
-        self.summary = XGBoostSummary(self._j_xgb_model.summary())
+        try:
+            self.summary = XGBoostSummary(self._j_xgb_model.summary())
+        except py4j.protocol.Py4JJavaError:
+            self.summary = None
 
     @staticmethod
     def trainWithFiles(fold, train_matrix, params, num_rounds=100,
@@ -289,9 +295,6 @@ class XGBoostModel(object):
             df_grouped._jdf, feature_col, label_col)
         score = self._j_xgb_model.eval(j_rdd, 'test', None, 0, False, j_groups)
         return float(score.split('=')[1].strip())
-
-    def summary(self):
-        return XGBoostSummary(self._j_xgb_model.summary())
 
     def saveModelAsHadoopFile(self, sc, path):
         j_sc = sc._jvm.org.apache.spark.api.java.JavaSparkContext.toSparkContext(sc._jsc)

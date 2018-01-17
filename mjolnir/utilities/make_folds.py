@@ -64,7 +64,7 @@ def write_wiki_folds(sc, df, num_workers, fold_col, path_format, features):
                     write_xgb(local_input, local_output.name)
 
     # Write out as text files from scala, much faster than shuffling to python
-    writer = sc._jvm.org.wikimedia.search.mjolnir.DataWriter(sc._jsc)
+    writer = sc._jvm.org.wikimedia.search.mjolnir.DataWriter(sc._jsc, False)
     j_paths = writer.write(df._jdf, num_workers, path_format, fold_col)
 
     # Convert everything to python objects

@@ -28,7 +28,7 @@ class DataWriter(
 ) extends Serializable {
 
   // Accepting JavaSparkContext for py4j compatability
-  def this(sc: JavaSparkContext) = this(sc.broadcast(new SerializableConfiguration(sc.hadoopConfiguration)))
+  def this(sc: JavaSparkContext, sparse: Boolean) = this(sc.broadcast(new SerializableConfiguration(sc.hadoopConfiguration)), sparse)
 
   private def asHDFSPath(path: String): HDFSPath = if (path.charAt(0) == '/') {
     new HDFSPath(s"file://$path")
