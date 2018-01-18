@@ -2,6 +2,7 @@
 
 set -e
 
+apt update
 apt install -q -y software-properties-common
 # Confluent is needed for installing kafka, which requires zookeeper and some other stuff
 # This intentionally uses an older version to get kafka 0.9, to match production
