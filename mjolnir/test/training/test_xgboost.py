@@ -106,7 +106,7 @@ def test_train_minimum_params(df_train, folds_a):
     # What else can we practically assert?
     df_transformed = model.transform(df_train)
     assert 'prediction' in df_transformed.columns
-    assert 0.74 == pytest.approx(model.eval(df_train), abs=0.01)
+    assert 0.59 == pytest.approx(model.eval(df_train), abs=0.01)
 
     # make sure train didn't clobber the incoming params
     assert params['num_rounds'] == 1

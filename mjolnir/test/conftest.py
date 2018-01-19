@@ -72,7 +72,8 @@ def spark_context(request):
         .set('spark.jars.packages', ','.join([
             'ml.dmlc:xgboost4j-spark:0.8-wmf-1',
             'org.wikimedia.search:mjolnir:0.4-SNAPSHOT',
-            'org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0']))
+            'org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0',
+            'org.wikimedia.analytics.refinery.hive:refinery-hive:0.0.57']))
         # By default spark will shuffle to 200 partitions, which is
         # way too many for our small test cases. This cuts execution
         # time of the tests in half.

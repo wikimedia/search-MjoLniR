@@ -22,18 +22,19 @@ import mjolnir.sampling
 from pyspark import SparkContext
 from pyspark.sql import HiveContext
 from pyspark.sql import functions as F
+import requests
 
 SEARCH_CLUSTERS = {
     'eqiad': ['http://elastic%d.eqiad.wmnet:9200' % (i) for i in range(1017, 1052)],
     'codfw': ['http://elastic%d.codfw.wmnet:9200' % (i) for i in range(2001, 2035)],
+    'localhost': ['http://localhost:9200'],
 }
 
 
 def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
                  min_sessions_per_query, search_cluster, brokers, ltr_feature_definitions,
-                 samples_size_tolerance):
-    # TODO: Should this jar have to be provided on the command line instead?
-    sqlContext.sql("ADD JAR /mnt/hdfs/wmf/refinery/current/artifacts/refinery-hive.jar")
+                 samples_size_tolerance, session_factory=requests.Session):
+    sqlContext.sql("DROP TEMPORARY FUNCTION IF EXISTS stemmer")
     sqlContext.sql("CREATE TEMPORARY FUNCTION stemmer AS 'org.wikimedia.analytics.refinery.hive.StemmerUDF'")
 
     # Load click data from HDFS
@@ -61,7 +62,8 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
         # TODO: While this works for now, at some point we might want to handle
         # things like multimedia search from commons, and non-main namespace searches.
         indices={wiki: '%s_content' % (wiki) for wiki in wikis},
-        min_sessions_per_query=min_sessions_per_query)
+        min_sessions_per_query=min_sessions_per_query,
+        session_factory=session_factory)
 
     # Sample to some subset of queries per wiki
     hit_page_id_counts, df_sampled_raw = mjolnir.sampling.sample(
@@ -157,7 +159,8 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
                 # things like multimedia search from commons, and non-main namespace searches.
                 indices={wiki: '%s_content' % (wiki) for wiki in wikis},
                 model=ltr_feature_definitions,
-                feature_names_accu=fnames_accu)
+                feature_names_accu=fnames_accu,
+                session_factory=session_factory)
     else:
         if brokers:
             df_features = mjolnir.features.collect_kafka(
@@ -178,7 +181,7 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
                 # to vary per-wiki. Varied features per wiki would also mean they can't be trained
                 # together, which is perhaps a good thing anyways.
                 feature_definitions=mjolnir.features.enwiki_features(),
-                feature_names_accu=fnames_accu)
+                feature_names_accu=fnames_accu, session_factory=session_factory)
 
     # collect the accumulator
     df_features.cache().count()

@@ -59,7 +59,10 @@ def prep_training(df, num_partitions=None):
         # the pipeline so various tasks can accept a single column to work with.
         df.select('label', 'features', F.concat('wikiid', 'query').alias('queryId'))
         .repartition(num_partitions, 'queryId')
-        .sortWithinPartitions('queryId')
+        # xgboost ndcg isn't stable if labels of matching predictions are in
+        # different input orders so sort by label too. Sorting labels
+        # ascending is the less generous option, where the worst label comes first.
+        .sortWithinPartitions('wikiid', 'query', F.col('label').asc())
         .cache())
 
     j_groups = df._sc._jvm.org.wikimedia.search.mjolnir.PythonUtils.calcQueryGroups(
@@ -324,7 +327,7 @@ def cv_transformer(model, params):
     }
 
 
-def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final_num_trees=500):
+def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final_num_trees=500, iterations=150):
     """Find appropriate hyperparameters for training df
 
     This is far from perfect, hyperparameter tuning is a bit of a black art
@@ -373,13 +376,15 @@ def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final
         dataset_size = 'large'
     elif num_obs > 500000:
         dataset_size = 'med'
-    else:
+    elif num_obs > 500:
         dataset_size = 'small'
+    else:
+        dataset_size = 'xsmall'
 
     # Setup different tuning profiles for different sizes of datasets.
     tune_spaces = [
         ('initial', {
-            'iterations': 150,
+            'iterations': iterations,
             'space': {
                 'xlarge': {
                     'eta': hyperopt.hp.uniform('eta', 0.3, 0.8),
@@ -390,6 +395,7 @@ def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final
                         'min_child_weight', np.log(10), np.log(500), 10),
                     # % of features to use for each tree. helps prevent overfit
                     'colsample_bytree': hyperopt.hp.quniform('colsample_bytree', 0.8, 1, .01),
+                    'subsample': hyperopt.hp.quniform('subsample', 0.8, 1, .01),
                 },
                 'large': {
                     'eta': hyperopt.hp.uniform('eta', 0.3, 0.6),
@@ -397,6 +403,7 @@ def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final
                     'min_child_weight': hyperopt.hp.qloguniform(
                         'min_child_weight', np.log(10), np.log(300), 10),
                     'colsample_bytree': hyperopt.hp.quniform('colsample_bytree', 0.8, 1, .01),
+                    'subsample': hyperopt.hp.quniform('subsample', 0.8, 1, .01),
                 },
                 'med': {
                     'eta': hyperopt.hp.uniform('eta', 0.1, 0.6),
@@ -404,6 +411,7 @@ def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final
                     'min_child_weight': hyperopt.hp.qloguniform(
                         'min_child_weight', np.log(10), np.log(300), 10),
                     'colsample_bytree': hyperopt.hp.quniform('colsample_bytree', 0.8, 1, .01),
+                    'subsample': hyperopt.hp.quniform('subsample', 0.8, 1, .01),
                 },
                 'small': {
                     'eta': hyperopt.hp.uniform('eta', 0.1, 0.4),
@@ -411,6 +419,15 @@ def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final
                     'min_child_weight': hyperopt.hp.qloguniform(
                         'min_child_weight', np.log(10), np.log(100), 10),
                     'colsample_bytree': hyperopt.hp.quniform('colsample_bytree', 0.8, 1, .01),
+                    'subsample': hyperopt.hp.quniform('subsample', 0.8, 1, .01),
+                },
+                'xsmall': {
+                    'eta': hyperopt.hp.uniform('eta', 0.1, 0.4),
+                    'max_depth': hyperopt.hp.quniform('max_depth', 3, 6, 1),
+                    # Never use for real data, but convenient for tiny sets in test suite
+                    'min_child_weight': 0,
+                    'colsample_bytree': hyperopt.hp.quniform('colsample_bytree', 0.8, 1, .01),
+                    'subsample': hyperopt.hp.quniform('subsample', 0.8, 1, .01),
                 }
             }[dataset_size]
         })
@@ -439,6 +456,7 @@ def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final
             'large': 6,
             'med': 5,
             'small': 4,
+            'xsmall': 3,
         }[dataset_size],
         'gamma': 0,
         'subsample': 1.0,

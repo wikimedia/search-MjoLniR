@@ -24,7 +24,10 @@ from pyspark.sql import HiveContext
 import sys
 
 
-def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees, final_num_trees, num_cv_jobs):
+def run_pipeline(
+    sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees,
+    final_num_trees, num_cv_jobs, iterations
+):
     with hdfs_open_read(os.path.join(input_dir, 'stats.json')) as f:
         stats = json.loads(f.read())
 
@@ -68,7 +71,8 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, initial_num_trees
             num_cv_jobs=num_cv_jobs,
             train_matrix="train",
             initial_num_trees=initial_num_trees,
-            final_num_trees=final_num_trees)
+            final_num_trees=final_num_trees,
+            iterations=iterations)
 
         print 'CV  test-ndcg@10: %.4f' % (tune_results['metrics']['cv-test'])
         print 'CV train-ndcg@10: %.4f' % (tune_results['metrics']['cv-train'])
@@ -142,6 +146,9 @@ def parse_arguments(argv):
         '--final-trees', dest='final_num_trees', default=None, type=int,
         help='Number of trees in the final ensemble. If not provided the value from '
              + '--initial-trees will be used.  (Default: None)')
+    parser.add_argument(
+        '-t', '--iterations', dest='iterations', default=150, type=int,
+        help='The number of hyperparameter tuning iterations to perform')
     parser.add_argument(
         '-v', '--verbose', dest='verbose', default=False, action='store_true',
         help='Increase logging to INFO')

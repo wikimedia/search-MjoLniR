@@ -131,7 +131,7 @@ def make_folds(sc, sqlContext, input_dir, output_dir, wikis, zero_features, num_
     df_fold = (
         mjolnir.training.tuning.group_k_fold(df, num_folds)
         .repartition(200, 'wikiid', 'query')
-        .sortWithinPartitions('wikiid', 'query'))
+        .sortWithinPartitions('wikiid', 'query', F.col('label').asc()))
 
     try:
         df_fold.cache()
