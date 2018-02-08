@@ -45,6 +45,8 @@ global:
         # to group together. Setting this too high on low volume wikis will
         # result in little to no training data.
         min_sessions_per_query: 10
+        # Name of LTR feature set to collect features from
+        feature_definitions: featureset:enwiki_v1
     # Files that must exist to run
     paths:
         dir_exist: !!set
@@ -96,6 +98,7 @@ global:
                 samples-per-wiki: 35000000
                 search-cluster: codfw
                 min-sessions: "%(min_sessions_per_query)s"
+                feature-definitions: "%(feature_definitions)s"
         make_folds:
             spark_command: "%(SPARK_HOME)s/bin/spark-submit"
             mjolnir_utility_path: "%(mjolnir_utility_path)s"

@@ -13,6 +13,7 @@ To run:
 from __future__ import absolute_import
 import argparse
 from collections import OrderedDict
+import datetime
 import logging
 import mjolnir.dbn
 import mjolnir.metrics
@@ -140,48 +141,18 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     ndcgAt10 = mjolnir.metrics.ndcg(df_hits, 10, query_cols=['wikiid', 'query'])
     print 'unweighted ndcg@10: %.4f' % (ndcgAt10)
 
-    # Collect features for all known queries. Note that this intentionally
-    # uses query and NOT norm_query_id. Merge those back into the source hits.
+    # Collect features for all known query, hit_page_id combinations.
     fnames_accu = df_hits._sc.accumulator(OrderedDict(), mjolnir.features.FeatureNamesAccumulator())
-    if ltr_feature_definitions:
-        if brokers:
-            df_features = mjolnir.features.collect_from_ltr_plugin_and_kafka(
-                df_hits,
-                brokers=brokers,
-                indices={wiki: '%s_content' % (wiki) for wiki in wikis},
-                model=ltr_feature_definitions,
-                feature_names_accu=fnames_accu)
-        else:
-            df_features = mjolnir.features.collect_from_ltr_plugin(
-                df_hits,
-                url_list=SEARCH_CLUSTERS[search_cluster],
-                # TODO: While this works for now, at some point we might want to handle
-                # things like multimedia search from commons, and non-main namespace searches.
-                indices={wiki: '%s_content' % (wiki) for wiki in wikis},
-                model=ltr_feature_definitions,
-                feature_names_accu=fnames_accu,
-                session_factory=session_factory)
-    else:
-        if brokers:
-            df_features = mjolnir.features.collect_kafka(
-                df_hits,
-                brokers=brokers,
-                indices={wiki: '%s_content' % (wiki) for wiki in wikis},
-                feature_definitions=mjolnir.features.enwiki_features(),
-                feature_names_accu=fnames_accu)
-        else:
-            df_features = mjolnir.features.collect_es(
-                df_hits,
-                url_list=SEARCH_CLUSTERS[search_cluster],
-                # TODO: While this works for now, at some point we might want to handle
-                # things like multimedia search from commons, and non-main namespace searches.
-                indices={wiki: '%s_content' % (wiki) for wiki in wikis},
-                # TODO: If we are going to do multiple wikis, this probably needs different features
-                # per wiki? At a minimum trying to include useful templates as features will need
-                # to vary per-wiki. Varied features per wiki would also mean they can't be trained
-                # together, which is perhaps a good thing anyways.
-                feature_definitions=mjolnir.features.enwiki_features(),
-                feature_names_accu=fnames_accu, session_factory=session_factory)
+    df_features = mjolnir.features.collect(
+        df_hits,
+        # Only used if brokers is None, otherwise the remote kafka consumer decides what
+        # servers to talk to.
+        url_list=SEARCH_CLUSTERS[search_cluster],
+        model=ltr_feature_definitions,
+        feature_names_accu=fnames_accu,
+        brokers=brokers,
+        indices={wiki: '%s_content' % (wiki) for wiki in wikis},
+        session_factory=session_factory)
 
     # collect the accumulator
     df_features.cache().count()
@@ -194,15 +165,24 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     # of request sent
 
     features = fnames_accu.value.keys()
-    df_features = df_features.withColumn('features', mjolnir.spark.add_meta(df_features._sc, F.col('features'), {
-            'features': features
-        }))
     df_hits_with_features = (
         df_hits
         .join(df_features, how='inner', on=['wikiid', 'query', 'hit_page_id'])
         .withColumn('label', mjolnir.spark.add_meta(sc, F.col('label'), {
             'weightedNdcgAt10': weightedNdcgAt10,
             'ndcgAt10': ndcgAt10,
+        }))
+        .withColumn('features', mjolnir.spark.add_meta(sc, F.col('features'), {
+            'features': features,
+            'feature_definitions': ltr_feature_definitions,
+            'collected_at': datetime.datetime.now().isoformat(),
+            'used_kafka': brokers is not None,
+            'search_cluster': search_cluster,
+            # TODO: Where does this metadata go? It seems a bit more top-level
+            # but could be useful to remember.
+            'min_sessions_per_query': min_sessions_per_query,
+            'input_dir': input_dir,
+            'output_dir': output_dir,
         })))
 
     df_hits_with_features.write.parquet(output_dir)
@@ -242,7 +222,7 @@ def parse_arguments(argv):
         '-vv', '--very-verbose', dest='very_verbose', default=False, action='store_true',
         help='Increase logging to DEBUG')
     parser.add_argument(
-        '-f', '--feature-definitions', dest='ltr_feature_definitions', type=str, required=False,
+        '-f', '--feature-definitions', dest='ltr_feature_definitions', type=str, required=True,
         help='Name of the LTR plugin feature definitions (featureset:name[@store] or '
              + 'model:name[@store])')
     parser.add_argument(

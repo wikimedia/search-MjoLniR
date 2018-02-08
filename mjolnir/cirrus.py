@@ -71,7 +71,7 @@ def check_idle(url_list, session_factory=requests.Session):
             except:  # noqa: E722
                 failed.append(parsed.netloc)
                 #  Host depooled/unavailable? No big deal check another.
-                pass
+                continue
             if busy_nodes / float(num_nodes) > .1:
                 raise Exception('Refusing to use cluster containing %s: %d nodes with > 10 percent cpu usage'
                                 % (parsed.netloc, busy_nodes))

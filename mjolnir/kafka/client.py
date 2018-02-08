@@ -19,7 +19,7 @@ def _make_producer(brokers):
                                api_version=mjolnir.kafka.BROKER_VERSION)
 
 
-def produce_queries(df, brokers, run_id, create_bulk_query, topic=mjolnir.kafka.TOPIC_REQUEST):
+def produce_queries(df, brokers, run_id, create_es_query, topic=mjolnir.kafka.TOPIC_REQUEST):
     """Push feature collection queries into kafka.
 
     Write out the feature requests as elasticsearch multi-search queries to kafka.
@@ -34,9 +34,9 @@ def produce_queries(df, brokers, run_id, create_bulk_query, topic=mjolnir.kafka.
         List of kafka brokers used to bootstrap access into the kafka cluster.
     run_id : str
         A unique identifier for this data collection run
-    create_bulk_query : callable
+    create_es_query : callable
         Function accepting a row from df that returns a string
-        containing an elasticsearch multi-search query.
+        containing an elasticsearch query.
     topic : str, optional
         The topic to produce queries to
 
@@ -51,7 +51,7 @@ def produce_queries(df, brokers, run_id, create_bulk_query, topic=mjolnir.kafka.
         for row in rows:
             producer.send(topic, json.dumps({
                 'run_id': run_id,
-                'request': create_bulk_query(row),
+                'request': create_es_query(row),
                 'wikiid': row.wikiid,
                 'query': row.query,
             }))
