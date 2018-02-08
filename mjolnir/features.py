@@ -1,5 +1,5 @@
 """
-Integration for collecting feature vectors from elasticsearch
+Integration for collecting feature vectors from elasticsearch ltr plugin
 """
 
 from __future__ import absolute_import
@@ -9,49 +9,13 @@ import json
 import mjolnir.cirrus
 import mjolnir.kafka.client
 import mjolnir.spark
+import mjolnir.utils
 import os
 from pyspark.accumulators import AccumulatorParam
 from pyspark.ml.linalg import Vectors
 from pyspark.sql import functions as F
 import random
-import re
 import requests
-
-
-def _wrap_with_page_ids(hit_page_ids, should):
-    """Wrap an elasticsearch query with an ids filter.
-
-    Parameters
-    ----------
-    hit_page_ids : list of ints
-        Set of page ids to collect features for
-    should : dict or list of dict
-        Elasticsearch query for a single feature
-
-    Returns
-    -------
-    string
-        JSON encoded elasticsearch query
-    """
-    assert len(hit_page_ids) < 10000
-    if not isinstance(should, list):
-        should = [should]
-    return json.dumps({
-        "_source": False,
-        "from": 0,
-        "size": 9999,
-        "query": {
-            "bool": {
-                "filter": {
-                    'ids': {
-                        'values': map(str, set(hit_page_ids)),
-                    }
-                },
-                "should": should,
-                "disable_coord": True,
-            }
-        }
-    })
 
 
 class LtrLoggingQuery(object):
@@ -259,26 +223,6 @@ def _handle_response(response, feature_names, feature_names_accu):
     return features.items()
 
 
-def _explode_ltr_model_definition(definition):
-    """
-    Parse a string describing a ltr featureset or model
-    (featureset|model):name[@storename]
-
-    Parameters
-    ----------
-    definition: string
-        the model/featureset definition
-
-    Returns
-    -------
-        list: 3 elements list: type, name, store
-    """
-    res = re.search('(featureset|model)+:([^@]+)(?:[@](.+))?$', definition)
-    if res is None:
-        raise ValueError("Cannot parse ltr model definition [%s]." % (definition))
-    return res.groups()
-
-
 def collect_from_ltr_plugin(df, url_list, model, feature_names_accu, indices=None, session_factory=requests.Session):
     """Collect feature vectors from elasticsearch and the ltr plugin
 
@@ -314,7 +258,7 @@ def collect_from_ltr_plugin(df, url_list, model, feature_names_accu, indices=Non
     if indices is None:
         indices = {}
 
-    eltType, name, store = _explode_ltr_model_definition(model)
+    eltType, name, store = mjolnir.utils.explode_ltr_model_definition(model)
 
     def collect_partition(rows):
         """Generate a function that will collect feature vectors for each partition.
@@ -371,7 +315,7 @@ def collect_from_ltr_plugin_and_kafka(df, brokers, model, feature_names_accu, in
     mjolnir.spark.assert_columns(df, ['wikiid', 'query', 'hit_page_id'])
     if indices is None:
         indices = {}
-    eltType, name, store = _explode_ltr_model_definition(model)
+    eltType, name, store = mjolnir.utils.explode_ltr_model_definition(model)
     log_query = LtrLoggingQuery(eltType, name, store)
 
     def kafka_handle_response(record):
@@ -408,8 +352,43 @@ def collect_from_ltr_plugin_and_kafka(df, brokers, model, feature_names_accu, in
         .drop_duplicates(['wikiid', 'query', 'hit_page_id']))
 
 
-def collect(df, url_list, model, feature_names_accu, brokers=None, indices=None, session_factory=requests.Session):
-    if brokers is None:
-        return collect_from_ltr_plugin(df, url_list, model, feature_names_accu, indices, session_factory)
+def collect(df, model, url_list=None, brokers=None, indices=None, session_factory=requests.Session):
+    """Collect feature values from elasticsearch
+
+    Parameters
+    ----------
+    df : pyspark.sql.DataFrame
+        Input data. Must have wikiid, query and hit_page_id columns
+    model : str
+        Feature set definition. (featureset|model):name[@storename]
+    url_list : list of str, optional
+        List of http urls to elasticsearch servers to query directly
+        from executors.
+    brokers : list of str, optional
+        List of kafka broker strings to use instead of a direct connection
+        for feature collection.
+    indices : map str -> str, optional
+        Map from wikiid to index to collect features from.
+    session_factory : requests.Session
+
+    Returns
+    -------
+    df_features : pyspark.sql.DataFrame
+        Dataframe with wikiid, query, hit_page_id and features columns.
+        The new features column is a pyspark.ml.linalg.Vector
+    feature_names_accu : pyspark.Accumulator
+        Collects ordered dict of feature names to usage counts. Can be
+        used to ensure all the features were collected the same number
+        of times, as expected.
+    """
+    if brokers and url_list:
+        raise ValueError('cannot specify brokers and url_list')
+    feature_names_accu = df._sc.accumulator(OrderedDict(), FeatureNamesAccumulator())
+    if brokers:
+        df_res = collect_from_ltr_plugin_and_kafka(df, brokers, model, feature_names_accu, indices)
+    elif url_list:
+        df_res = collect_from_ltr_plugin(df, url_list, model, feature_names_accu, indices, session_factory)
     else:
-        return collect_from_ltr_plugin_and_kafka(df, brokers, model, feature_names_accu, indices)
+        raise ValueError('Unknown collection method')
+
+    return df_res, feature_names_accu

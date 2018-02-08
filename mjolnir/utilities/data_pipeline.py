@@ -12,7 +12,6 @@ To run:
 
 from __future__ import absolute_import
 import argparse
-from collections import OrderedDict
 import datetime
 import logging
 import mjolnir.dbn
@@ -142,14 +141,10 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     print 'unweighted ndcg@10: %.4f' % (ndcgAt10)
 
     # Collect features for all known query, hit_page_id combinations.
-    fnames_accu = df_hits._sc.accumulator(OrderedDict(), mjolnir.features.FeatureNamesAccumulator())
-    df_features = mjolnir.features.collect(
+    df_features, fnames_accu = mjolnir.features.collect(
         df_hits,
-        # Only used if brokers is None, otherwise the remote kafka consumer decides what
-        # servers to talk to.
-        url_list=SEARCH_CLUSTERS[search_cluster],
+        url_list=SEARCH_CLUSTERS[search_cluster] if brokers is None else None,
         model=ltr_feature_definitions,
-        feature_names_accu=fnames_accu,
         brokers=brokers,
         indices={wiki: '%s_content' % (wiki) for wiki in wikis},
         session_factory=session_factory)

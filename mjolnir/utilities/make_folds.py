@@ -2,7 +2,7 @@
 Using the outputs of data_pipeline.py split our training data
 into multiple folds with a test/train split for each. Save these
 splits, to hdfs if requested, in the appropriate training algorithm
-binary format.
+binary format. Additionally generates some statistics on the dataset.
 """
 from __future__ import absolute_import
 import argparse
@@ -14,6 +14,7 @@ import mjolnir.training.tuning
 from mjolnir.utils import as_local_paths, as_output_file, as_output_files, \
                           hdfs_mkdir, hdfs_unlink
 import os
+import sys
 from pyspark import SparkContext
 from pyspark.sql import functions as F, HiveContext
 import xgboost
@@ -31,13 +32,15 @@ def summarize_training_df(df, data_size):
 
 
 def make_df_stats(df, data_size):
-    return {
+    metadata = dict(df.schema['features'].metadata)
+    metadata.update(df.schema['label'].metadata)
+    metadata.update({
         'num_observations': data_size,
         'num_queries': df.select('query').drop_duplicates().count(),
         'num_norm_queries': df.select('norm_query_id').drop_duplicates().count(),
-        'features': df.schema['features'].metadata['features'],
         'summary': summarize_training_df(df, data_size),
-    }
+    })
+    return metadata
 
 
 def write_xgb(in_path, out_path):
@@ -54,6 +57,11 @@ def write_xgb(in_path, out_path):
 
 
 def write_wiki_folds(sc, df, num_workers, fold_col, path_format, features):
+    # Trying to track down a problem with Rabit killing tests
+    # in CI.
+    if "pytest" in sys.modules:
+        assert num_workers == 1
+
     def write_binaries(rows):
         # row is dict from split name (train/test) to path data can be found
         for pair in rows:

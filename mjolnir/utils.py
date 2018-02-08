@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 import contextlib
 import os
+import re
 import subprocess
 import tempfile
 import urlparse
@@ -111,3 +112,23 @@ def hdfs_open_read(path):
         path = os.path.join('/mnt/hdfs', parts.path[1:])
     with open(path, 'r') as f:
         yield f
+
+
+def explode_ltr_model_definition(definition):
+    """
+    Parse a string describing a ltr featureset or model
+    (featureset|model):name[@storename]
+
+    Parameters
+    ----------
+    definition: string
+        the model/featureset definition
+
+    Returns
+    -------
+        list: 3 elements list: type, name, store
+    """
+    res = re.search('(featureset|model)+:([^@]+)(?:[@](.+))?$', definition)
+    if res is None:
+        raise ValueError("Cannot parse ltr model definition [%s]." % (definition))
+    return res.groups()
