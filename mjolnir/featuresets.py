@@ -4,6 +4,17 @@ Helpers for defining an LTR featureset
 
 from __future__ import absolute_import
 
+import mjolnir.esltr
+
+
+def make_feature_def(query, params):
+    return {
+        'name': query.name,
+        'params': params.keys(),
+        'template_language': 'mustache',
+        'template': query.make_query(params['query_string'])
+    }
+
 
 class ScriptFeature(object):
     """
@@ -167,3 +178,25 @@ def enwiki_features():
                       "pow(doc['incoming_links'].value , 0.7) / " +
                       "( pow(doc['incoming_links'].value, 0.7) + pow(30,0.7))"),
     ]
+
+
+def create_feature_set(name, features, store_name=None, index=None):
+    ltr = mjolnir.esltr.Ltr()
+    feature_store = ltr.get_feature_store(store_name)
+    if not feature_store.exists():
+        feature_store.create()
+    feature_set = feature_store.get_feature_set(name)
+    if feature_set.exists():
+        raise Exception("Feature set already exists")
+    if index:
+        feature_set.validation = {
+            "index": index,
+            "params": {
+                "query_string": 'yabba dabba doo',
+            },
+        }
+
+    params = {'query_stirng': '{{query_string}}'}
+    built = [make_feature_def(f, params) for f in features]
+    feature_set.add_features(built)
+    return feature_set
