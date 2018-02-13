@@ -292,7 +292,7 @@ class XGBoostModel(object):
             df_grouped = df_test
 
         j_rdd = df_test._sc._jvm.org.wikimedia.search.mjolnir.PythonUtils.toLabeledPoints(
-            df_grouped._jdf, feature_col, label_col)
+            df_grouped._jdf, feature_col, label_col, True)
         score = self._j_xgb_model.eval(j_rdd, 'test', None, 0, False, j_groups)
         return float(score.split('=')[1].strip())
 

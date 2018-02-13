@@ -1,7 +1,7 @@
 package org.wikimedia.search.mjolnir
 
 import org.apache.spark.ml.feature.{LabeledPoint => MLLabeledPoint}
-import org.apache.spark.ml.linalg.{Vector => MLVector}
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vectors, Vector => MLVector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{Dataset, Row}
@@ -13,6 +13,11 @@ import scala.collection.mutable.ListBuffer
   * pyspark.
   */
 object PythonUtils {
+  private def shiftVector(vec: MLVector): MLVector = vec match {
+    case y: DenseVector => Vectors.dense(Array(0D) ++ y.toArray)
+    case y: SparseVector => Vectors.sparse(y.size + 1, y.indices.map(_ + 1), y.values)
+  }
+
   /**
    * There is no access to LabeledPoint from pyspark, but various methods such as
    * trainWithRDD and eval require an RDD[MLLabeledPoint]. This offers a bridge to
@@ -21,13 +26,23 @@ object PythonUtils {
    * @param ds Input dataframe containing features and label
    * @param featureCol Name of the column containing feature vectors
    * @param labelCol Name of the column containing numeric labels
+   * @param shiftRight Shift all features to index + 1. This is a disapointing hack,
+   *                  but due to the way data files are created feature indices start
+   *                  at 1 and the 0 feature is empty. This allows to shift to match
+   *                  when evaluating a dataframe againts a model trained that way.
    */
-  def toLabeledPoints(ds: Dataset[_], featureCol: String, labelCol: String): RDD[MLLabeledPoint] = {
+  def toLabeledPoints(ds: Dataset[_], featureCol: String, labelCol: String, shiftRight: Boolean): RDD[MLLabeledPoint] = {
     ds.select(col(featureCol), col(labelCol).cast(DoubleType)).rdd.map {
       case Row(feature: MLVector, label: Double) =>
-        MLLabeledPoint(label, feature)
+        val shiftedFeature = if (shiftRight) shiftVector(feature) else feature
+        MLLabeledPoint(label, shiftedFeature)
     }
   }
+
+  def toLabeledPoints(ds: Dataset[_], featureCol: String, labelCol: String): RDD[MLLabeledPoint] = {
+    toLabeledPoints(ds, featureCol, labelCol, shiftRight = false)
+  }
+
 
   /**
    * Training/evaluating a ranking model in XGBoost requires rows for the same
