@@ -1,10 +1,20 @@
 from __future__ import absolute_import
 import contextlib
 import os
+import random
 import re
 import subprocess
 import tempfile
 import urlparse
+
+
+def temp_dir():
+    # Should we instead set tempfile.tempdir ? How to reliably do that for
+    # all executions? Need to investigate how that works with pyspark workers.
+    if 'LOCAL_DIRS' in os.environ:
+        dirs = os.environ['LOCAL_DIRS'].split(',')
+        return random.choice(dirs)
+    return None
 
 
 def multi_with(f):
@@ -44,7 +54,7 @@ def multi_with(f):
 @contextlib.contextmanager
 def as_output_file(path):
     if path[:7] == 'hdfs://':
-        f = tempfile.NamedTemporaryFile()
+        f = tempfile.NamedTemporaryFile(dir=temp_dir())
         yield f
         f.flush()
         subprocess.check_call(['hdfs', 'dfs', '-copyFromLocal', f.name, path])
@@ -62,8 +72,7 @@ def as_local_path(path, with_query=False):
     elif path[:len("file:/")] == "file:/":
         yield path[len("file:"):]
     else:
-        # TODO: Untested
-        with tempfile.NamedTemporaryFile() as local:
+        with tempfile.NamedTemporaryFiledir(dir=temp_dir()) as local:
             os.unlink(local.name)
             subprocess.check_call(['hdfs', 'dfs', '-copyToLocal', path, local.name])
             if with_query:
