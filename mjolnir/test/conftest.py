@@ -70,7 +70,8 @@ def spark_context(request):
         .setAppName("pytest-pyspark-local-testing")
         # Maven coordinates of jvm dependencies
         .set('spark.jars.packages', ','.join([
-            'ml.dmlc:xgboost4j-spark:0.8-wmf-1',
+            # SNAPSHOT to allow loading of binary dmatrix in distributed training
+            'ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT',
             'org.wikimedia.search:mjolnir:0.4-SNAPSHOT',
             'org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0',
             'org.wikimedia.analytics.refinery.hive:refinery-hive:0.0.57']))

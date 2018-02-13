@@ -57,24 +57,29 @@ private class MlrXGBoost(asLocalFile: AsLocalFile) extends Serializable {
       // XGBoost refuses to load our binary format if rabit has been
       // initialized, so we do it early. This make the odd situation
       // where we need to dispose of them before rabit is shutdown.
-      val watches = createDMatrices(rows.next())
       rabitEnv.foreach { env =>
         env.put("DMLC_TASK_ID", TaskContext.getPartitionId().toString)
         Rabit.init(env)
       }
       try {
-        if (rows.hasNext) {
-          throw new IOException("Expected single row in partition but received more.")
+        // TODO: This doesn't guarantee delete when one dmatrix
+        // fails init after another has been initialized.
+        val watches = createDMatrices(rows.next())
+        try {
+          if (rows.hasNext) {
+            throw new IOException("Expected single row in partition but received more.")
+          }
+          val metrics = Array.fill(watches.size)(new Array[Float](numRounds))
+          val booster = XGBoost.train(
+            watches(trainMatrix), params, numRounds, watches, metrics,
+            earlyStoppingRound = earlyStoppingRound)
+          val bytes = booster.toByteArray
+          booster.dispose
+          Iterator(bytes -> watches.keys.zip(metrics).toMap)
+        } finally {
+          watches.values.foreach(_.delete())
         }
-        val metrics = Array.fill(watches.size)(new Array[Float](numRounds))
-        val booster = XGBoost.train(
-          watches(trainMatrix), params, numRounds, watches, metrics,
-          earlyStoppingRound = earlyStoppingRound)
-        val bytes = booster.toByteArray
-        booster.dispose
-        Iterator(bytes -> watches.keys.zip(metrics).toMap)
       } finally {
-        watches.values.foreach(_.delete())
         rabitEnv.foreach { _ => Rabit.shutdown() }
       }
     }).cache()
