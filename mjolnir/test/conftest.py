@@ -64,15 +64,17 @@ def spark_context(request):
             ','.join(['https://archiva.wikimedia.org/repository/%s' % (repo)
                       for repo in ['releases', 'snapshots', 'mirrored']]))
 
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
     conf = (
         SparkConf()
         .setMaster("local[2]")
         .setAppName("pytest-pyspark-local-testing")
+        # Local jvm package. Compiled by the tox `jvm` testenv
+        .set('spark.jars', os.path.join(base_dir, 'jvm/target/mjolnir-0.4-SNAPSHOT.jar'))
         # Maven coordinates of jvm dependencies
         .set('spark.jars.packages', ','.join([
             # SNAPSHOT to allow loading of binary dmatrix in distributed training
             'ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT',
-            'org.wikimedia.search:mjolnir:0.4-SNAPSHOT',
             'org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0',
             'org.wikimedia.analytics.refinery.hive:refinery-hive:0.0.57']))
         # By default spark will shuffle to 200 partitions, which is
