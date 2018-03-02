@@ -67,6 +67,7 @@ class LtrLoggingQuery(object):
             "_source": False,
             "from": 0,
             "size": 9999,
+            "stats": ["mjolnir"],
             "query": {
                 "bool": {
                     "filter": [

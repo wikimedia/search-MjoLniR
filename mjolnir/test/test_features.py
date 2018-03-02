@@ -19,9 +19,9 @@ def test_collect_ltr_plugin(spark_context, hive_context, make_requests_session):
     accu = df._sc.accumulator(OrderedDict(), mjolnir.features.FeatureNamesAccumulator())
     df_result = mjolnir.features.collect_from_ltr_plugin(
         df, ['http://localhost:9200'],
-        "model:enwiki_100t_v1",
+        "featureset:enwiki_v1",
         accu,
-        {'enwiki': 'en-wp-ltr-0617_content_first'},
+        {'enwiki': 'enwiki_content'},
         session_factory=session_factory)
 
     result = df_result.collect()
@@ -36,6 +36,7 @@ def test_collect_ltr_plugin(spark_context, hive_context, make_requests_session):
 
     apple_856_features = [row.features for row in result if row.query == 'apple' and row.hit_page_id == 856][0]
     apple_856 = dict(zip(feature_names, apple_856_features.toArray()))
-    assert apple_856['title'] == 35.9801
-    assert apple_856['auxiliary_text'] == 45.17453
+    # What is this really testing? Exact numbers are meaningless
+    assert apple_856['title'] == 36.71202
+    assert apple_856['auxiliary_text'] == 48.56861
     assert apple_856['file_text'] == 0.0
