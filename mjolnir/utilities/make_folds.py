@@ -20,25 +20,25 @@ from pyspark.sql import functions as F, HiveContext
 import xgboost
 
 
-def summarize_training_df(df, data_size):
+def summarize_training_df(df, features, data_size):
     if data_size > 10000000:
         df = df.repartition(200)
     summary = collections.defaultdict(dict)
-    for row in mjolnir.feature_engineering.explode_features(df).describe().collect():
+    for row in mjolnir.feature_engineering.explode_features(df, features).describe().collect():
         statistic = row.summary
         for field, value in (x for x in row.asDict().items() if x[0] != 'summary'):
             summary[field][statistic] = value
     return dict(summary)
 
 
-def make_df_stats(df, data_size):
-    metadata = dict(df.schema['features'].metadata)
+def make_df_wiki_stats(df, features_metadata, data_size):
+    metadata = dict(features_metadata)
     metadata.update(df.schema['label'].metadata)
     metadata.update({
         'num_observations': data_size,
         'num_queries': df.select('query').drop_duplicates().count(),
         'num_norm_queries': df.select('norm_query_id').drop_duplicates().count(),
-        'summary': summarize_training_df(df, data_size),
+        'summary': summarize_training_df(df, features_metadata['features'], data_size),
     })
     return metadata
 
@@ -134,7 +134,6 @@ def make_folds(sc, sqlContext, input_dir, output_dir, wikis, zero_features, num_
 
     # TODO: Limit size?
     pool = multiprocessing.dummy.Pool(len(wikis) * 3)
-    features = df.schema['features'].metadata['features']
 
     df_fold = (
         mjolnir.training.tuning.group_k_fold(df, num_folds)
@@ -149,10 +148,18 @@ def make_folds(sc, sqlContext, input_dir, output_dir, wikis, zero_features, num_
         for wiki in wikis:
             df_wiki = df_fold.where(F.col('wikiid') == wiki).drop('wikiid')
             path_format = os.path.join(output_dir, wiki + '.%s.f%s.p%d')
+            metadata = dict(df.schema['features'].metadata)
+            if 'wiki_features' in metadata:
+                metadata['features'] = metadata['wiki_features'][wiki]
+                del metadata['wiki_features']
             wiki_stats[wiki] = {
-                'all': pool.apply_async(write_wiki_all, (sc, df_wiki, num_workers, None, path_format, features)),
-                'folds': pool.apply_async(write_wiki_folds, (sc, df_wiki, num_workers, 'fold', path_format, features)),
-                'stats': pool.apply_async(make_df_stats, (df_wiki, counts[wiki])),
+                'all': pool.apply_async(
+                    write_wiki_all,
+                    (sc, df_wiki, num_workers, None, path_format, metadata['features'])),
+                'folds': pool.apply_async(
+                    write_wiki_folds,
+                    (sc, df_wiki, num_workers, 'fold', path_format, metadata['features'])),
+                'stats': pool.apply_async(make_df_wiki_stats, (df_wiki, metadata, counts[wiki])),
             }
 
         wiki_stats = {wiki: {k: v.get() for k, v in stats.items()} for wiki, stats in wiki_stats.items()}

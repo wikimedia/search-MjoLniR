@@ -416,6 +416,14 @@ def collect(global_profile, profiles):
     subprocess_check_call(cmd, env=config['environment'])
 
 
+def feature_selection(global_profile, profiles):
+    """Run feature selection against collected data"""
+    all_wikis = [wiki for group in profiles.values() for wiki in group['wikis']]
+    config = global_profile['commands']['feature_selection']
+    cmd = build_spark_command(config) + build_mjolnir_utility(config) + all_wikis
+    subprocess_check_call(cmd, env=config['environment'])
+
+
 def make_folds(global_profile, profiles):
     for name, profile in profiles.items():
         config = profile['commands']['make_folds']
@@ -434,6 +442,8 @@ def train(global_profile, profiles):
 def collect_and_train(global_profile, profiles):
     """Run data and training pipelines"""
     collect(global_profile, profiles)
+    feature_selection(global_profile, profiles)
+    make_folds(global_profile, profiles)
     train(global_profile, profiles)
 
     # Cleanup training data from hdfs
@@ -514,13 +524,17 @@ def main(argv=None):
             'func': train,
             'needed': ['training_pipeline'],
         },
+        'feature_selection': {
+            'func': feature_selection,
+            'needed': ['feature_selection'],
+        },
         'make_folds': {
             'func': make_folds,
             'needed': ['make_folds'],
         },
         'collect_and_train': {
             'func': collect_and_train,
-            'needed': ['data_pipeline', 'make_folds', 'training_pipeline'],
+            'needed': ['data_pipeline', 'feature_selection', 'make_folds', 'training_pipeline'],
         },
         'shell': {
             'func': lambda x, y: shell('pyspark', x, y),

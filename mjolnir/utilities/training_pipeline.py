@@ -112,7 +112,10 @@ def run_pipeline(
 
         # Generate a feature map so xgboost can include feature names in the dump.
         # The final `q` indicates all features are quantitative values (floats).
-        features = config['stats']['features']
+        if 'wiki_features' in config['stats']:
+            features = config['stats']['wiki_features'][wiki]
+        else:
+            features = config['stats']['features']
         json_model_output = os.path.join(output_dir, 'model_%s.json' % (wiki))
         with open(json_model_output, 'wb') as f:
             # The 'unused' first feature is because DataWriter creates datafiles

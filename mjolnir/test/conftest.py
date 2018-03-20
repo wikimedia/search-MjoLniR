@@ -76,7 +76,9 @@ def spark_context(request):
             # SNAPSHOT to allow loading of binary dmatrix in distributed training
             'ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT',
             'org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0',
-            'org.wikimedia.analytics.refinery.hive:refinery-hive:0.0.57']))
+            'org.wikimedia.analytics.refinery.hive:refinery-hive:0.0.57',
+            'sramirez:spark-infotheoretic-feature-selection:1.4.4',
+            'sramirez:spark-MDLP-discretization:1.4.1']))
         # By default spark will shuffle to 200 partitions, which is
         # way too many for our small test cases. This cuts execution
         # time of the tests in half.

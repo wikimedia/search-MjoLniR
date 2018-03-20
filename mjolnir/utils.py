@@ -3,6 +3,7 @@ import contextlib
 import os
 import random
 import re
+import shutil
 import subprocess
 import tempfile
 import urlparse
@@ -72,7 +73,7 @@ def as_local_path(path, with_query=False):
     elif path[:len("file:/")] == "file:/":
         yield path[len("file:"):]
     else:
-        with tempfile.NamedTemporaryFiledir(dir=temp_dir()) as local:
+        with tempfile.NamedTemporaryFile(dir=temp_dir()) as local:
             os.unlink(local.name)
             subprocess.check_call(['hdfs', 'dfs', '-copyToLocal', path, local.name])
             if with_query:
@@ -112,6 +113,13 @@ def hdfs_unlink(*paths):
             os.unlink(path)
     if remote:
         subprocess.check_call(['hdfs', 'dfs', '-rm'] + remote)
+
+
+def hdfs_rmdir(path):
+    if path[:7] == 'hdfs://':
+        subprocess.check_call(['hdfs', 'dfs', '-rm', '-r', '-f', path])
+    else:
+        shutil.rmtree(path)
 
 
 @contextlib.contextmanager
