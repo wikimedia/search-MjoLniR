@@ -190,7 +190,7 @@ def upload_models(input_dir, search_clusters, wikis, yes):
 
         feature_store_name, feature_set_name = choose_feature_set(
             search_clusters,
-            'featureset:20180215-query_explorer',  # tune['metadata']['dataset']['feature_definitions'],
+            tune['metadata']['dataset']['feature_definitions'],
             tune['metadata']['dataset']['wiki_features'][wiki])
         url_pattern = '%%s/_ltr/%s_featureset/%s/_createmodel' % (
             '' if feature_store_name is None else feature_store_name + '/',
