@@ -81,12 +81,13 @@ def transform(df, url_list, indices=None, batch_size=15, top_n=5, session_factor
         indices = {}
 
     def collect_partition_hit_page_ids(rows):
-        random.shuffle(url_list)
-        url = url_list.pop()
+        partition_url_list = list(url_list)
+        random.shuffle(partition_url_list)
+        url = partition_url_list.pop()
         with session_factory() as session:
             for batch_rows in _batch(rows, batch_size):
                 bulk_query = _create_bulk_query(batch_rows, indices, top_n)
-                url, response = mjolnir.cirrus.make_request(session, url, url_list, bulk_query)
+                url, response = mjolnir.cirrus.make_request(session, url, partition_url_list, bulk_query)
                 for row, hit_page_ids in zip(batch_rows, _handle_response(response)):
                     # Extend the provided row with an extra field. Ideally we would
                     # instead use a UDF, but that makes re-using a requests session

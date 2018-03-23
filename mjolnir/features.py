@@ -269,13 +269,14 @@ def collect_from_ltr_plugin(df, url_list, model, feature_names_accu, indices=Non
         pyspark.sql.Row
             Collected feature vectors for a single (wiki, query, hit_page_id)
         """
-        random.shuffle(url_list)
-        url = url_list.pop()
+        partition_url_list = list(url_list)
+        random.shuffle(partition_url_list)
+        url = partition_url_list.pop()
         log_query = LtrLoggingQuery(eltType, name, store)
         with session_factory() as session:
             for row in rows:
                 req = log_query.make_msearch(row, indices)
-                url, response = mjolnir.cirrus.make_request(session, url, url_list, req)
+                url, response = mjolnir.cirrus.make_request(session, url, partition_url_list, req)
                 assert response.status_code == 200
                 parsed = json.loads(response.text)
                 assert 'responses' in parsed, response.text

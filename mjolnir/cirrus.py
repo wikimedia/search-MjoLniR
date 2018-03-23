@@ -9,6 +9,18 @@ import requests
 import urlparse
 
 
+# TODO: These are probably inaccessible because the access is through a firewall hole that
+# ops wasn't thrilled to put in place. Because the firewall is in the routers and not
+# puppet it doesn't all get updated the same.
+# Better would be to read some config that says this instead of hardcoding into repo.
+INACCESSIBLE = set([1021, 1022, 1028, 1029])
+SEARCH_CLUSTERS = {
+    'eqiad': tuple('http://elastic%d.eqiad.wmnet:9200' % (i) for i in range(1017, 1052) if i not in INACCESSIBLE),
+    'codfw': tuple('http://elastic%d.codfw.wmnet:9200' % (i) for i in range(2001, 2035)),
+    'localhost': tuple(['http://localhost:9200']),
+}
+
+
 def _bulk_success(response):
     """Return true if all requests in a bulk request succeeded
 
