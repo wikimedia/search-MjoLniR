@@ -115,7 +115,10 @@ def run_pipeline(
         features = config['stats']['features']
         json_model_output = os.path.join(output_dir, 'model_%s.json' % (wiki))
         with open(json_model_output, 'wb') as f:
-            f.write(model.dump(features))
+            # The 'unused' first feature is because DataWriter creates datafiles
+            # that start at index 1 to support xgboost and lightgbm from the same
+            # file.
+            f.write(model.dump(['unused'] + features))
             print 'Wrote xgboost json model to %s' % (json_model_output)
         # Write out the xgboost binary format as well, so it can be re-loaded
         # and evaluated
