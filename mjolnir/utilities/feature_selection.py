@@ -5,11 +5,13 @@ Reduce the number of features used in a dataset
 from __future__ import absolute_import
 import argparse
 from functools import reduce
+import json
 import logging
 import mjolnir.feature_engineering
 import mjolnir.spark
 import mjolnir.utils
 import multiprocessing.dummy
+import os
 from pyspark import SparkContext
 from pyspark.ml.feature import VectorAssembler
 from pyspark.sql import HiveContext
@@ -76,6 +78,21 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, algo, num_features, pre_
             mjolnir.utils.hdfs_rmdir(exploded_output_dir)
         except Exception:
             pass
+
+    # Write out some extra stats that our spark utility will use to size
+    # executors for fold generation and training.  The filename must start
+    # with _ to be ignored by parquet loader.
+    stats_path = os.path.join(output_dir, '_stats.json')
+    counts = (
+        sqlContext.read.parquet(output_dir)
+        .groupBy('wikiid')
+        .agg(F.count(F.lit(1)).alias('num_obs'))
+        .collect())
+    with mjolnir.utils.as_output_file(stats_path) as f:
+        f.write(json.dumps({
+            'num_features': len(pre_selected) if pre_selected else num_features,
+            'num_obs': {row.wikiid: row.num_obs for row in counts}
+        }))
 
 
 def arg_parser():

@@ -10,6 +10,7 @@ import collections
 import json
 import logging
 import multiprocessing.dummy
+import math
 import mjolnir.feature_engineering
 import mjolnir.training.tuning
 from mjolnir.utils import as_local_paths, as_output_file, as_output_files, \
@@ -133,8 +134,8 @@ def make_folds(sc, sqlContext, input_dir, output_dir, wikis, zero_features, num_
     if max_executors is None:
         max_executors = num_workers
 
-    # TODO: Limit size?
-    pool = multiprocessing.dummy.Pool(len(wikis) * 3)
+    pool_size = int(math.floor(max_executors / float(num_workers)))
+    pool = multiprocessing.dummy.Pool(pool_size)
 
     df_fold = (
         mjolnir.training.tuning.group_k_fold(df, num_folds)

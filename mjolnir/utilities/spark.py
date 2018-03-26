@@ -43,6 +43,8 @@ import argparse
 from collections import OrderedDict
 import datetime
 import logging
+import json
+import mjolnir.utils
 import os
 import pprint
 import subprocess
@@ -233,7 +235,7 @@ def validate_profiles(config):
                     'mjolnir_utility_path': [],
                     'mjolnir_utility': [],
                     'spark_conf': [
-                        'spark.yarn.executor.memoryOverhead',
+                        'spark.executor.memoryOverhead',
                     ],
                     'spark_args': [],
                     'cmd_args': ['num-workers', 'num-folds']
@@ -246,7 +248,7 @@ def validate_profiles(config):
                     'mjolnir_utility': [],
                     'spark_conf': [
                         'spark.dynamicAllocation.maxExecutors',
-                        'spark.yarn.executor.memoryOverhead',
+                        'spark.executor.memoryOverhead',
                         'spark.task.cpus'
                     ],
                     'spark_args': ['executor-memory', 'executor-cores'],
@@ -406,6 +408,94 @@ def subprocess_check_call(args, env=None):
         if retval is not 0:
             raise Exception("Subprocess returned non-zero exit code: %d" % (retval))
 
+# Autodetection of parameters to run with, primarily spark configuration to
+# appropriately size the executors.
+
+
+def parse_memory_to_mb(memory):
+    suffixes = {
+        'T': 2 ** 20,
+        'G': 2 ** 10,
+        'M': 1,
+    }
+    for suffix, scale in suffixes.items():
+        if memory[-1] == suffix:
+            return int(memory[:-1]) * scale
+    raise Exception('Unrecognized amount of memory: %s' % (memory))
+
+
+def autodetect_make_folds_memory_overhead(config, wikis):
+    input_dir = config['cmd_args']['input']
+    stats_path = os.path.join(input_dir, '_stats.json')
+    with mjolnir.utils.hdfs_open_read(stats_path) as f:
+        stats = json.load(f)
+    n_obs = max(stats['num_obs'][wiki] for wiki in wikis if wiki in stats['num_obs'])
+    n_workers = config['cmd_args']['num-workers']
+
+    n_feature_values = n_obs * stats['num_features'] / float(n_workers)
+    bytes_per_value = config['autodetect']['bytes_per_value']['make_folds']
+    overhead_bytes = n_feature_values * bytes_per_value
+    overhead_mb = overhead_bytes // 2**20
+    baseline_memory_overhead_mb = parse_memory_to_mb(
+        config['autodetect']['baseline_memory_overhead'])
+    return baseline_memory_overhead_mb + overhead_mb
+
+
+def autodetect_train_memory_overhead(config, wikis):
+    input_dir = config['cmd_args']['input']
+    stats_path = os.path.join(input_dir, 'stats.json')
+    with mjolnir.utils.hdfs_open_read(stats_path) as f:
+        stats = json.load(f)
+    wiki_stats = [(wiki, stats['wikis'][wiki]) for wiki in wikis if wiki in stats['wikis']]
+
+    max_feature_values = 0
+    for wiki, x in wiki_stats:
+        num_obs = x['stats']['num_observations']
+        if 'wiki_features' in x['stats']:
+            num_features = len(x['stats']['wiki_features'][wiki])
+        else:
+            num_features = len(x['stats']['features'])
+        n_feature_values = float(num_obs) * num_features / x['num_workers']
+        if n_feature_values > max_feature_values:
+            max_feature_values = n_feature_values
+
+    # Also defined emperically from same dataset as make_folds
+    bytes_per_value = config['autodetect']['bytes_per_value']['train']
+    overhead_bytes = max_feature_values * bytes_per_value
+    overhead_mb = overhead_bytes // 2**20
+    baseline_memory_overhead_mb = parse_memory_to_mb(
+        config['autodetect']['baseline_memory_overhead'])
+    return baseline_memory_overhead_mb + overhead_mb
+
+
+def autodetect_max_executors(config, wikis):
+    # TODO: executor-memory and max-executors need to be tuned in parallel
+    # to ensure enough storage memory is available.
+    executor_memory = (
+        parse_memory_to_mb(config['spark_args']['executor-memory'])
+        + int(config['spark_conf']['spark.executor.memoryOverhead']))
+    memory_limit_mb = parse_memory_to_mb(config['autodetect']['agg_memory_limit'])
+    by_memory = memory_limit_mb // executor_memory
+
+    executor_cores = config['spark_args']['executor-cores']
+    cpu_limit = config['autodetect']['agg_cpu_limit']
+    by_cores = cpu_limit // executor_cores
+
+    return min(by_memory, by_cores)
+
+
+def apply_autodetect(detectors, all_config, wikis):
+    stack = [(detectors, all_config)]
+    while stack:
+        detectors, config = stack.pop()
+        for key, detector in detectors:
+            if key in config:
+                if isinstance(detector, list):
+                    stack.append((detector, config[key]))
+                elif config[key] == 'auto':
+                    config[key] = detector(all_config, wikis)
+    return all_config
+
 
 # Registration of available CLI commands
 
@@ -427,16 +517,18 @@ def register_command(needed):
 # Helpers for running profiles from CLI commands
 
 
-def run_all_profiles(global_profile, profiles, command):
+def run_all_profiles(global_profile, profiles, command, detectors=[]):
     all_wikis = [wiki for group in profiles.values() for wiki in group['wikis']]
-    config = global_profile['commands'][command]
+    raw_config = global_profile['commands'][command]
+    config = apply_autodetect(detectors, raw_config, all_wikis)
     cmd = build_spark_command(config) + build_mjolnir_utility(config) + all_wikis
     subprocess_check_call(cmd, env=config['environment'])
 
 
-def run_each_profile(global_profile, profiles, command):
+def run_each_profile(global_profile, profiles, command, detectors=[]):
     for name, profile in profiles.items():
-        config = profile['commands'][command]
+        raw_config = profile['commands'][command]
+        config = apply_autodetect(detectors, raw_config, profile['wikis'])
         cmd = build_spark_command(config) + build_mjolnir_utility(config) + profile['wikis']
         subprocess_check_call(cmd, env=config['environment'])
 
@@ -472,13 +564,25 @@ def feature_selection(global_profile, profiles):
 @register_command(['make_folds'])
 def make_folds(global_profile, profiles):
     """Prepare a feature dataframe for training"""
-    run_each_profile(global_profile, profiles, 'make_folds')
+    detectors = [
+        ('spark_conf', [
+            ('spark.executor.memoryOverhead', autodetect_make_folds_memory_overhead),
+            ('spark.dynamicAllocation.maxExecutors', autodetect_max_executors),
+        ]),
+    ]
+    run_each_profile(global_profile, profiles, 'make_folds', detectors)
 
 
 @register_command(['training_pipeline'])
 def train(global_profile, profiles):
     """Run mjolnir training pipeline"""
-    run_each_profile(global_profile, profiles, 'training_pipeline')
+    detectors = [
+        ('spark_conf', [
+            ('spark.executor.memoryOverhead', autodetect_train_memory_overhead),
+            ('spark.dynamicAllocation.maxExecutors', autodetect_max_executors),
+        ]),
+    ]
+    run_each_profile(global_profile, profiles, 'training_pipeline', detectors)
 
 
 @register_command(['data_pipeline', 'collect_features', 'feature_selection', 'make_folds', 'training_pipeline'])
@@ -613,7 +717,7 @@ def main(**args):
                 sys.exit(1)
 
         # Finally do the thing
-        command['func'](global_profile, profiles)
+        command['fn'](global_profile, profiles)
 
 
 if __name__ == "__main__":

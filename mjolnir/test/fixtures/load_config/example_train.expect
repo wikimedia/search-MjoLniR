@@ -1,6 +1,14 @@
 global_config:
   commands:
     collect_features:
+      autodetect:
+        agg_cpu_limit: '450'
+        agg_memory_limit: 1T
+        baseline_memory_overhead: 512M
+        bytes_per_value:
+          make_folds: '29'
+          train: '20'
+        executor_max_memory: 50G
       cmd_args:
         feature-definitions: featureset:enwiki_v1
         input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
@@ -40,6 +48,14 @@ global_config:
         spark.executor.memoryOverhead: '512'
         spark.task.cpus: '1'
     data_pipeline:
+      autodetect:
+        agg_cpu_limit: '450'
+        agg_memory_limit: 1T
+        baseline_memory_overhead: 512M
+        bytes_per_value:
+          make_folds: '29'
+          train: '20'
+        executor_max_memory: 50G
       cmd_args:
         input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
         kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
@@ -70,6 +86,7 @@ global_config:
         executor-cores: '1'
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
+        jars: hdfs://analytics-hadoop/wmf/refinery/current/artifacts/refinery-hive.jar
         master: yarn
         packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
@@ -80,6 +97,14 @@ global_config:
         spark.executor.memoryOverhead: '512'
         spark.task.cpus: '1'
     feature_selection:
+      autodetect:
+        agg_cpu_limit: '450'
+        agg_memory_limit: 1T
+        baseline_memory_overhead: 512M
+        bytes_per_value:
+          make_folds: '29'
+          train: '20'
+        executor_max_memory: 50G
       cmd_args:
         input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
         num-features: '50'
@@ -117,6 +142,14 @@ global_config:
         spark.locality.wait: '0'
         spark.task.cpus: '1'
     make_folds:
+      autodetect:
+        agg_cpu_limit: '450'
+        agg_memory_limit: 1T
+        baseline_memory_overhead: 512M
+        bytes_per_value:
+          make_folds: '29'
+          train: '20'
+        executor_max_memory: 50G
       cmd_args:
         input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
         max-executors: '50'
@@ -156,6 +189,14 @@ global_config:
         spark.locality.wait: '0'
         spark.task.cpus: '1'
     pyspark:
+      autodetect:
+        agg_cpu_limit: '450'
+        agg_memory_limit: 1T
+        baseline_memory_overhead: 512M
+        bytes_per_value:
+          make_folds: '29'
+          train: '20'
+        executor_max_memory: 50G
       environment:
         HOME: /home/pytest
         PYSPARK_PYTHON: venv/bin/python
@@ -185,6 +226,14 @@ global_config:
         spark.executor.memoryOverhead: '512'
         spark.task.cpus: '1'
     pyspark_train:
+      autodetect:
+        agg_cpu_limit: '450'
+        agg_memory_limit: 1T
+        baseline_memory_overhead: 512M
+        bytes_per_value:
+          make_folds: '29'
+          train: '20'
+        executor_max_memory: 50G
       environment:
         HOME: /home/pytest
         PYSPARK_PYTHON: venv/bin/python
@@ -214,6 +263,14 @@ global_config:
         spark.executor.memoryOverhead: '6144'
         spark.task.cpus: '4'
     training_pipeline:
+      autodetect:
+        agg_cpu_limit: '450'
+        agg_memory_limit: 1T
+        baseline_memory_overhead: 512M
+        bytes_per_value:
+          make_folds: '29'
+          train: '20'
+        executor_max_memory: 50G
       cmd_args:
         input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/folded
         output: /home/pytest/training_size/marker-global
@@ -255,6 +312,14 @@ profiles:
   large:
     commands:
       collect_features:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           feature-definitions: featureset:enwiki_v1
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
@@ -294,6 +359,14 @@ profiles:
           spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
       data_pipeline:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
           kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
@@ -324,6 +397,7 @@ profiles:
           executor-cores: '1'
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
+          jars: hdfs://analytics-hadoop/wmf/refinery/current/artifacts/refinery-hive.jar
           master: yarn
           packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
@@ -334,6 +408,14 @@ profiles:
           spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
       feature_selection:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
           num-features: '50'
@@ -371,6 +453,14 @@ profiles:
           spark.locality.wait: '0'
           spark.task.cpus: '1'
       make_folds:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
           max-executors: '50'
@@ -410,6 +500,14 @@ profiles:
           spark.locality.wait: '0'
           spark.task.cpus: '1'
       pyspark:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -439,6 +537,14 @@ profiles:
           spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
       pyspark_train:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -468,6 +574,14 @@ profiles:
           spark.executor.memoryOverhead: '6144'
           spark.task.cpus: '4'
       training_pipeline:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           cv-jobs: '80'
           final-trees: '100'
@@ -513,6 +627,14 @@ profiles:
   medium:
     commands:
       collect_features:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           feature-definitions: featureset:enwiki_v1
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
@@ -552,6 +674,14 @@ profiles:
           spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
       data_pipeline:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
           kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
@@ -582,6 +712,7 @@ profiles:
           executor-cores: '1'
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
+          jars: hdfs://analytics-hadoop/wmf/refinery/current/artifacts/refinery-hive.jar
           master: yarn
           packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
@@ -592,6 +723,14 @@ profiles:
           spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
       feature_selection:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
           num-features: '50'
@@ -629,6 +768,14 @@ profiles:
           spark.locality.wait: '0'
           spark.task.cpus: '1'
       make_folds:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
           max-executors: '50'
@@ -668,6 +815,14 @@ profiles:
           spark.locality.wait: '0'
           spark.task.cpus: '1'
       pyspark:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -697,6 +852,14 @@ profiles:
           spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
       pyspark_train:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -726,6 +889,14 @@ profiles:
           spark.executor.memoryOverhead: '6144'
           spark.task.cpus: '4'
       training_pipeline:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           cv-jobs: '125'
           final-trees: '100'
@@ -773,6 +944,14 @@ profiles:
   small:
     commands:
       collect_features:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           feature-definitions: featureset:enwiki_v1
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
@@ -812,6 +991,14 @@ profiles:
           spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
       data_pipeline:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
           kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
@@ -842,6 +1029,7 @@ profiles:
           executor-cores: '1'
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
+          jars: hdfs://analytics-hadoop/wmf/refinery/current/artifacts/refinery-hive.jar
           master: yarn
           packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
@@ -852,6 +1040,14 @@ profiles:
           spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
       feature_selection:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
           num-features: '50'
@@ -889,6 +1085,14 @@ profiles:
           spark.locality.wait: '0'
           spark.task.cpus: '1'
       make_folds:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
           max-executors: '50'
@@ -928,6 +1132,14 @@ profiles:
           spark.locality.wait: '0'
           spark.task.cpus: '1'
       pyspark:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -957,6 +1169,14 @@ profiles:
           spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
       pyspark_train:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -986,6 +1206,14 @@ profiles:
           spark.executor.memoryOverhead: '6144'
           spark.task.cpus: '4'
       training_pipeline:
+        autodetect:
+          agg_cpu_limit: '450'
+          agg_memory_limit: 1T
+          baseline_memory_overhead: 512M
+          bytes_per_value:
+            make_folds: '29'
+            train: '20'
+          executor_max_memory: 50G
         cmd_args:
           cv-jobs: '125'
           final-trees: '500'

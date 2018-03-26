@@ -5,15 +5,16 @@ Transforms user behaviour logs into a labeled training dataset
 from __future__ import absolute_import
 import argparse
 import datetime
+import json
 import logging
 import mjolnir.dbn
 import mjolnir.metrics
 import mjolnir.norm_query
 import mjolnir.features
 import mjolnir.sampling
+import os
 from pyspark import SparkContext
-from pyspark.sql import HiveContext
-from pyspark.sql import functions as F
+from pyspark.sql import HiveContext, functions as F
 import requests
 
 
@@ -64,6 +65,20 @@ def collect_features(sc, sqlContext, input_dir, output_dir, wikis,
         })))
 
     df_hits_with_features.write.parquet(output_dir)
+
+    # Emit some statistics that will allow the spark utility to automatically
+    # size the executors for building datasets out of this.
+    counts = (
+        sqlContext.read.parquet(output_dir)
+        .groupBy('wikiid')
+        .agg(F.count(F.lit(1)).alias('num_obs'))
+        .collect())
+    stats_path = os.path.join(output_dir, '_stats.json')
+    with mjolnir.utils.as_output_file(stats_path) as f:
+        f.write(json.dumps({
+            'num_features': len(features),
+            'num_obs': {row.wikiid: row.num_obs for row in counts}
+        }))
 
 
 def arg_parser():

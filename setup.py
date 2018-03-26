@@ -12,7 +12,9 @@ requirements = [
     'jsonschema',
     # python xgboost is only used for building
     # binary datasets. Primary usage is from jvm.
-    'xgboost',
+    # The underlying xgboost version needs to stay
+    # consistent or the files won't load.
+    'xgboost<0.80',
     # hyperopt requires networkx < 2.0, but doesn't say so
     'networkx<2.0',
     # pyspark requirements

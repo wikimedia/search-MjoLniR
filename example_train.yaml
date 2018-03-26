@@ -70,6 +70,21 @@ global:
             ? "%(mjolnir_utility_path)s"
             ? "%(spark_submit)s"
             ? "%(PYSPARK_PYTHON)s"
+    # Configuration for auto-detected values
+    autodetect:
+        # Set limits to use no more than 1TB of memory
+        agg_memory_limit: 1T
+        # limits to use no more than 1/3 of cluster cpu
+        agg_cpu_limit: 450
+        # max memory that can be assigned to single executor
+        executor_max_memory: 50G
+        # Amount of memory needed for pyspark/jvm
+        baseline_memory_overhead: 512M
+        # Number of bytes of memory overhead to allocate per
+        # value of the feature matrix
+        bytes_per_value:
+            make_folds: 29
+            train: 20
     spark_args:
         master: "%(master)s"
         # TODO: When is this necessary?
@@ -104,6 +119,10 @@ global:
             paths:
                 dir_not_exist: !!set
                     ? "%(local_labeled_data_path)s"
+            spark_args:
+                # Ivy blows up if we try and use a package dependency. Pull only the jar
+                # and not it's deps.
+                jars: hdfs://analytics-hadoop/wmf/refinery/current/artifacts/refinery-hive.jar
             cmd_args:
                 input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
                 output-dir: "%(hdfs_labeled_data_path)s"
