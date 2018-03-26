@@ -558,9 +558,17 @@ def main(argv=None):
 
     # Filter to selected wikis
     if args['wikis']:
-        wikis = set(args['wikis'])
-        for name, group in profiles.items():
-            group['wikis'] = [wiki for wiki in group['wikis'] if wiki in wikis]
+        include = set(wiki for wiki in args['wikis'] if wiki[0] != '-')
+        exclude = set(wiki[1:] for wiki in args['wikis'] if wiki[0] == '-')
+        if include and exclude:
+            include = include.difference(exclude)
+            exclude = None
+        if include:
+            for name, group in profiles.items():
+                group['wikis'] = [wiki for wiki in group['wikis'] if wiki in include]
+        elif exclude:
+            for name, group in profiles.items():
+                group['wikis'] = [wiki for wiki in group['wikis'] if wiki not in exclude]
     # Filter groups with no defined wikis
     profiles = {name: group for name, group in profiles.items() if group['wikis']}
 
