@@ -284,6 +284,7 @@ def enwiki_features():
     features.append(FieldValueFeature('popularity_score'))
     features.append(FieldValueFeature('incoming_links'))
     features.append(FieldValueFeature('text.word_count'))
+    features.append(FieldValueFeature('text_bytes'))
 
     return features
 
