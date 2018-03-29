@@ -14,11 +14,12 @@ import requests
 
 
 class Ltr(object):
-    def __init__(self, host='localhost', port=9200, session_factory=None):
-        self.host = host
-        self.port = port
+    def __init__(self, host='localhost', port=9200, session_factory=None, base_path=None):
+        if base_path is None:
+            self.base_path = 'http://%s:%d/_ltr/' % (host, port)
+        else:
+            self.base_path = base_path + '/_ltr/'
         self.session = session_factory() if session_factory else requests.Session()
-        self.base_path = 'http://%s:%d/_ltr/' % (host, port)
 
     def list_feature_stores(self):
         return self.request('GET')
