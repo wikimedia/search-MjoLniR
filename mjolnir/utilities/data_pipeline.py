@@ -99,9 +99,10 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
         .join(df_rel, how='inner', on=['wikiid', 'norm_query_id', 'hit_page_id'])
         .cache())
 
-    # TODO: Training is per-wiki, should this be as well?
     weightedNdcgAt10 = mjolnir.metrics.ndcg(df_all_hits, 10, query_cols=['wikiid', 'query', 'session_id'])
-    print 'weighted ndcg@10: %.4f' % (weightedNdcgAt10)
+    print 'weighted ndcg@10:'
+    for wiki, ndcg in weightedNdcgAt10.items():
+        print '\t%s: %.4f' % (wiki, ndcg)
 
     df_hits = (
         df_all_hits
@@ -136,9 +137,10 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
 
     print 'Fetched a total of %d samples for %d wikis' % (sum(actual_samples_per_wiki.values()), len(wikis))
 
-    # TODO: Training is per-wiki, should this be as well?
     ndcgAt10 = mjolnir.metrics.ndcg(df_hits, 10, query_cols=['wikiid', 'query'])
-    print 'unweighted ndcg@10: %.4f' % (ndcgAt10)
+    print 'unweighted ndcg@10:'
+    for wiki, ndcg in ndcgAt10.items():
+        print '\t%s: %.4f' % (wiki, ndcg)
 
     # Collect features for all known query, hit_page_id combinations.
     df_features, fnames_accu = mjolnir.features.collect(
@@ -164,8 +166,8 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
         df_hits
         .join(df_features, how='inner', on=['wikiid', 'query', 'hit_page_id'])
         .withColumn('label', mjolnir.spark.add_meta(sc, F.col('label'), {
-            'weightedNdcgAt10': weightedNdcgAt10,
-            'ndcgAt10': ndcgAt10,
+            'click_log_weighted_ndcg@10': weightedNdcgAt10,
+            'click_log_ndcg@10': ndcgAt10,
         }))
         .withColumn('features', mjolnir.spark.add_meta(sc, F.col('features'), {
             'features': features,

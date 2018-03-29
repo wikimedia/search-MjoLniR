@@ -30,7 +30,8 @@ def _ndcg_at(k, label_col):
     return F.udf(ndcg_at_k, pyspark.sql.types.DoubleType())
 
 
-def ndcg(df, k, label_col='label', position_col='hit_position', query_cols=['wikiid', 'query', 'session_id']):
+def ndcg(df, k, label_col='label', position_col='hit_position', wiki_col='wikiid',
+         query_cols=['wikiid', 'query', 'session_id']):
     """
     Calculate ndcg@k for the provided dataframe
 
@@ -52,6 +53,9 @@ def ndcg(df, k, label_col='label', position_col='hit_position', query_cols=['wik
     float
         The ndcg@k value, always between 0 and 1
     """
+    if wiki_col not in query_cols:
+        query_cols = query_cols + [wiki_col]
+
     # ideal results per labels
     w = Window.partitionBy(*query_cols).orderBy(F.col(label_col).desc())
     topAtK = (
@@ -70,9 +74,9 @@ def ndcg(df, k, label_col='label', position_col='hit_position', query_cols=['wik
         .where(F.col('rn') <= k)
         .groupBy(*query_cols)
         .agg(F.collect_list(F.struct(label_col, 'rn')).alias('predictedTopAtK')))
-    return (
-        topAtK
-        .join(predictedTopAtK, query_cols, how='inner')
-        .select(_ndcg_at(k, label_col)('predictedTopAtK', 'topAtK').alias('ndcgAtK'))
-        .select(F.mean('ndcgAtK').alias('ndcgAtK'))
-        .collect()[0].ndcgAtK)
+    return {row[wiki_col]: row.ndcgAtK for row in topAtK
+            .join(predictedTopAtK, query_cols, how='inner')
+            .select(wiki_col, _ndcg_at(k, label_col)('predictedTopAtK', 'topAtK').alias('ndcgAtK'))
+            .groupBy(wiki_col)
+            .agg(F.mean('ndcgAtK').alias('ndcgAtK'))
+            .collect()}
