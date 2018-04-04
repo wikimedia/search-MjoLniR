@@ -2844,6 +2844,21 @@
         "template_language": "mustache"
     }, 
     {
+        "name": "text_bytes", 
+        "params": [
+            "query_string"
+        ], 
+        "template": {
+            "function_score": {
+                "field_value_factor": {
+                    "field": "text_bytes", 
+                    "missing": 0
+                }
+            }
+        }, 
+        "template_language": "mustache"
+    }, 
+    {
         "name": "text_dismax_plain", 
         "params": [
             "query_string"
