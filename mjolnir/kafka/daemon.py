@@ -194,8 +194,8 @@ class Daemon(object):
                 return False
 
             # Standard execution of elasticsearch bulk query
-            _, response = mjolnir.cirrus.make_request(session, 'http://localhost:9200', [],
-                                                      record.value['request'], reuse_url=True)
+            response = mjolnir.cirrus.make_request('msearch', session, ['http://localhost:9200'],
+                                                   record.value['request'], reuse_url=True)
             future = self.producer.send(self.topic_result, json.dumps({
                 'run_id': record.value['run_id'],
                 'wikiid': record.value['wikiid'],

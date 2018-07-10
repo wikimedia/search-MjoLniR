@@ -21,8 +21,8 @@ SEARCH_CLUSTERS = {
 }
 
 
-def _bulk_success(response):
-    """Return true if all requests in a bulk request succeeded
+def _msearch_success(response):
+    """Return true if all requests in a multi search request succeeded
 
     Parameters
     ----------
@@ -41,13 +41,23 @@ def _bulk_success(response):
     return True
 
 
-def make_request(session, url, url_list, bulk_query, num_retries=5, reuse_url=False):
+def make_request(mode, session, url_list, bulk_query, num_retries=5, reuse_url=False):
+    http_verb, url_suffix, is_success = {
+        'msearch': ('GET', '/_msearch', _msearch_success)
+    }[mode]
+
     failures = 0
+    last_ex = None
     while True:
+        if len(url_list) == 0:
+            if last_ex is None:
+                raise RuntimeError("No urls provided")
+            raise last_ex
         try:
-            result = session.get(url + '/_msearch', data=bulk_query)
-            if _bulk_success(result):
-                return url, result
+            url = url_list[-1] + url_suffix
+            result = session.request(http_verb, url, data=bulk_query)
+            if is_success(result):
+                return result
             last_ex = RuntimeError('Too many failures or no urls left')
         except requests.ConnectionError as e:
             last_ex = e
@@ -55,12 +65,10 @@ def make_request(session, url, url_list, bulk_query, num_retries=5, reuse_url=Fa
         if failures >= num_retries:
             raise last_ex
         if not reuse_url:
-            if len(url_list) == 0:
-                raise last_ex
             # TODO: This is only desirable if url_list is a list of actual
             # servers. If the url_list is a loadbalancer like LVS then we
             # want to keep using the existing url.
-            url = url_list.pop()
+            url_list.pop()
 
 
 def check_idle(url_list, session_factory=requests.Session):

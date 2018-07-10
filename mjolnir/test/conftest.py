@@ -130,7 +130,16 @@ class MockSession(object):
         pass
 
     def get(self, url, data=None):
+        return self.request('GET', url, data=data)
+
+    def request(self, method, url, data=None):
+        # TODO: This hash is far from a uniqueness guarantee, it's
+        # not really even best effort in the face of hash collisions
         md5 = hashlib.md5()
+        if method.upper() != 'GET':
+            # Only add non-GET method to md5 to keep hashes from when
+            # that was the only option.
+            md5.update(method)
         md5.update(url)
         if data is not None:
             md5.update(data)
@@ -139,7 +148,7 @@ class MockSession(object):
         for row in self.sqlite.execute("SELECT status_code, content from requests WHERE digest=?", [digest]):
             return MockResponse(row[0], row[1])
 
-        r = requests.get(url, data=data)
+        r = requests.request(method, url, data=data)
 
         try:
             self.sqlite.execute("INSERT INTO requests VALUES (?,?,?)", [digest, r.status_code, r.text])
