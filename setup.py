@@ -9,6 +9,7 @@ requirements = [
     'pyyaml',
     'hyperopt',
     'elasticsearch>=5.0.0,<6.0.0',
+    'jsonschema',
     # python xgboost is only used for building
     # binary datasets. Primary usage is from jvm.
     'xgboost',

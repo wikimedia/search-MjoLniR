@@ -11,7 +11,7 @@ import mjolnir.kafka.msearch_daemon
 
 
 def parse_arguments(argv):
-    parser = argparse.ArgumentParser(description='...')
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         '-b', '--brokers', dest='brokers', required=True, type=lambda x: x.split(','),
         help='Kafka brokers to bootstrap from as a comma separated list of <host>:<port>')

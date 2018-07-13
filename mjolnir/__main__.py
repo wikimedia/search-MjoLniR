@@ -11,6 +11,8 @@ Utilities:
 * training_pipeline    Individual spark job for turning labeled training data
 *                      into xgboost models.
 * kafka_msearch_daemon Daemon side of feature collection via kafka
+* kafka_bulk_daemon    Daemon for pushing document updates from kafka into
+*                      elasticsearch.
 
 Usage:
     mjolnir (-h | --help)
@@ -18,6 +20,7 @@ Usage:
 """  # noqa
 
 from __future__ import absolute_import
+import logging
 import sys
 import traceback
 from importlib import import_module
@@ -50,6 +53,7 @@ def main(args=None):
         sys.stderr.write("Could not find utility %s" % (module_name))
         sys.exit(1)
 
+    logging.basicConfig(level='INFO')
     module.main(args)
 
 
