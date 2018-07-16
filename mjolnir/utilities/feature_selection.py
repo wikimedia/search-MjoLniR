@@ -4,6 +4,7 @@ Reduce the number of features used in a dataset
 
 from __future__ import absolute_import
 import argparse
+from functools import reduce
 import logging
 import mjolnir.feature_engineering
 import mjolnir.spark

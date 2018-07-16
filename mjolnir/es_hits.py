@@ -103,7 +103,7 @@ def transform(df, url_list, indices=None, batch_size=15, top_n=5, session_factor
     # but out of thread pool rejection.
     mjolnir.cirrus.check_idle(url_list, session_factory)
     max_executors = 1500 / batch_size
-    if df.rdd.getNumPartitions > max_executors:
+    if df.rdd.getNumPartitions() > max_executors:
         df = df.coalesce(max_executors)
 
     return (

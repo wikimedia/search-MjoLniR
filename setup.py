@@ -8,6 +8,7 @@ requirements = [
     'kafka',
     'pyyaml',
     'hyperopt',
+    'elasticsearch>=5.0.0,<6.0.0',
     # python xgboost is only used for building
     # binary datasets. Primary usage is from jvm.
     'xgboost',
@@ -48,7 +49,7 @@ setup(
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Programming Language :: Python",
-        "Programming Language :: Python :: 2",
+        "Programming Language :: Python :: 3",
         "Environment :: Other Environment",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",

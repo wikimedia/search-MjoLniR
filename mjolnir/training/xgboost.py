@@ -251,7 +251,7 @@ class XGBoostModel(object):
         # instead as a filename. Write the feature map out to a file if necessary.
         if features:
             feat_map = "\n".join(["%d %s q" % (i, fname) for i, fname in enumerate(features)])
-            fmap_f = tempfile.NamedTemporaryFile()
+            fmap_f = tempfile.NamedTemporaryFile(mode='w')
             fmap_f.write(feat_map)
             fmap_f.flush()
             fmap_path = fmap_f.name

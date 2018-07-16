@@ -23,7 +23,7 @@ def append_features(df, *cols):
     """
     def add_features(feat, *other):
         raw = feat.toArray()
-        return Vectors.dense(np.append(raw, map(float, other)))
+        return Vectors.dense(np.append(raw, list(map(float, other))))
     add_features_udf = F.udf(add_features, VectorUDT())
     new_feat_list = df.schema['features'].metadata['features'] + cols
     return df.withColumn('features', mjolnir.spark.add_meta(
@@ -85,7 +85,7 @@ def quantiles(df, input_col):
             relativeError=1./2550, handleInvalid='error')
         return qds.fit(df).getSplits()
     except Exception as e:
-        print e
+        print(e)
         raise
 
 

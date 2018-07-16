@@ -29,9 +29,9 @@ def test_norm_query(df_love, hive_context, make_requests_session):
 
     # 1402 rows of input data made it through the min_session limits
     assert df_res.count() == 1402
-    # 6 individual query groups were found
-    assert df_res.select('norm_query_id').drop_duplicates().count() == 6
-    # Those 6 query groups are made up of 124 different queries
+    # 7 individual query groups were found
+    assert df_res.select('norm_query_id').drop_duplicates().count() == 7
+    # Those 7 query groups are made up of 124 different queries
     assert df_res.select('wikiid', 'query', 'norm_query_id').drop_duplicates().count() == 124
 
 
@@ -55,7 +55,7 @@ def test_make_query_groups(hits, expected):
     row = namedtuple('row', ('query', 'hit_page_ids'))
     source = [row(str(i), hit_page_ids) for i, hit_page_ids in enumerate(hits)]
     groups = mjolnir.norm_query._make_query_groups(source)
-    assert [(str(i), g) for i, g in enumerate(expected)] == groups
+    assert [(str(i), g) for i, g in enumerate(expected)] == list(groups)
 
 
 def test_vectorized_jaccard_sim():

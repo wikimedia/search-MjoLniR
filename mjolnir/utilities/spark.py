@@ -118,7 +118,7 @@ def build_template_vars(template_vars, environment, marker):
         template_vars = {k: v % template_vars for k, v in template_vars.items()}
         i += 1
         if i > 20:
-            print template_vars
+            print(template_vars)
             raise Exception('Stuck in a loop')
 
     return template_vars
@@ -337,7 +337,7 @@ def pretty_print_cli(args, env):
                     line.append(args.pop(0))
             output[-1] += ' \\'
             output.append('\t%s' % (' '.join(line)))
-    print '\n'.join(output)
+    print('\n'.join(output))
 
 
 def build_mjolnir_utility(config):
@@ -395,7 +395,7 @@ def build_spark_command(config):
 
 def subprocess_check_call(args, env=None):
     """Helper function to only run commands if we are not using dry run"""
-    print "Running Command:"
+    print("Running Command:")
     pretty_print_cli(args, env=env)
     if DRY_RUN:
         return 0
@@ -573,9 +573,9 @@ def main(argv=None):
     profiles = {name: group for name, group in profiles.items() if group['wikis']}
 
     if args['debug']:
-        print "Global Config: "
+        print("Global Config: ")
         pprint.pprint(global_profile)
-        print "\n\nProfiles:"
+        print("\n\nProfiles:")
         pprint.pprint(profiles)
     else:
         command = commands[args['command']]
@@ -595,7 +595,7 @@ def main(argv=None):
             errors = errors.union(check_defaults(profile, command['needed']))
         if errors:
             for error in errors:
-                print error
+                print(error)
             if not DRY_RUN:
                 sys.exit(1)
 

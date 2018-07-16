@@ -144,7 +144,7 @@ def get_offset_end(brokers, run_id, num_end_sigils, topic=mjolnir.kafka.TOPIC_CO
     seen_sigils = set()
     for message in consumer:
         if 'run_id' in message.value and message.value['run_id'] == run_id and 'complete' in message.value:
-            print 'found sigil for run %s and partition %d' % (message.value['run_id'], message.value['partition'])
+            print('found sigil for run %s and partition %d' % (message.value['run_id'], message.value['partition']))
             for partition, offset in enumerate(message.value['offsets']):
                 offsets_end[partition] = max(offsets_end[partition], offset)
             seen_sigils.add(message.value['partition'])
@@ -187,7 +187,6 @@ def collect_results(sc, brokers, receive_record, offsets_start, offsets_end, run
         raise RuntimeError("Cannot fetch offset_start, topic %s should have been created" % mjolnir.kafka.TOPIC_RESULT)
     for partition, (start, end) in enumerate(zip(offsets_start, offsets_end)):
         offset_ranges.append(OffsetRange(mjolnir.kafka.TOPIC_RESULT, partition, start, end))
-    assert not isinstance(brokers, basestring)
     # TODO: how can we force the kafka api_version here?
     kafka_params = {
         'metadata.broker.list': ','.join(brokers),
@@ -200,6 +199,6 @@ def collect_results(sc, brokers, receive_record, offsets_start, offsets_end, run
     # spark executors, we could chunk the offsets and union together multiple RDD's.
     return (
         KafkaUtils.createRDD(sc, kafka_params, offset_ranges)
-        .map(lambda (k, v): json.loads(v))
+        .map(lambda x: json.loads(x[1]))
         .filter(lambda rec: 'run_id' in rec and rec['run_id'] == run_id)
         .flatMap(receive_record))

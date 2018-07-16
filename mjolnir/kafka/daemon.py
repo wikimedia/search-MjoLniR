@@ -13,7 +13,7 @@ import logging
 import multiprocessing.dummy
 import mjolnir.cirrus
 import mjolnir.kafka
-import Queue
+import queue
 import requests
 import time
 
@@ -46,7 +46,7 @@ class Daemon(object):
         # enough.  We want enough to keep the workers busy, but not so many
         # that the commited offsets are siginficantly ahead of the work
         # actually being performed.
-        self.work_queue = Queue.Queue(10)
+        self.work_queue = queue.Queue(10)
 
     def run(self):
         worker_pool = multiprocessing.dummy.Pool(self.n_workers, self._produce)

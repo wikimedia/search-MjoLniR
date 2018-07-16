@@ -18,12 +18,12 @@ apt-get install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="-
     openjdk-8-jdk \
     confluent-kafka-2.11.7 \
     ca-certificates-java='20161107~bpo8+1' \
-    python-virtualenv \
+    python3-virtualenv \
     git-core \
     build-essential \
     maven \
     liblapack-dev \
-    python-dev \
+    python3-dev \
     gfortran \
     zip
 
@@ -104,8 +104,7 @@ EOD
 
 if [ ! -d /vagrant/venv ]; then
     cd /vagrant
-    # the clickmodels dependency of mjolnir doesn't work with python 3.x
-    virtualenv -p /usr/bin/python2.7 venv
+    virtualenv -p /usr/bin/python3 venv
     venv/bin/pip install tox
 fi
 

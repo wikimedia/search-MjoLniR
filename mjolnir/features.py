@@ -84,7 +84,7 @@ class LtrLoggingQuery(object):
                         },
                         {
                             'ids': {
-                                'values': map(str, set(ids))
+                                'values': sorted(map(str, set(ids)))
                             }
                         }
                     ]
@@ -179,7 +179,7 @@ class FeatureNamesAccumulator(AccumulatorParam):
         return OrderedDict()
 
     def addInPlace(self, value1, value2):
-        for k, v in value2.iteritems():
+        for k, v in value2.items():
             value1[k] = value1.get(k, 0) + v
         return value1
 
@@ -331,17 +331,17 @@ def collect_from_ltr_plugin_and_kafka(df, brokers, model, feature_names_accu, in
 
     run_id = base64.b64encode(os.urandom(16))
     offsets_start = mjolnir.kafka.client.get_offset_start(brokers)
-    print 'producing queries to kafka'
+    print('producing queries to kafka')
     num_end_sigils = mjolnir.kafka.client.produce_queries(
         df.groupBy('wikiid', 'query').agg(F.collect_set('hit_page_id').alias('hit_page_ids')),
         brokers,
         run_id,
         lambda row: log_query.make_msearch(row, indices))
-    print 'waiting for end run sigils'
+    print('waiting for end run sigils')
     offsets_end = mjolnir.kafka.client.get_offset_end(brokers, run_id, num_end_sigils)
-    print 'reading results from:'
+    print('reading results from:')
     for p, (start, end) in enumerate(zip(offsets_start, offsets_end)):
-        print '%d : %d to %d' % (p, start, end)
+        print('%d : %d to %d' % (p, start, end))
     return (
         mjolnir.kafka.client.collect_results(
             df._sc,

@@ -6,7 +6,7 @@ to make those queries against an elasticsearch cluster.
 from __future__ import absolute_import
 import random
 import requests
-import urlparse
+import urllib.parse
 
 
 # TODO: These are probably inaccessible because the access is through a firewall hole that
@@ -79,7 +79,7 @@ def check_idle(url_list, session_factory=requests.Session):
     failed = []
     with session_factory() as session:
         while len(url_list):
-            parsed = urlparse.urlparse(url_list.pop())
+            parsed = urllib.parse.urlparse(url_list.pop())
             try:
                 url = '%s://%s/_nodes/stats/os' % (parsed.scheme, parsed.netloc)
                 res = session.get(url).json()

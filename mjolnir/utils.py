@@ -6,7 +6,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-import urlparse
+import urllib.parse
 
 
 def temp_dir():
@@ -42,7 +42,7 @@ def multi_with(f):
                     child.send(None)
                 except StopIteration:
                     pass
-                except Exception, e:
+                except Exception as e:
                     errors.append(e)
                 else:
                     errors.append(Exception("Expected StopIteration"))
@@ -125,7 +125,7 @@ def hdfs_rmdir(path):
 @contextlib.contextmanager
 def hdfs_open_read(path):
     if path[:7] == 'hdfs://':
-        parts = urlparse.urlparse(path)
+        parts = urllib.parse.urlparse(path)
         path = os.path.join('/mnt/hdfs', parts.path[1:])
     with open(path, 'r') as f:
         yield f

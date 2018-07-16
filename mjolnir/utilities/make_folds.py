@@ -119,7 +119,7 @@ def make_folds(sc, sqlContext, input_dir, output_dir, wikis, zero_features, num_
     else:
         missing = set(wikis).difference(counts.keys())
         for wiki in missing:
-            print 'No observations available for ' + wiki
+            print('No observations available for ' + wiki)
         wikis = list(set(wikis).intersection(counts.keys()))
     if not wikis:
         raise Exception('No wikis provided')

@@ -81,7 +81,7 @@ def minimal_feature_set_action(cluster, features, def_name, store_name, minimal_
         minimal_feature_set = feature_store.get_feature_set(minimal_feature_set_name)
         if not minimal_feature_set.exists():
             def create():
-                print 'Creating feature set %s on cluster %s' % (minimal_feature_set_name, cluster)
+                print('Creating feature set %s on cluster %s' % (minimal_feature_set_name, cluster))
                 minimal_feature_set.add_features(minimal_feature_definitions)
 
             return 'create', create
@@ -149,7 +149,7 @@ def upload_models(input_dir, search_clusters, wikis, yes):
     fnames = glob.glob('%s/tune_*.pickle' % (input_dir))
     wikis = set(wikis)
     for fname in fnames:
-        print fname
+        print(fname)
         with open(fname, 'rb') as f:
             tune = pickle.load(f)
         wiki = tune['metadata']['wiki']
@@ -165,10 +165,10 @@ def upload_models(input_dir, search_clusters, wikis, yes):
         # TODO: v1?
         model_name = '%s_%s_v1' % (name, wiki)
 
-        answer = raw_input('\tUpload model %s? ' % (model_name)).lower()
+        answer = input('\tUpload model %s? ' % (model_name)).lower()
         if answer != 'y':
-            print '\tSkipping.'
-            print ''
+            print('\tSkipping.')
+            print('')
             continue
 
         req = {
@@ -198,18 +198,18 @@ def upload_models(input_dir, search_clusters, wikis, yes):
 
         for cluster in search_clusters:
             base_url = random.choice(mjolnir.cirrus.SEARCH_CLUSTERS[cluster])
-            print '\tUploading to %s' % (base_url)
+            print('\tUploading to %s' % (base_url))
             res = requests.post(url_pattern % (base_url,), data=json.dumps(req),
                                 headers={'Content-Type': 'application/json'})
 
             try:
                 parsed = res.json()
                 if 'result' in parsed and parsed['result'] == 'created':
-                    print 'Created on %s!' % (cluster)
+                    print('Created on %s!' % (cluster))
                 else:
                     pprint.pprint(parsed)
             except ValueError:
-                print res.text
+                print(res.text)
 
 
 def parse_arguments(argv):

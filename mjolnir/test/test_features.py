@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from collections import OrderedDict
 import mjolnir.features
+import numpy as np
 import pyspark.sql
 
 
@@ -36,7 +37,7 @@ def test_collect_ltr_plugin(spark_context, hive_context, make_requests_session):
 
     apple_856_features = [row.features for row in result if row.query == 'apple' and row.hit_page_id == 856][0]
     apple_856 = dict(zip(feature_names, apple_856_features.toArray()))
-    # What is this really testing? Exact numbers are meaningless
-    assert apple_856['title'] == 36.71202
-    assert apple_856['auxiliary_text'] == 48.56861
+    for field in ('title', 'auxiliary_text'):
+        assert type(apple_856[field]) == np.float64
+        assert apple_856[field] > 0
     assert apple_856['file_text'] == 0.0

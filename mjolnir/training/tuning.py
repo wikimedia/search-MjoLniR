@@ -127,7 +127,7 @@ def _py4j_retry(fn, default_retval):
             try:
                 return fn(*args, **kwargs)
             except py4j.protocol.Py4JJavaError as e:
-                print e
+                print(e)
                 failures += 1
         return default_retval
     return with_retry
@@ -163,7 +163,7 @@ def make_cv_objective(train_func, folds, num_cv_jobs, transformer=None, **kwargs
         def inner(fold):
             return train_func(fold, params, **kwargs)
 
-        return cv_mapper(inner, folds)
+        return list(cv_mapper(inner, folds))
 
     if transformer is None:
         return f

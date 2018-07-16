@@ -114,7 +114,7 @@ def _sample_queries(df, wiki_percents, num_buckets=100, seed=None):
         .map(to_pair_rdd)
         .sampleByKey(withReplacement=False, fractions=wiki_fractions, seed=seed)
         # Convert the PairRDD back into a dataframe.
-        .map(lambda (key, row): row)
+        .map(lambda x: x[1])
         .toDF(['wikiid', 'norm_query_id']))
 
 

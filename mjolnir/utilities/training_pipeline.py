@@ -45,7 +45,7 @@ def run_pipeline(
     for wiki in wikis:
         config = stats['wikis'][wiki]
 
-        print 'Training wiki: %s' % (wiki)
+        print('Training wiki: %s' % (wiki))
         num_folds = config['num_folds']
         if num_cv_jobs is None:
             num_cv_jobs = num_folds
@@ -74,8 +74,8 @@ def run_pipeline(
             final_num_trees=final_num_trees,
             iterations=iterations)
 
-        print 'CV  test-ndcg@10: %.4f' % (tune_results['metrics']['cv-test'])
-        print 'CV train-ndcg@10: %.4f' % (tune_results['metrics']['cv-train'])
+        print('CV  test-ndcg@10: %.4f' % (tune_results['metrics']['cv-test']))
+        print('CV train-ndcg@10: %.4f' % (tune_results['metrics']['cv-train']))
 
         tune_results['metadata'] = {
             'wiki': wiki,
@@ -86,29 +86,29 @@ def run_pipeline(
 
         # Train a model over all data with best params.
         best_params = tune_results['params'].copy()
-        print 'Best parameters:'
+        print('Best parameters:')
         for param, value in best_params.items():
-            print '\t%20s: %s' % (param, value)
+            print('\t%20s: %s' % (param, value))
         model = mjolnir.training.xgboost.train(
             all_paths, best_params, train_matrix="all")
 
         tune_results['metrics'] = {
             'train': model.summary.train()
         }
-        print 'train-ndcg@10: %.5f' % (tune_results['metrics']['train'][-1])
+        print('train-ndcg@10: %.5f' % (tune_results['metrics']['train'][-1]))
 
         # Save the tune results somewhere for later analysis. Use pickle
         # to maintain the hyperopt.Trials objects as is. It might be nice
         # to write out a json version, but the Trials objects require
         # some more work before they can be json encoded.
         tune_output_pickle = os.path.join(output_dir, 'tune_%s.pickle' % (wiki))
-        with open(tune_output_pickle, 'w') as f:
+        with open(tune_output_pickle, 'wb') as f:
             # TODO: This includes special hyperopt and mjolnir objects, it would
             # be nice if those could be converted to something simple like dicts
             # and output json instead of pickle. This would greatly simplify
             # post-processing.
             f.write(pickle.dumps(tune_results))
-            print 'Wrote tuning results to %s' % (tune_output_pickle)
+            print('Wrote tuning results to %s' % (tune_output_pickle))
 
         # Generate a feature map so xgboost can include feature names in the dump.
         # The final `q` indicates all features are quantitative values (floats).
@@ -117,18 +117,18 @@ def run_pipeline(
         else:
             features = config['stats']['features']
         json_model_output = os.path.join(output_dir, 'model_%s.json' % (wiki))
-        with open(json_model_output, 'wb') as f:
+        with open(json_model_output, 'w') as f:
             # The 'unused' first feature is because DataWriter creates datafiles
             # that start at index 1 to support xgboost and lightgbm from the same
             # file.
             f.write(model.dump(['unused'] + features))
-            print 'Wrote xgboost json model to %s' % (json_model_output)
+            print('Wrote xgboost json model to %s' % (json_model_output))
         # Write out the xgboost binary format as well, so it can be re-loaded
         # and evaluated
         model_output = os.path.join(output_dir, 'model_%s.xgb' % (wiki))
         model.saveModelAsLocalFile(model_output)
-        print 'Wrote xgboost binary model to %s' % (model_output)
-        print ''
+        print('Wrote xgboost binary model to %s' % (model_output))
+        print('')
 
 
 def parse_arguments(argv):

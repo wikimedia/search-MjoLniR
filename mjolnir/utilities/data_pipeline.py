@@ -94,9 +94,9 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
         .cache())
 
     weightedNdcgAt10 = mjolnir.metrics.ndcg(df_all_hits, 10, query_cols=['wikiid', 'query', 'session_id'])
-    print 'weighted ndcg@10:'
+    print('weighted ndcg@10:')
     for wiki, ndcg in weightedNdcgAt10.items():
-        print '\t%s: %.4f' % (wiki, ndcg)
+        print('\t%s: %.4f' % (wiki, ndcg))
 
     df_hits = (
         df_all_hits
@@ -129,12 +129,12 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     if not_enough_samples:
         raise ValueError('\n'.join(not_enough_samples))
 
-    print 'Fetched a total of %d samples for %d wikis' % (sum(actual_samples_per_wiki.values()), len(wikis))
+    print('Fetched a total of %d samples for %d wikis' % (sum(actual_samples_per_wiki.values()), len(wikis)))
 
     ndcgAt10 = mjolnir.metrics.ndcg(df_hits, 10, query_cols=['wikiid', 'query'])
-    print 'unweighted ndcg@10:'
+    print('unweighted ndcg@10:')
     for wiki, ndcg in ndcgAt10.items():
-        print '\t%s: %.4f' % (wiki, ndcg)
+        print('\t%s: %.4f' % (wiki, ndcg))
 
     # Collect features for all known query, hit_page_id combinations.
     df_features, fnames_accu = mjolnir.features.collect(
@@ -148,14 +148,15 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     # collect the accumulator
     df_features.cache().count()
 
-    if len(set(fnames_accu.value.values())) != 1:
+    num_rows_collected = set(fnames_accu.value.values())
+    if len(num_rows_collected) != 1:
         raise ValueError("Not all features were collected properly: " + str(fnames_accu.value))
-
-    print 'Collected %d datapoints' % (fnames_accu.value.values()[0])
+    num_rows_collected = num_rows_collected.pop()
+    print('Collected %d datapoints' % (num_rows_collected))
     # TODO: count and check that this value is sane, this would require computing the number
     # of request sent
 
-    features = fnames_accu.value.keys()
+    features = list(fnames_accu.value.keys())
     df_hits_with_features = (
         df_hits
         .join(df_features, how='inner', on=['wikiid', 'query', 'hit_page_id'])

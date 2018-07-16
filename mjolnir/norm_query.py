@@ -61,7 +61,7 @@ def _binary_sim(matrix):
     # This adds up to:
     #  memory usage = max_rows * matrix.shape[1] * 14
     mem_limit = 100 * pow(2, 20)
-    max_rows = mem_limit / (14 * matrix.shape[1])
+    max_rows = mem_limit // (14 * matrix.shape[1])
     out = np.eye(matrix.shape[0])
     for c_batch, r_batch in _batch(c, r, max_rows):
         # Use those indices to build two matrices that contains all
@@ -122,7 +122,7 @@ def _make_query_groups(source, threshold=0.5):
     # better algorithms for this, although in a test agglomerative clustering
     # returned very similar results.
     # Assigns each row to a unique group id
-    groups = range(n_rows)
+    groups = list(range(n_rows))
     # Walk over all the rows
     for i in range(n_rows):
         # The similarity matrix is mirrored over the diagonal, so we only
