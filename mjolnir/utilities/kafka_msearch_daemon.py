@@ -7,7 +7,7 @@ kafka.
 from __future__ import absolute_import
 import argparse
 import logging
-import mjolnir.kafka.daemon
+import mjolnir.kafka.msearch_daemon
 
 
 def parse_arguments(argv):
@@ -43,7 +43,7 @@ def main(argv=None):
         logging.basicConfig()
     del args['verbose']
     del args['very_verbose']
-    mjolnir.kafka.daemon.Daemon(**args).run()
+    mjolnir.kafka.msearch_daemon.Daemon(**args).run()
 
 
 if __name__ == '__main__':

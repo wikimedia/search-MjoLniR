@@ -10,7 +10,7 @@ Utilities:
 *                      labeled training data.
 * training_pipeline    Individual spark job for turning labeled training data
 *                      into xgboost models.
-* kafka_daemon         Daemon side of feature collection via kafka
+* kafka_msearch_daemon Daemon side of feature collection via kafka
 
 Usage:
     mjolnir (-h | --help)
