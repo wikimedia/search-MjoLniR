@@ -41,6 +41,7 @@ easier to deal with. Only time will tell.
 from __future__ import absolute_import
 import argparse
 import datetime
+import logging
 import os
 import pprint
 import subprocess
@@ -480,10 +481,41 @@ class KeyValueAction(argparse.Action):
         return tuple(value.split('=', 2))
 
 
-def parse_arguments(argv, available_commands):
+COMMANDS = {
+    'collect': {
+        'func': collect,
+        'needed': ['data_pipeline'],
+    },
+    'train': {
+        'func': train,
+        'needed': ['training_pipeline'],
+    },
+    'feature_selection': {
+        'func': feature_selection,
+        'needed': ['feature_selection'],
+    },
+    'make_folds': {
+        'func': make_folds,
+        'needed': ['make_folds'],
+    },
+    'collect_and_train': {
+        'func': collect_and_train,
+        'needed': ['data_pipeline', 'feature_selection', 'make_folds', 'training_pipeline'],
+    },
+    'shell': {
+        'func': lambda x, y: shell('pyspark', x, y),
+        'needed': []
+    },
+    'shell_train': {
+        'func': lambda x, y: shell('pyspark_train', x, y),
+        'needed': []
+    }
+}
+
+
+def arg_parser():
     parser = argparse.ArgumentParser(
         description='Run pre-configured spark-submit commands')
-
     parser.add_argument(
         '-c', '--config', dest='config', type=str, required=True,
         default='/etc/mjolnir/spark.yaml',
@@ -503,52 +535,15 @@ def parse_arguments(argv, available_commands):
         help='Print the command definition and exit')
     parser.set_defaults(dry_run=False)
     parser.add_argument(
-        'command', metavar='command', type=str, choices=set(available_commands),
-        help='Command to run: ' + ', '.join(available_commands))
+        'command', metavar='command', type=str, choices=set(COMMANDS.keys()),
+        help='Command to run: ' + ', '.join(COMMANDS.keys()))
     parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='*', default=[],
         help='Limit wikis to this list')
-
-    args = parser.parse_args(argv)
-
-    return dict(vars(args))
+    return parser
 
 
-def main(argv=None):
-    commands = {
-        'collect': {
-            'func': collect,
-            'needed': ['data_pipeline'],
-        },
-        'train': {
-            'func': train,
-            'needed': ['training_pipeline'],
-        },
-        'feature_selection': {
-            'func': feature_selection,
-            'needed': ['feature_selection'],
-        },
-        'make_folds': {
-            'func': make_folds,
-            'needed': ['make_folds'],
-        },
-        'collect_and_train': {
-            'func': collect_and_train,
-            'needed': ['data_pipeline', 'feature_selection', 'make_folds', 'training_pipeline'],
-        },
-        'shell': {
-            'func': lambda x, y: shell('pyspark', x, y),
-            'needed': []
-        },
-        'shell_train': {
-            'func': lambda x, y: shell('pyspark_train', x, y),
-            'needed': []
-        }
-    }
-    # We could probably auto-generate better help from the __doc__ strings of
-    # functions for each command, but save that for another day
-    args = parse_arguments(argv, commands.keys())
-
+def main(**args):
     # Easiest to just make this global instead of passing around
     global DRY_RUN
     DRY_RUN = args['dry_run']
@@ -578,7 +573,7 @@ def main(argv=None):
         print("\n\nProfiles:")
         pprint.pprint(profiles)
     else:
-        command = commands[args['command']]
+        command = COMMANDS[args['command']]
 
         # This is necessary because the path to the virtualenv needs to be the same
         # locally as it is on the remote executors. This places the venv at ./venv.
@@ -604,4 +599,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig()
+    kwargs = dict(vars(arg_parser().parse_args()))
+    main(**kwargs)

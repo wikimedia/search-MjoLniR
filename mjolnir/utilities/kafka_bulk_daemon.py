@@ -4,10 +4,11 @@ and push them into elasticsearch.
 """
 from __future__ import absolute_import
 import argparse
+import logging
 import mjolnir.kafka.bulk_daemon
 
 
-def parse_arguments(argv):
+def arg_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         '-b', '--brokers', dest='brokers', required=True, type=str,
@@ -21,13 +22,13 @@ def parse_arguments(argv):
     parser.add_argument(
         '-g', '--group-id', dest='group_id', type=str, default='TODO',
         help='Kafka consumer group to join')
-    return parser.parse_args(argv)
+    return parser
 
 
-def main(argv=None):
-    args = parse_arguments(argv)
-    mjolnir.kafka.bulk_daemon.run(**dict(vars(args)))
+main = mjolnir.kafka.bulk_daemon.run
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig()
+    kwargs = dict(vars(arg_parser().parse_args()))
+    main(**kwargs)

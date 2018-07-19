@@ -78,8 +78,8 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, algo, num_features, pre_
             pass
 
 
-def parse_arguments(argv):
-    parser = argparse.ArgumentParser(description='...')
+def arg_parser():
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         '-i', '--input', dest='input_dir', type=str,
         default='hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*',
@@ -95,41 +95,24 @@ def parse_arguments(argv):
         '-o', '--output-dir', dest='output_dir', type=str, required=True,
         help='Output path, prefixed with hdfs://, to write resulting dataframe to')
     parser.add_argument(
-        '-f', '--features', dest='pre_selected', type=str, required=False, default=None,
+        '-f', '--features', dest='pre_selected', type=lambda x: x.split(','), required=False, default=None,
         help='Comma separated list of pre-selected features. Optional')
-    parser.add_argument(
-        '-v', '--verbose', dest='verbose', default=False, action='store_true',
-        help='Increase logging to INFO')
-    parser.add_argument(
-        '-vv', '--very-verbose', dest='very_verbose', default=False, action='store_true',
-        help='Increase logging to DEBUG')
     parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='+',
         help='A wiki to generate features and labels for')
-
-    args = dict(vars(parser.parse_args(argv)))
-    if args['features']:
-        args['features'] = args['features'].split(',')
-    return args
+    return parser
 
 
-def main(argv=None):
-    args = parse_arguments(argv)
-    if args['very_verbose']:
-        logging.basicConfig(level=logging.DEBUG)
-    elif args['verbose']:
-        logging.basicConfig(level=logging.INFO)
-    else:
-        logging.basicConfig()
-    del args['verbose']
-    del args['very_verbose']
+def main(**kwargs):
     sc = SparkContext(appName="MLR: feature selection")
     # spark info logging is incredibly spammy. Use warn to have some hope of
     # human decipherable output
     sc.setLogLevel('WARN')
     sqlContext = HiveContext(sc)
-    run_pipeline(sc, sqlContext, **args)
+    run_pipeline(sc, sqlContext, **kwargs)
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig()
+    kwargs = dict(vars(arg_parser().parse_args()))
+    main(**kwargs)

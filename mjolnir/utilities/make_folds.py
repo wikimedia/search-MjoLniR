@@ -8,6 +8,7 @@ from __future__ import absolute_import
 import argparse
 import collections
 import json
+import logging
 import multiprocessing.dummy
 import mjolnir.feature_engineering
 import mjolnir.training.tuning
@@ -176,7 +177,7 @@ def make_folds(sc, sqlContext, input_dir, output_dir, wikis, zero_features, num_
         }))
 
 
-def parse_arguments(argv):
+def arg_parser():
     parser = argparse.ArgumentParser(description='Prepare XGB binary matrices')
     parser.add_argument(
         '-i', '--input', dest='input_dir', type=str, required=True,
@@ -199,22 +200,21 @@ def parse_arguments(argv):
     parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='*',
         help='List of wikis to build matrices for')
-    args = parser.parse_args(argv)
-    return dict(vars(args))
+    return parser
 
 
-def main(argv=None):
-    args = parse_arguments(argv)
-
+def main(**kwargs):
     app_name = 'MLR: writer binary folded datasets'
-    if args['wikis']:
-        app_name += ': ' + ', '.join(args['wikis'])
+    if kwargs['wikis']:
+        app_name += ': ' + ', '.join(kwargs['wikis'])
     sc = SparkContext(appName=app_name)
     sc.setLogLevel('WARN')
     sqlContext = HiveContext(sc)
 
-    make_folds(sc, sqlContext, **args)
+    make_folds(sc, sqlContext, **kwargs)
 
 
 if __name__ == '__main__':
-    main()
+    logging.basicConfig()
+    kwargs = dict(vars(arg_parser().parse_args()))
+    main(**kwargs)

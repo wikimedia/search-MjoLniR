@@ -1,13 +1,5 @@
 """
-Example script demonstrating the data collection portion of the MLR pipeline.
-This is mostly to demonstrate how everything ties together
-
-To run:
-    PYSPARK_PYTHON=venv/bin/python spark-submit \
-        --jars /path/to/mjolnir-with-dependencies.jar
-        --artifacts 'mjolnir_venv.zip#venv' \
-        --files /usr/lib/libhdfs.so.0.0.0
-        mjolnir/cli/data_pipeline.py
+Transforms user behaviour logs into a labeled training dataset
 """
 
 from __future__ import absolute_import
@@ -180,8 +172,18 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     df_hits_with_features.write.parquet(output_dir)
 
 
-def parse_arguments(argv):
-    parser = argparse.ArgumentParser(description='...')
+def percentage(value):
+    try:
+        value = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("Must be between 0 and 1")
+    if value < 0 or value > 1:
+        raise argparse.ArgumentTypeError("Must be between 0 and 1")
+    return value
+
+
+def arg_parser():
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         '-i', '--input', dest='input_dir', type=str,
         default='hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*',
@@ -190,7 +192,7 @@ def parse_arguments(argv):
         '-q', '--samples-per-wiki', dest='samples_per_wiki', type=int, default=1000000,
         help='The approximate number of rows in the final result per-wiki.')
     parser.add_argument(
-        '-qe', '--sample-size-tolerance', dest='samples_size_tolerance', type=float, default=0.5,
+        '-qe', '--sample-size-tolerance', dest='samples_size_tolerance', type=percentage, default=0.5,
         help='The tolerance between the --samples-per-wiki set and the actual number of rows fetched.'
              + ' Higher requires closer match.')
     parser.add_argument(
@@ -208,43 +210,25 @@ def parse_arguments(argv):
              + ' form to bootstrap access. Query normalization will still use the '
              + ' --search-cluster option')
     parser.add_argument(
-        '-v', '--verbose', dest='verbose', default=False, action='store_true',
-        help='Increase logging to INFO')
-    parser.add_argument(
-        '-vv', '--very-verbose', dest='very_verbose', default=False, action='store_true',
-        help='Increase logging to DEBUG')
-    parser.add_argument(
         '-f', '--feature-definitions', dest='ltr_feature_definitions', type=str, required=True,
         help='Name of the LTR plugin feature definitions (featureset:name[@store] or '
              + 'model:name[@store])')
     parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='+',
         help='A wiki to generate features and labels for')
-
-    args = parser.parse_args(argv)
-    if args.samples_size_tolerance < 0 or args.samples_size_tolerance > 1:
-        raise ValueError('--sample-size-tolerance must be between 0 and 1')
-
-    return dict(vars(args))
+    return parser
 
 
-def main(argv=None):
-    args = parse_arguments(argv)
-    if args['very_verbose']:
-        logging.basicConfig(level=logging.DEBUG)
-    elif args['verbose']:
-        logging.basicConfig(level=logging.INFO)
-    else:
-        logging.basicConfig()
-    del args['verbose']
-    del args['very_verbose']
+def main(**kwargs):
     sc = SparkContext(appName="MLR: data collection pipeline")
     # spark info logging is incredibly spammy. Use warn to have some hope of
     # human decipherable output
     sc.setLogLevel('WARN')
     sqlContext = HiveContext(sc)
-    run_pipeline(sc, sqlContext, **args)
+    run_pipeline(sc, sqlContext, **kwargs)
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig()
+    kwargs = dict(vars(arg_parser().parse_args()))
+    main(**kwargs)

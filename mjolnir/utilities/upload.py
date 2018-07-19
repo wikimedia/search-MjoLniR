@@ -4,6 +4,7 @@ from collections import defaultdict, OrderedDict
 import glob
 import hashlib
 import json
+import logging
 import mjolnir.cirrus
 import mjolnir.esltr
 import mjolnir.featuresets
@@ -212,7 +213,7 @@ def upload_models(input_dir, search_clusters, wikis, yes):
                 print(res.text)
 
 
-def parse_arguments(argv):
+def arg_parser():
     parser = argparse.ArgumentParser(description='Upload models to elasticsearch')
     parser.add_argument(
         '-i', '--input', dest='input_dir', required=True,
@@ -229,15 +230,14 @@ def parse_arguments(argv):
     parser.add_argument(
         'wikis', metavar='wikis', type=str, nargs='*',
         help='Wikis to upload models for. Empty for all models in input directory')
-    args = parser.parse_args(argv)
-    return dict(vars(args))
+    return parser
 
 
-def main(argv=None):
-    args = parse_arguments(argv)
-    # ???
-    upload_models(**args)
+def main(**kwargs):
+    upload_models(**kwargs)
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig()
+    kwargs = dict(vars(arg_parser().parse_args()))
+    main(**kwargs)

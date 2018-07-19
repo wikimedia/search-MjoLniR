@@ -131,7 +131,7 @@ def run_pipeline(
         print('')
 
 
-def parse_arguments(argv):
+def arg_parser():
     parser = argparse.ArgumentParser(description='Train XGBoost ranking models')
     parser.add_argument(
         '-i', '--input', dest='input_dir', type=str, required=True,
@@ -156,39 +156,22 @@ def parse_arguments(argv):
         '-t', '--iterations', dest='iterations', default=150, type=int,
         help='The number of hyperparameter tuning iterations to perform')
     parser.add_argument(
-        '-v', '--verbose', dest='verbose', default=False, action='store_true',
-        help='Increase logging to INFO')
-    parser.add_argument(
-        '-vv', '--very-verbose', dest='very_verbose', default=False, action='store_true',
-        help='Increase logging to DEBUG')
-    parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='*',
         help='A wiki to perform model training for.')
-
-    args = parser.parse_args(argv)
-    return dict(vars(args))
+    return parser
 
 
-def main(argv=None):
-    args = parse_arguments(argv)
-    if args['very_verbose']:
-        logging.basicConfig(level=logging.DEBUG)
-    elif args['verbose']:
-        logging.basicConfig(level=logging.INFO)
-    else:
-        logging.basicConfig()
-    del args['verbose']
-    del args['very_verbose']
+def main(**kwargs):
     # TODO: Set spark configuration? Some can't actually be set here though, so best might be to set all of it
     # on the command line for consistency.
     app_name = "MLR: training pipeline xgboost"
-    if args['wikis']:
-        app_name += ': ' + ', '.join(args['wikis'])
+    if kwargs['wikis']:
+        app_name += ': ' + ', '.join(kwargs['wikis'])
     sc = SparkContext(appName=app_name)
     sc.setLogLevel('WARN')
     sqlContext = HiveContext(sc)
 
-    output_dir = args['output_dir']
+    output_dir = kwargs['output_dir']
     if os.path.exists(output_dir):
         logging.error('Output directory (%s) already exists' % (output_dir))
         sys.exit(1)
@@ -199,7 +182,7 @@ def main(argv=None):
     os.mkdir(output_dir)
 
     try:
-        run_pipeline(sc, sqlContext, **args)
+        run_pipeline(sc, sqlContext, **kwargs)
     except:  # noqa: E722
         # If the directory we created is still empty delete it
         # so it doesn't need to be manually re-created
@@ -209,4 +192,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig()
+    kwargs = dict(vars(arg_parser().parse_args()))
+    main(**kwargs)
