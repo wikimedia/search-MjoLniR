@@ -166,7 +166,7 @@ def load_config(stream, marker, template_overrides):
         as global_profile above but specialized to a particular set of
         wikis.
     """
-    config = yaml.load(stream)
+    config = yaml.safe_load(stream)
 
     if 'working_dir' in config:
         working_dir = config['working_dir']

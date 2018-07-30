@@ -24,7 +24,7 @@ import logging
 import os
 import sys
 import traceback
-import pyyaml
+import yaml
 from importlib import import_module
 
 USAGE = """Usage:
@@ -52,7 +52,7 @@ def configure_logging(log_level=None, logging_config=None, **kwargs):
     else:
         log.info('Loading logging configuration from %s', logging_config)
         with open(logging_config) as f:
-            logging.config.dictConfig(pyyaml.load(f))
+            logging.config.dictConfig(yaml.safe_load(f))
 
         # If running from console mirror logs there
         if sys.stdin.isatty():

@@ -53,8 +53,8 @@ def compare_fixture(expect_file, generated):
     as_yaml = yaml.dump(sort_fixture(generated), default_flow_style=False)
     if os.path.isfile(expect_file):
         with open(expect_file, 'r') as f:
-            current = sort_fixture(yaml.load(as_yaml))
-            fixture = sort_fixture(yaml.load(f))
+            current = sort_fixture(yaml.safe_load(as_yaml))
+            fixture = sort_fixture(yaml.safe_load(f))
             assert current == fixture
     else:
         with open(expect_file, 'w') as f:
@@ -79,7 +79,7 @@ def test_load_config(monkeypatch, test_file, expect_file):
 @pytest.mark.parametrize(*generate_fixtures('build_spark_command'))
 def test_build_spark_command(test_file, expect_file):
     with open(test_file, 'r') as f:
-        test = yaml.load(f)
+        test = yaml.safe_load(f)
     cmd = mjolnir.utilities.spark.build_spark_command(test)
     compare_fixture(expect_file, cmd)
 
@@ -87,6 +87,6 @@ def test_build_spark_command(test_file, expect_file):
 @pytest.mark.parametrize(*generate_fixtures('build_mjolnir_utility'))
 def test_build_mjolnir_utility(test_file, expect_file):
     with open(test_file, 'r') as f:
-        test = yaml.load(f)
+        test = yaml.safe_load(f)
     cmd = mjolnir.utilities.spark.build_mjolnir_utility(test)
     compare_fixture(expect_file, cmd)
