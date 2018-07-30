@@ -77,7 +77,7 @@ global:
         packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:%(spark_version)s,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
     spark_conf:
         spark.task.cpus: "%(cores_per_task)s"
-        spark.yarn.executor.memoryOverhead: "%(executor_memory_overhead)s"
+        spark.executor.memoryOverhead: "%(executor_memory_overhead)s"
         # While undesirable, we can't disable the public (maven central) repository
         # until spark 2.2, which depends on java 8 (and our cluster is on java 7 still)
         spark.driver.extraJavaOptions: "-Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080 -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080"

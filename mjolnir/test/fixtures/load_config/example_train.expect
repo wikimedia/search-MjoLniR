@@ -38,8 +38,8 @@ global_config:
       spark_conf:
         spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
           -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+        spark.executor.memoryOverhead: '512'
         spark.task.cpus: '1'
-        spark.yarn.executor.memoryOverhead: '512'
     feature_selection:
       cmd_args:
         input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
@@ -74,9 +74,9 @@ global_config:
         spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
           -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
         spark.dynamicAllocation.maxExecutors: '400'
+        spark.executor.memoryOverhead: '512'
         spark.locality.wait: '0'
         spark.task.cpus: '1'
-        spark.yarn.executor.memoryOverhead: '512'
     make_folds:
       cmd_args:
         input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-features
@@ -113,9 +113,9 @@ global_config:
         spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
           -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
         spark.dynamicAllocation.maxExecutors: '100'
+        spark.executor.memoryOverhead: '512'
         spark.locality.wait: '0'
         spark.task.cpus: '1'
-        spark.yarn.executor.memoryOverhead: '512'
     pyspark:
       environment:
         HOME: /home/pytest
@@ -143,8 +143,8 @@ global_config:
       spark_conf:
         spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
           -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+        spark.executor.memoryOverhead: '512'
         spark.task.cpus: '1'
-        spark.yarn.executor.memoryOverhead: '512'
     pyspark_train:
       environment:
         HOME: /home/pytest
@@ -172,8 +172,8 @@ global_config:
       spark_conf:
         spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
           -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+        spark.executor.memoryOverhead: '6144'
         spark.task.cpus: '4'
-        spark.yarn.executor.memoryOverhead: '6144'
     training_pipeline:
       cmd_args:
         input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds-global
@@ -209,8 +209,8 @@ global_config:
         spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
           -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
         spark.dynamicAllocation.executorIdleTimeout: 180s
+        spark.executor.memoryOverhead: '512'
         spark.task.cpus: '1'
-        spark.yarn.executor.memoryOverhead: '512'
   wikis: []
 profiles:
   large:
@@ -253,8 +253,8 @@ profiles:
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
-          spark.yarn.executor.memoryOverhead: '512'
       feature_selection:
         cmd_args:
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
@@ -289,9 +289,9 @@ profiles:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.dynamicAllocation.maxExecutors: '400'
+          spark.executor.memoryOverhead: '512'
           spark.locality.wait: '0'
           spark.task.cpus: '1'
-          spark.yarn.executor.memoryOverhead: '512'
       make_folds:
         cmd_args:
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-features
@@ -328,9 +328,9 @@ profiles:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.dynamicAllocation.maxExecutors: '100'
+          spark.executor.memoryOverhead: '5120'
           spark.locality.wait: '0'
           spark.task.cpus: '1'
-          spark.yarn.executor.memoryOverhead: '5120'
       pyspark:
         environment:
           HOME: /home/pytest
@@ -358,8 +358,8 @@ profiles:
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
-          spark.yarn.executor.memoryOverhead: '512'
       pyspark_train:
         environment:
           HOME: /home/pytest
@@ -387,8 +387,8 @@ profiles:
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.executor.memoryOverhead: '6144'
           spark.task.cpus: '4'
-          spark.yarn.executor.memoryOverhead: '6144'
       training_pipeline:
         cmd_args:
           cv-jobs: '80'
@@ -427,8 +427,8 @@ profiles:
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.dynamicAllocation.executorIdleTimeout: 180s
           spark.dynamicAllocation.maxExecutors: '85'
+          spark.executor.memoryOverhead: '6144'
           spark.task.cpus: '6'
-          spark.yarn.executor.memoryOverhead: '6144'
     wikis:
     - enwiki
     - dewiki
@@ -472,8 +472,8 @@ profiles:
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
-          spark.yarn.executor.memoryOverhead: '512'
       feature_selection:
         cmd_args:
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
@@ -508,9 +508,9 @@ profiles:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.dynamicAllocation.maxExecutors: '400'
+          spark.executor.memoryOverhead: '512'
           spark.locality.wait: '0'
           spark.task.cpus: '1'
-          spark.yarn.executor.memoryOverhead: '512'
       make_folds:
         cmd_args:
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-features
@@ -547,9 +547,9 @@ profiles:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.dynamicAllocation.maxExecutors: '100'
+          spark.executor.memoryOverhead: '1536'
           spark.locality.wait: '0'
           spark.task.cpus: '1'
-          spark.yarn.executor.memoryOverhead: '1536'
       pyspark:
         environment:
           HOME: /home/pytest
@@ -577,8 +577,8 @@ profiles:
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
-          spark.yarn.executor.memoryOverhead: '512'
       pyspark_train:
         environment:
           HOME: /home/pytest
@@ -606,8 +606,8 @@ profiles:
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.executor.memoryOverhead: '6144'
           spark.task.cpus: '4'
-          spark.yarn.executor.memoryOverhead: '6144'
       training_pipeline:
         cmd_args:
           cv-jobs: '125'
@@ -646,8 +646,8 @@ profiles:
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.dynamicAllocation.executorIdleTimeout: 180s
           spark.dynamicAllocation.maxExecutors: '130'
+          spark.executor.memoryOverhead: '2048'
           spark.task.cpus: '4'
-          spark.yarn.executor.memoryOverhead: '2048'
     wikis:
     - itwiki
     - ptwiki
@@ -693,8 +693,8 @@ profiles:
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
-          spark.yarn.executor.memoryOverhead: '512'
       feature_selection:
         cmd_args:
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
@@ -729,9 +729,9 @@ profiles:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.dynamicAllocation.maxExecutors: '400'
+          spark.executor.memoryOverhead: '512'
           spark.locality.wait: '0'
           spark.task.cpus: '1'
-          spark.yarn.executor.memoryOverhead: '512'
       make_folds:
         cmd_args:
           input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-features
@@ -768,9 +768,9 @@ profiles:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.dynamicAllocation.maxExecutors: '100'
+          spark.executor.memoryOverhead: '1024'
           spark.locality.wait: '0'
           spark.task.cpus: '1'
-          spark.yarn.executor.memoryOverhead: '1024'
       pyspark:
         environment:
           HOME: /home/pytest
@@ -798,8 +798,8 @@ profiles:
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.executor.memoryOverhead: '512'
           spark.task.cpus: '1'
-          spark.yarn.executor.memoryOverhead: '512'
       pyspark_train:
         environment:
           HOME: /home/pytest
@@ -827,8 +827,8 @@ profiles:
         spark_conf:
           spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.executor.memoryOverhead: '6144'
           spark.task.cpus: '4'
-          spark.yarn.executor.memoryOverhead: '6144'
       training_pipeline:
         cmd_args:
           cv-jobs: '125'
@@ -867,8 +867,8 @@ profiles:
             -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
           spark.dynamicAllocation.executorIdleTimeout: 180s
           spark.dynamicAllocation.maxExecutors: '130'
+          spark.executor.memoryOverhead: '1024'
           spark.task.cpus: '4'
-          spark.yarn.executor.memoryOverhead: '1024'
     wikis:
     - svwiki
     - fawiki
