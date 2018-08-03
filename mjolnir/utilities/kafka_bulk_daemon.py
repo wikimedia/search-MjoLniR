@@ -17,8 +17,8 @@ def arg_parser():
        '-c', '--es-clusters', dest='es_clusters', required=True, type=str,
        help='Elasticsearch servers to bootstrap from as a comma separated list of <host>:<port>')
     parser.add_argument(
-        '-t', '--topic', dest='topic', required=True, type=str,
-        help='Kafka topic to read indexing requests from')
+        '-t', '--topic', dest='topics', required=True, type=str, nargs='+',
+        help='Kafka topic(s) to read indexing requests from. Multiple topics may be provided.')
     parser.add_argument(
         '-g', '--group-id', dest='group_id', type=str, default='TODO',
         help='Kafka consumer group to join')

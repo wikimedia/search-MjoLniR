@@ -147,7 +147,7 @@ def make_es_clusters(bootstrap_hosts):
     return clusters
 
 
-def run(brokers, es_clusters, topic, group_id):
+def run(brokers, es_clusters, topics, group_id):
     es_clusters = make_es_clusters(es_clusters)
     all_available_indices_memo = ttl_memoize(lambda: [available_indices(c) for c in es_clusters])
     consumer = kafka.KafkaConsumer(
@@ -161,10 +161,13 @@ def run(brokers, es_clusters, topic, group_id):
         # same lifetime as offsets.
         auto_offset_reset='earliest',
         api_version=mjolnir.kafka.BROKER_VERSION,
+        # Our expected records are tiny and compress well. Accept
+        # large batches. Increased from default of 500.
+        max_poll_records=2000,
     )
 
-    log.info('Subscribing to %s', topic)
-    consumer.subscribe([topic])
+    log.info('Subscribing to: %s', ', '.join(topics))
+    consumer.subscribe(topics)
     try:
         while True:
             poll_response = consumer.poll(timeout_ms=60000)
