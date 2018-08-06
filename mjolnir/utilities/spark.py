@@ -40,6 +40,7 @@ easier to deal with. Only time will tell.
 
 from __future__ import absolute_import
 import argparse
+from collections import OrderedDict
 import datetime
 import logging
 import os
@@ -408,23 +409,27 @@ def subprocess_check_call(args, env=None):
 
 # Registration of available CLI commands
 
-COMMANDS = {}
+COMMANDS = OrderedDict()
 
 
 def register_command(needed):
     def inner(fn):
-        COMMANDS[fn.__name__] = {
+        name = fn.__name__
+        desc = '{:20s} - {}'.format(name, fn.__doc__) if fn.__doc__ else name
+        COMMANDS[name] = {
             'fn': fn,
-            'needed': needed
+            'desc': desc,
+            'needed': needed,
         }
     return inner
+
 
 # Helpers for running profiles from CLI commands
 
 
 def run_all_profiles(global_profile, profiles, command):
     all_wikis = [wiki for group in profiles.values() for wiki in group['wikis']]
-    config = global_profile['commands']['data_pipeline']
+    config = global_profile['commands'][command]
     cmd = build_spark_command(config) + build_mjolnir_utility(config) + all_wikis
     subprocess_check_call(cmd, env=config['environment'])
 
@@ -445,10 +450,17 @@ def run_shell(global_profile, profiles, command):
 
 # Individual CLI command definitions
 
+
 @register_command(['data_pipeline'])
-def collect(global_profile, profiles):
-    """Run mjolnir data pipeline"""
+def build_dataset(global_profile, profiles):
+    """Transform click logs into a labeled dataset"""
     run_all_profiles(global_profile, profiles, 'data_pipeline')
+
+
+@register_command(['collect_features'])
+def collect_features(global_profile, profiles):
+    """Collect features from elasticsearch for a labeled dataset"""
+    run_all_profiles(global_profile, profiles, 'collect_features')
 
 
 @register_command(['feature_selection'])
@@ -459,6 +471,7 @@ def feature_selection(global_profile, profiles):
 
 @register_command(['make_folds'])
 def make_folds(global_profile, profiles):
+    """Prepare a feature dataframe for training"""
     run_each_profile(global_profile, profiles, 'make_folds')
 
 
@@ -468,27 +481,25 @@ def train(global_profile, profiles):
     run_each_profile(global_profile, profiles, 'training_pipeline')
 
 
-@register_command(['data_pipeline', 'feature_selection', 'make_folds', 'training_pipeline'])
+@register_command(['data_pipeline', 'collect_features', 'feature_selection', 'make_folds', 'training_pipeline'])
 def collect_and_train(global_profile, profiles):
     """Run data and training pipelines"""
-    collect(global_profile, profiles)
+    build_dataset(global_profile, profiles)
+    collect_features(global_profile, profiles)
     feature_selection(global_profile, profiles)
     make_folds(global_profile, profiles)
     train(global_profile, profiles)
 
-    # Cleanup training data from hdfs
-    # TODO when ready
-    hdfs_training_data_path = global_profile['commands']['data_pipeline']['cmd_args']['output-dir']
-    subprocess_check_call(['hdfs', 'dfs', '-rm', '-r', '-f', hdfs_training_data_path])
-
 
 @register_command(['pyspark'])
 def shell(global_profile, profiles):
+    """Run a pyspark shell with mjolnir"""
     run_shell(global_profile, profiles, 'pyspark')
 
 
 @register_command(['pyspark_train'])
 def shell_train(global_profile, profiles):
+    """Run a pyspark shell with mjolnir and memory/core counts reasonable for training"""
     run_shell(global_profile, profiles, 'pyspark_train')
 
 
@@ -517,8 +528,12 @@ class KeyValueAction(argparse.Action):
 
 
 def arg_parser():
+    description = ['Run pre-configured spark-submit commands', 'Available commands:', '']
+    for name, options in COMMANDS.items():
+        description.append('\t' + options['desc'])
     parser = argparse.ArgumentParser(
-        description='Run pre-configured spark-submit commands')
+        description='\n'.join(description),
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
         '-c', '--config', dest='config', type=str, required=True,
         default='/etc/mjolnir/spark.yaml',

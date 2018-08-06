@@ -1,5 +1,5 @@
 """
-Transforms user behaviour logs into a labeled training dataset
+Transforms user behaviour logs into a labeled dataset
 """
 
 from __future__ import absolute_import
@@ -18,7 +18,7 @@ import requests
 
 
 def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
-                 min_sessions_per_query, search_cluster, brokers, ltr_feature_definitions,
+                 min_sessions_per_query, search_cluster, brokers,
                  samples_size_tolerance, session_factory=requests.Session):
     sqlContext.sql("DROP TEMPORARY FUNCTION IF EXISTS stemmer")
     sqlContext.sql("CREATE TEMPORARY FUNCTION stemmer AS 'org.wikimedia.analytics.refinery.hive.StemmerUDF'")
@@ -79,17 +79,16 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
         # naive conversion of relevance % into a label
         .withColumn('label', (F.col('relevance') * 10).cast('int')))
 
+    # Merge relevance back into our sampled dataset. This join has to happen
+    # before aggregation for the weighted ndcg to be calculated with the
+    # original result ordering.
     df_all_hits = (
         df_sampled
         .select('wikiid', 'query', 'norm_query_id', 'hit_page_id', 'session_id', 'hit_position')
         .join(df_rel, how='inner', on=['wikiid', 'norm_query_id', 'hit_page_id'])
         .cache())
 
-    weightedNdcgAt10 = mjolnir.metrics.ndcg(df_all_hits, 10, query_cols=['wikiid', 'query', 'session_id'])
-    print('weighted ndcg@10:')
-    for wiki, ndcg in weightedNdcgAt10.items():
-        print('\t%s: %.4f' % (wiki, ndcg))
-
+    # Aggregate per-session rows into per-page rows
     df_hits = (
         df_all_hits
         .groupBy('wikiid', 'query', 'norm_query_id', 'hit_page_id')
@@ -102,6 +101,7 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
              F.first('relevance').alias('relevance'))
         .cache())
 
+    # Check that we really got enough stuff
     actual_samples_per_wiki = df_hits.groupby('wikiid').agg(F.count(F.lit(1)).alias('n_obs')).collect()
     actual_samples_per_wiki = {row.wikiid: row.n_obs for row in actual_samples_per_wiki}
 
@@ -123,42 +123,23 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
 
     print('Fetched a total of %d samples for %d wikis' % (sum(actual_samples_per_wiki.values()), len(wikis)))
 
+    # Calculate a few stats about the dataset
+    weightedNdcgAt10 = mjolnir.metrics.ndcg(df_all_hits, 10, query_cols=['wikiid', 'query', 'session_id'])
+    print('weighted ndcg@10:')
+    for wiki, ndcg in weightedNdcgAt10.items():
+        print('\t%s: %.4f' % (wiki, ndcg))
+
     ndcgAt10 = mjolnir.metrics.ndcg(df_hits, 10, query_cols=['wikiid', 'query'])
     print('unweighted ndcg@10:')
     for wiki, ndcg in ndcgAt10.items():
         print('\t%s: %.4f' % (wiki, ndcg))
 
-    # Collect features for all known query, hit_page_id combinations.
-    df_features, fnames_accu = mjolnir.features.collect(
-        df_hits,
-        url_list=mjolnir.cirrus.SEARCH_CLUSTERS[search_cluster] if brokers is None else None,
-        model=ltr_feature_definitions,
-        brokers=brokers,
-        indices={wiki: '%s_content' % (wiki) for wiki in wikis},
-        session_factory=session_factory)
-
-    # collect the accumulator
-    df_features.cache().count()
-
-    num_rows_collected = set(fnames_accu.value.values())
-    if len(num_rows_collected) != 1:
-        raise ValueError("Not all features were collected properly: " + str(fnames_accu.value))
-    num_rows_collected = num_rows_collected.pop()
-    print('Collected %d datapoints' % (num_rows_collected))
-    # TODO: count and check that this value is sane, this would require computing the number
-    # of request sent
-
-    features = list(fnames_accu.value.keys())
-    df_hits_with_features = (
+    # Add some metadata and write it all out
+    (
         df_hits
-        .join(df_features, how='inner', on=['wikiid', 'query', 'hit_page_id'])
         .withColumn('label', mjolnir.spark.add_meta(sc, F.col('label'), {
             'click_log_weighted_ndcg@10': weightedNdcgAt10,
             'click_log_ndcg@10': ndcgAt10,
-        }))
-        .withColumn('features', mjolnir.spark.add_meta(sc, F.col('features'), {
-            'features': features,
-            'feature_definitions': ltr_feature_definitions,
             'collected_at': datetime.datetime.now().isoformat(),
             'used_kafka': brokers is not None,
             'search_cluster': search_cluster,
@@ -167,9 +148,8 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
             'min_sessions_per_query': min_sessions_per_query,
             'input_dir': input_dir,
             'output_dir': output_dir,
-        })))
-
-    df_hits_with_features.write.parquet(output_dir)
+        }))
+        .write.parquet(output_dir))
 
 
 def percentage(value):
@@ -209,10 +189,6 @@ def arg_parser():
         help='Collect feature vectors via kafka using specified broker in <host>:<port> '
              + ' form to bootstrap access. Query normalization will still use the '
              + ' --search-cluster option')
-    parser.add_argument(
-        '-f', '--feature-definitions', dest='ltr_feature_definitions', type=str, required=True,
-        help='Name of the LTR plugin feature definitions (featureset:name[@store] or '
-             + 'model:name[@store])')
     parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='+',
         help='A wiki to generate features and labels for')

@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from itertools import islice
 import json
 from mjolnir.utilities.data_pipeline import run_pipeline as run_data_pipeline
+from mjolnir.utilities.collect_features import collect_features
 from mjolnir.utilities.feature_selection import run_pipeline as run_feature_selection_pipeline
 from mjolnir.utilities.make_folds import make_folds
 from mjolnir.utilities.training_pipeline import run_pipeline as run_train_pipeline
@@ -85,9 +86,10 @@ def test_integration(spark_context, hive_context, make_requests_session):
 
     with tempdir() as dir:
         input_dir = os.path.join(dir, 'input')
-        data_dir = os.path.join(dir, 'data')
-        feature_sel_dir = os.path.join(dir, 'features')
-        folds_dir = os.path.join(dir, 'folds')
+        labeled_dir = os.path.join(dir, 'labeled')
+        collect_dir = os.path.join(dir, 'features')
+        feature_sel_dir = os.path.join(dir, 'pruned')
+        folds_dir = os.path.join(dir, 'folded')
         trained_dir = os.path.join(dir, 'trained')
 
         # Generate some fake sessions and write them out
@@ -98,17 +100,24 @@ def test_integration(spark_context, hive_context, make_requests_session):
 
         # Apply data collection to those sessions.
         run_data_pipeline(
-            spark_context, hive_context, input_dir, data_dir,
+            spark_context, hive_context, input_dir, labeled_dir,
             wikis=["enwiki"], samples_per_wiki=5000,
             min_sessions_per_query=1, search_cluster='localhost',
-            # When building the fixture the featureset has to actually exist on
-            # whatever elasticsearch is serving up results.
+            brokers=None, samples_size_tolerance=0.5,
+            session_factory=session_factory)
+
+        # Collect features for the labeled dataset
+        # When building the fixture the featureset has to actually exist on
+        # whatever elasticsearch is serving up results.
+        collect_features(
+            spark_context, hive_context, labeled_dir, collect_dir,
+            wikis=['enwiki'], search_cluster='localhost',
             brokers=None, ltr_feature_definitions='featureset:enwiki_v1',
-            samples_size_tolerance=0.5, session_factory=session_factory)
+            session_factory=session_factory)
 
         # Run feature selection
         run_feature_selection_pipeline(
-            spark_context, hive_context, input_dir=data_dir, output_dir=feature_sel_dir,
+            spark_context, hive_context, input_dir=collect_dir, output_dir=feature_sel_dir,
             algo='mrmr', num_features=10, pre_selected=None, wikis=None)
 
         # Generate folds to feed into training

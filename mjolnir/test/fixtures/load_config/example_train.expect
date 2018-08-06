@@ -1,12 +1,50 @@
 global_config:
   commands:
-    data_pipeline:
+    collect_features:
       cmd_args:
         feature-definitions: featureset:enwiki_v1
+        input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
+        kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
+        output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
+        search-cluster: codfw
+      environment:
+        HOME: /home/pytest
+        PYSPARK_PYTHON: venv/bin/python
+        SPARK_CONF_DIR: /etc/spark2/conf
+        SPARK_HOME: /usr/lib/spark2
+        USER: pytest
+      mjolnir_utility: collect_features
+      mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
+      paths:
+        dir_exist: !!set
+          /etc/spark2/conf: null
+        dir_not_exist: !!set
+          /mnt/hdfs/user/pytest/mjolnir/marker/pruned: null
+        file_exist: !!set
+          /srv/mjolnir/mjolnir_venv.zip: null
+          /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+          /usr/lib/spark2/bin/spark-submit: null
+          venv/bin/python: null
+      spark_args:
+        archives: /srv/mjolnir/mjolnir_venv.zip#venv
+        executor-cores: '1'
+        executor-memory: 2G
+        files: /usr/lib/libhdfs.so.0.0.0
+        master: yarn
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+        repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
+      spark_command: /usr/lib/spark2/bin/spark-submit
+      spark_conf:
+        spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
+          -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+        spark.executor.memoryOverhead: '512'
+        spark.task.cpus: '1'
+    data_pipeline:
+      cmd_args:
         input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
         kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
         min-sessions: '10'
-        output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
+        output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
         samples-per-wiki: '35000000'
         search-cluster: codfw
       environment:
@@ -21,7 +59,7 @@ global_config:
         dir_exist: !!set
           /etc/spark2/conf: null
         dir_not_exist: !!set
-          /mnt/hdfs/user/pytest/mjolnir/marker: null
+          /mnt/hdfs/user/pytest/mjolnir/marker/labeled: null
         file_exist: !!set
           /srv/mjolnir/mjolnir_venv.zip: null
           /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
@@ -43,9 +81,9 @@ global_config:
         spark.task.cpus: '1'
     feature_selection:
       cmd_args:
-        input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
+        input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
         num-features: '50'
-        output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-features
+        output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
       environment:
         HOME: /home/pytest
         PYSPARK_PYTHON: venv/bin/python
@@ -80,11 +118,11 @@ global_config:
         spark.task.cpus: '1'
     make_folds:
       cmd_args:
-        input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-features
+        input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
         max-executors: '50'
         num-folds: '5'
         num-workers: '1'
-        output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds-global
+        output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/folded
       environment:
         HOME: /home/pytest
         PYSPARK_PYTHON: venv/bin/python
@@ -177,7 +215,7 @@ global_config:
         spark.task.cpus: '4'
     training_pipeline:
       cmd_args:
-        input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds-global
+        input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/folded
         output: /home/pytest/training_size/marker-global
       environment:
         HOME: /home/pytest
@@ -216,13 +254,51 @@ global_config:
 profiles:
   large:
     commands:
-      data_pipeline:
+      collect_features:
         cmd_args:
           feature-definitions: featureset:enwiki_v1
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
+          kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
+          search-cluster: codfw
+        environment:
+          HOME: /home/pytest
+          PYSPARK_PYTHON: venv/bin/python
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
+          USER: pytest
+        mjolnir_utility: collect_features
+        mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
+        paths:
+          dir_exist: !!set
+            /etc/spark2/conf: null
+          dir_not_exist: !!set
+            /mnt/hdfs/user/pytest/mjolnir/marker/pruned: null
+          file_exist: !!set
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
+            venv/bin/python: null
+        spark_args:
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
+          executor-cores: '1'
+          executor-memory: 2G
+          files: /usr/lib/libhdfs.so.0.0.0
+          master: yarn
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
+        spark_command: /usr/lib/spark2/bin/spark-submit
+        spark_conf:
+          spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
+            -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.executor.memoryOverhead: '512'
+          spark.task.cpus: '1'
+      data_pipeline:
+        cmd_args:
           input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
           kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
           min-sessions: '10'
-          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
           samples-per-wiki: '35000000'
           search-cluster: codfw
         environment:
@@ -237,7 +313,7 @@ profiles:
           dir_exist: !!set
             /etc/spark2/conf: null
           dir_not_exist: !!set
-            /mnt/hdfs/user/pytest/mjolnir/marker: null
+            /mnt/hdfs/user/pytest/mjolnir/marker/labeled: null
           file_exist: !!set
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
@@ -259,9 +335,9 @@ profiles:
           spark.task.cpus: '1'
       feature_selection:
         cmd_args:
-          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
           num-features: '50'
-          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-features
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -296,11 +372,11 @@ profiles:
           spark.task.cpus: '1'
       make_folds:
         cmd_args:
-          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-features
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
           max-executors: '50'
           num-folds: '3'
           num-workers: '1'
-          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds-large
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/folded
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -395,7 +471,7 @@ profiles:
         cmd_args:
           cv-jobs: '80'
           final-trees: '100'
-          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds-large
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/folded
           output: /home/pytest/training_size/marker-large
         environment:
           HOME: /home/pytest
@@ -436,13 +512,51 @@ profiles:
     - dewiki
   medium:
     commands:
-      data_pipeline:
+      collect_features:
         cmd_args:
           feature-definitions: featureset:enwiki_v1
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
+          kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
+          search-cluster: codfw
+        environment:
+          HOME: /home/pytest
+          PYSPARK_PYTHON: venv/bin/python
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
+          USER: pytest
+        mjolnir_utility: collect_features
+        mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
+        paths:
+          dir_exist: !!set
+            /etc/spark2/conf: null
+          dir_not_exist: !!set
+            /mnt/hdfs/user/pytest/mjolnir/marker/pruned: null
+          file_exist: !!set
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
+            venv/bin/python: null
+        spark_args:
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
+          executor-cores: '1'
+          executor-memory: 2G
+          files: /usr/lib/libhdfs.so.0.0.0
+          master: yarn
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
+        spark_command: /usr/lib/spark2/bin/spark-submit
+        spark_conf:
+          spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
+            -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.executor.memoryOverhead: '512'
+          spark.task.cpus: '1'
+      data_pipeline:
+        cmd_args:
           input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
           kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
           min-sessions: '10'
-          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
           samples-per-wiki: '35000000'
           search-cluster: codfw
         environment:
@@ -457,7 +571,7 @@ profiles:
           dir_exist: !!set
             /etc/spark2/conf: null
           dir_not_exist: !!set
-            /mnt/hdfs/user/pytest/mjolnir/marker: null
+            /mnt/hdfs/user/pytest/mjolnir/marker/labeled: null
           file_exist: !!set
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
@@ -479,9 +593,9 @@ profiles:
           spark.task.cpus: '1'
       feature_selection:
         cmd_args:
-          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
           num-features: '50'
-          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-features
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -516,11 +630,11 @@ profiles:
           spark.task.cpus: '1'
       make_folds:
         cmd_args:
-          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-features
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
           max-executors: '50'
           num-folds: '5'
           num-workers: '1'
-          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds-medium
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/folded
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -615,7 +729,7 @@ profiles:
         cmd_args:
           cv-jobs: '125'
           final-trees: '100'
-          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds-medium
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/folded
           output: /home/pytest/training_size/marker-medium
         environment:
           HOME: /home/pytest
@@ -658,13 +772,51 @@ profiles:
     - ruwiki
   small:
     commands:
-      data_pipeline:
+      collect_features:
         cmd_args:
           feature-definitions: featureset:enwiki_v1
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
+          kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
+          search-cluster: codfw
+        environment:
+          HOME: /home/pytest
+          PYSPARK_PYTHON: venv/bin/python
+          SPARK_CONF_DIR: /etc/spark2/conf
+          SPARK_HOME: /usr/lib/spark2
+          USER: pytest
+        mjolnir_utility: collect_features
+        mjolnir_utility_path: /srv/mjolnir/venv/bin/mjolnir-utilities.py
+        paths:
+          dir_exist: !!set
+            /etc/spark2/conf: null
+          dir_not_exist: !!set
+            /mnt/hdfs/user/pytest/mjolnir/marker/pruned: null
+          file_exist: !!set
+            /srv/mjolnir/mjolnir_venv.zip: null
+            /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
+            /usr/lib/spark2/bin/spark-submit: null
+            venv/bin/python: null
+        spark_args:
+          archives: /srv/mjolnir/mjolnir_venv.zip#venv
+          executor-cores: '1'
+          executor-memory: 2G
+          files: /usr/lib/libhdfs.so.0.0.0
+          master: yarn
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
+        spark_command: /usr/lib/spark2/bin/spark-submit
+        spark_conf:
+          spark.driver.extraJavaOptions: -Dhttp.proxyHost=webproxy.eqiad.wmnet -Dhttp.proxyPort=8080
+            -Dhttps.proxyHost=webproxy.eqiad.wmnet -Dhttps.proxyPort=8080
+          spark.executor.memoryOverhead: '512'
+          spark.task.cpus: '1'
+      data_pipeline:
+        cmd_args:
           input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
           kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
           min-sessions: '10'
-          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
           samples-per-wiki: '35000000'
           search-cluster: codfw
         environment:
@@ -679,7 +831,7 @@ profiles:
           dir_exist: !!set
             /etc/spark2/conf: null
           dir_not_exist: !!set
-            /mnt/hdfs/user/pytest/mjolnir/marker: null
+            /mnt/hdfs/user/pytest/mjolnir/marker/labeled: null
           file_exist: !!set
             /srv/mjolnir/mjolnir_venv.zip: null
             /srv/mjolnir/venv/bin/mjolnir-utilities.py: null
@@ -701,9 +853,9 @@ profiles:
           spark.task.cpus: '1'
       feature_selection:
         cmd_args:
-          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/labeled
           num-features: '50'
-          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-features
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -738,11 +890,11 @@ profiles:
           spark.task.cpus: '1'
       make_folds:
         cmd_args:
-          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-features
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/pruned
           max-executors: '50'
           num-folds: '5'
           num-workers: '1'
-          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds-small
+          output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/folded
         environment:
           HOME: /home/pytest
           PYSPARK_PYTHON: venv/bin/python
@@ -837,7 +989,7 @@ profiles:
         cmd_args:
           cv-jobs: '125'
           final-trees: '500'
-          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker-folds-small
+          input: hdfs://analytics-hadoop/user/pytest/mjolnir/marker/folded
           output: /home/pytest/training_size/marker-small
         environment:
           HOME: /home/pytest

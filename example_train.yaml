@@ -15,20 +15,23 @@ global:
         # Local path to python script for running mjolnir utilities
         mjolnir_utility_path: "%(working_dir)s/venv/bin/mjolnir-utilities.py"
 
+        # Paths to our parent data directory
+        data_path_prefix: "user/%(USER)s/mjolnir/%(marker)s"
+        hdfs_data_path_prefix: "hdfs://analytics-hadoop/%(data_path_prefix)s"
+        local_data_path_prefix: "/mnt/hdfs/%(data_path_prefix)s"
+
         # Path inside hdfs to the training data
-        training_data_path: "user/%(USER)s/mjolnir/%(marker)s"
-        hdfs_training_data_path: "hdfs://analytics-hadoop/%(training_data_path)s"
-        local_training_data_path: "/mnt/hdfs/%(training_data_path)s"
+        hdfs_labeled_data_path: "%(hdfs_data_path_prefix)s/labeled"
+        local_labeled_data_path: "%(local_data_path_prefix)s/labeled"
 
         # Path inside hdfs to training data after feature selection
-        feature_selection_suffix: "-features"
-        hdfs_feature_data_path: "%(hdfs_training_data_path)s%(feature_selection_suffix)s"
-        local_feature_data_path: "%(local_training_data_path)s%(feature_selection_suffix)s"
+        hdfs_feature_data_path: "%(hdfs_data_path_prefix)s/pruned"
+        local_feature_data_path: "%(local_data_path_prefix)s/pruned"
 
         # Fully qualified HDFS path to pre-folded data
         fold_data_suffix: "-folds-%(profile_name)s"
-        hdfs_fold_data_path: "%(hdfs_training_data_path)s%(fold_data_suffix)s"
-        local_fold_data_path: "%(local_training_data_path)s%(fold_data_suffix)s"
+        hdfs_fold_data_path: "%(hdfs_data_path_prefix)s/folded"
+        local_fold_data_path: "%(local_data_path_prefix)s/folded"
 
         # Base directory used to build path to write training output to
         base_training_output_dir: "%(HOME)s/training_size"
@@ -100,16 +103,28 @@ global:
             mjolnir_utility: data_pipeline
             paths:
                 dir_not_exist: !!set
-                    ? "%(local_training_data_path)s"
+                    ? "%(local_labeled_data_path)s"
             cmd_args:
                 input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
-                output-dir: "%(hdfs_training_data_path)s"
+                output-dir: "%(hdfs_labeled_data_path)s"
                 # Maximum number of training observations per-wiki. We usually get a bit less
                 # than requestsed, 35M turns into 25 or 30M.
                 samples-per-wiki: 35000000
                 search-cluster: codfw
                 kafka: "%(kafka_brokers)s"
                 min-sessions: "%(min_sessions_per_query)s"
+        collect_features:
+            spark_command: "%(SPARK_HOME)s/bin/spark-submit"
+            mjolnir_utility_path: "%(mjolnir_utility_path)s"
+            mjolnir_utility: collect_features
+            paths:
+                dir_not_exist: !!set
+                    ? "%(local_feature_data_path)s"
+            cmd_args:
+                input: "%(hdfs_labeled_data_path)s"
+                output-dir: "%(hdfs_feature_data_path)s"
+                search-cluster: codfw
+                kafka: "%(kafka_brokers)s"
                 feature-definitions: "%(feature_definitions)s"
         feature_selection:
             spark_command: "%(SPARK_HOME)s/bin/spark-submit"
@@ -119,7 +134,7 @@ global:
                 spark.locality.wait: 0
                 spark.dynamicAllocation.maxExecutors: 400
             cmd_args:
-                input: "%(hdfs_training_data_path)s"
+                input: "%(hdfs_labeled_data_path)s"
                 num-features: 50
                 output-dir: "%(hdfs_feature_data_path)s"
         make_folds:
