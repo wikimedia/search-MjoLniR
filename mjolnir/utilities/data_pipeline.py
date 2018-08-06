@@ -44,7 +44,8 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
     # Note that df_norm comes back cached
     df_norm = mjolnir.norm_query.transform(
         df_clicks,
-        url_list=mjolnir.cirrus.SEARCH_CLUSTERS[search_cluster],
+        url_list=mjolnir.cirrus.SEARCH_CLUSTERS[search_cluster] if search_cluster else None,
+        brokers=brokers,
         # TODO: While this works for now, at some point we might want to handle
         # things like multimedia search from commons, and non-main namespace searches.
         indices={wiki: '%s_content' % (wiki) for wiki in wikis},
@@ -142,7 +143,7 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
             'click_log_ndcg@10': ndcgAt10,
             'collected_at': datetime.datetime.now().isoformat(),
             'used_kafka': brokers is not None,
-            'search_cluster': search_cluster,
+            'search_cluster': search_cluster if search_cluster else "",
             # TODO: Where does this metadata go? It seems a bit more top-level
             # but could be useful to remember.
             'min_sessions_per_query': min_sessions_per_query,
@@ -179,7 +180,7 @@ def arg_parser():
         '-s', '--min-sessions', dest='min_sessions_per_query', type=int, default=10,
         help='The minimum number of sessions per normalized query')
     parser.add_argument(
-        '-c', '--search-cluster', dest='search_cluster', type=str, default='localhost',
+        '-c', '--search-cluster', dest='search_cluster', type=str,
         choices=mjolnir.cirrus.SEARCH_CLUSTERS.keys(), help='Search cluster to source features from')
     parser.add_argument(
         '-o', '--output-dir', dest='output_dir', type=str, required=True,
@@ -191,7 +192,7 @@ def arg_parser():
              + ' --search-cluster option')
     parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='+',
-        help='A wiki to generate features and labels for')
+        help='A wiki to generate labels for')
     return parser
 
 

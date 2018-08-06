@@ -38,7 +38,7 @@ global:
         training_output_dir: "%(base_training_output_dir)s/%(marker)s-%(profile_name)s"
 
         # Brokers to use to bootstrap kafka connections
-        kafka_brokers: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
+        kafka_brokers: kafka-jumbo1001.eqiad.wmnet:9092,kafka-jumbo1002.eqiad.wmnet:9092,kafka-jumbo1003.eqiad.wmnet:9092
 
         # Number of cpu cores to assign per task. Must be a multiple of
         # cores_per_executor. Spark can't take advantage of this being > 1, but
@@ -129,7 +129,6 @@ global:
                 # Maximum number of training observations per-wiki. We usually get a bit less
                 # than requestsed, 35M turns into 25 or 30M.
                 samples-per-wiki: 35000000
-                search-cluster: codfw
                 kafka: "%(kafka_brokers)s"
                 min-sessions: "%(min_sessions_per_query)s"
         collect_features:
@@ -142,7 +141,6 @@ global:
             cmd_args:
                 input: "%(hdfs_labeled_data_path)s"
                 output-dir: "%(hdfs_feature_data_path)s"
-                search-cluster: codfw
                 kafka: "%(kafka_brokers)s"
                 feature-definitions: "%(feature_definitions)s"
         feature_selection:

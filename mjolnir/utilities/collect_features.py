@@ -27,7 +27,7 @@ def collect_features(sc, sqlContext, input_dir, output_dir, wikis,
     # Collect features for all known query, hit_page_id combinations.
     df_features, fnames_accu = mjolnir.features.collect(
         df_hits,
-        url_list=mjolnir.cirrus.SEARCH_CLUSTERS[search_cluster] if brokers is None else None,
+        url_list=mjolnir.cirrus.SEARCH_CLUSTERS[search_cluster] if search_cluster else None,
         model=ltr_feature_definitions,
         brokers=brokers,
         indices={wiki: '%s_content' % (wiki) for wiki in wikis},
@@ -57,7 +57,7 @@ def collect_features(sc, sqlContext, input_dir, output_dir, wikis,
             'feature_definitions': ltr_feature_definitions,
             'collected_at': datetime.datetime.now().isoformat(),
             'used_kafka': brokers is not None,
-            'search_cluster': search_cluster,
+            'search_cluster': search_cluster if search_cluster else "",
             # TODO: Where does this metadata go? It seems a bit more top-level
             # but could be useful to remember.
             'input_dir': input_dir,
@@ -87,7 +87,7 @@ def arg_parser():
         '-i', '--input', dest='input_dir', type=str, required=True,
         help='Input path, prefixed with hdfs://, to query and click data')
     parser.add_argument(
-        '-c', '--search-cluster', dest='search_cluster', type=str, default='localhost',
+        '-c', '--search-cluster', dest='search_cluster', type=str,
         choices=mjolnir.cirrus.SEARCH_CLUSTERS.keys(), help='Search cluster to source features from')
     parser.add_argument(
         '-o', '--output-dir', dest='output_dir', type=str, required=True,

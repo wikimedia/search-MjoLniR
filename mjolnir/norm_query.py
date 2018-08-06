@@ -140,7 +140,7 @@ def _make_query_groups(source, threshold=0.5):
     return zip([row.query for row in source], groups)
 
 
-def transform(df, url_list, indices=None, batch_size=30, top_n=5, min_sessions_per_query=35,
+def transform(df, url_list=None, brokers=None, indices=None, batch_size=30, top_n=5, min_sessions_per_query=35,
               session_factory=requests.Session):
     """Group together similar results in df
 
@@ -154,6 +154,9 @@ def transform(df, url_list, indices=None, batch_size=30, top_n=5, min_sessions_p
     df : pyspark.sql.DataFrame
     url_list : list of str
         List of urls for elasticsearch servers
+    brokers : list of str
+        List of host:port pairs to bootstrap kafka with. Must provide either
+        brokers or url_list, but not both.
     indices : dict, optional
         Map from wikiid to the elasticsearch index to query. If a wiki is not provided
         the wikiid will be used as the index name.
@@ -201,7 +204,10 @@ def transform(df, url_list, indices=None, batch_size=30, top_n=5, min_sessions_p
         # Collect the current top hits for each individual query. This is used,
         # as opposed to historical hit page ids because the shift in results over
         # time negatively effects the grouping.
-        mjolnir.es_hits.transform(df_queries, url_list, indices, batch_size, top_n, session_factory)
+        mjolnir.es_hits.transform(
+            df_queries, url_list=url_list, brokers=brokers,
+            indices=indices, batch_size=batch_size, top_n=top_n,
+            session_factory=session_factory)
         # Build a row per normalized query
         .groupBy('wikiid', 'norm_query')
         .agg(F.collect_list(F.struct('query', 'hit_page_ids')).alias('source'))

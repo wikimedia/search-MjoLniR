@@ -3,9 +3,11 @@ Collect hit page ids for queries from elasticsearch
 """
 
 from __future__ import absolute_import
+import base64
 import json
 import mjolnir.cirrus
 import mjolnir.spark
+import os
 import random
 import requests
 
@@ -36,10 +38,7 @@ def _create_bulk_query(rows, indices, top_n):
     return "%s\n" % ('\n'.join(bulk_query))
 
 
-def _handle_response(response):
-    assert response.status_code == 200
-    parsed = response.json()
-    assert 'responses' in parsed, response.text
+def _handle_response(parsed):
     for one_response in parsed['responses']:
         yield [int(hit['_id']) for hit in one_response['hits']['hits']]
 
@@ -55,7 +54,38 @@ def _batch(iterable, n):
         yield cur_batch
 
 
-def transform(df, url_list, indices=None, batch_size=15, top_n=5, session_factory=requests.Session):
+def transform_from_kafka(df, brokers, indices=None, batch_size=15, top_n=5, session_factory=requests.Session):
+    mjolnir.spark.assert_columns(df, ['wikiid', 'query', 'norm_query'])
+    if indices is None:
+        indices = {}
+
+    def kafka_handle_response(record):
+        assert record['status_code'] == 200
+        parsed = json.loads(record['text'])
+        meta = record['meta']
+        for hit_page_ids in _handle_response(parsed):
+            # Extend the provided row with an extra field. Ideally we would
+            # instead use a UDF, but that makes re-using a requests session
+            # difficult. Explicit, rather than row + (hit_page_ids,) to ensure
+            # ordering matches toDF([...]) call that names them
+            yield (meta['wikiid'], meta['query'], meta['norm_query'], hit_page_ids)
+
+    run_id = base64.b64encode(os.urandom(16)).decode('ascii')
+    offsets_start = mjolnir.kafka.client.get_offset_start(brokers)
+    print('producing queries to kafka')
+    num_end_sigils = mjolnir.kafka.client.produce_queries(
+            df, brokers, run_id,
+            create_es_query=lambda row: _create_bulk_query([row], indices, top_n),
+            meta_keys=['wikiid', 'query', 'norm_query'])
+    offsets_end = mjolnir.kafka.client.get_offset_end(brokers, run_id, num_end_sigils)
+    return (
+        mjolnir.kafka.client.collect_results(
+            df._sc, brokers, kafka_handle_response,
+            offsets_start, offsets_end, run_id)
+        .toDF(['wikiid', 'query', 'norm_query', 'hit_page_ids']))
+
+
+def transform_from_elasticsearch(df, url_list, indices=None, batch_size=15, top_n=5, session_factory=requests.Session):
     """Collect hit page ids for queries from elasticsearch
 
     Parameters
@@ -89,7 +119,10 @@ def transform(df, url_list, indices=None, batch_size=15, top_n=5, session_factor
             for batch_rows in _batch(rows, batch_size):
                 bulk_query = _create_bulk_query(batch_rows, indices, top_n)
                 response = mjolnir.cirrus.make_request('msearch', session, partition_url_list, bulk_query)
-                for row, hit_page_ids in zip(batch_rows, _handle_response(response)):
+                assert response.status_code == 200
+                parsed = response.json()
+                assert 'responses' in parsed, response.text
+                for row, hit_page_ids in zip(batch_rows, _handle_response(parsed)):
                     # Extend the provided row with an extra field. Ideally we would
                     # instead use a UDF, but that makes re-using a requests session
                     # difficult. Explicit, rather than row + (hit_page_ids,) to ensure
@@ -110,3 +143,12 @@ def transform(df, url_list, indices=None, batch_size=15, top_n=5, session_factor
         df
         .rdd.mapPartitions(collect_partition_hit_page_ids)
         .toDF(['wikiid', 'query', 'norm_query', 'hit_page_ids']))
+
+
+def transform(df, url_list=None, brokers=None, **kwargs):
+    if brokers and url_list:
+        raise ValueError('cannot specify brokers and url_list')
+    if brokers:
+        return transform_from_kafka(df, brokers, **kwargs)
+    else:
+        return transform_from_elasticsearch(df, url_list, **kwargs)

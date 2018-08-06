@@ -325,18 +325,19 @@ def collect_from_ltr_plugin_and_kafka(df, brokers, model, feature_names_accu, in
         assert record['status_code'] == 200
         parsed = json.loads(record['text'])
         response = parsed['responses'][0]
+        meta = record['meta']
 
         for hit_page_id, features in extract_ltr_log_feature_values(response, feature_names_accu):
-            yield [record['wikiid'], record['query'], hit_page_id, features]
+            yield [meta['wikiid'], meta['query'], hit_page_id, features]
 
-    run_id = base64.b64encode(os.urandom(16))
+    run_id = base64.b64encode(os.urandom(16)).decode('ascii')
     offsets_start = mjolnir.kafka.client.get_offset_start(brokers)
     print('producing queries to kafka')
     num_end_sigils = mjolnir.kafka.client.produce_queries(
         df.groupBy('wikiid', 'query').agg(F.collect_set('hit_page_id').alias('hit_page_ids')),
-        brokers,
-        run_id,
-        lambda row: log_query.make_msearch(row, indices))
+        brokers, run_id,
+        create_es_query=lambda row: log_query.make_msearch(row, indices),
+        meta_keys=['wikiid', 'query'])
     print('waiting for end run sigils')
     offsets_end = mjolnir.kafka.client.get_offset_end(brokers, run_id, num_end_sigils)
     print('reading results from:')

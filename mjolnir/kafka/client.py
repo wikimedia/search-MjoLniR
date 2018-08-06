@@ -19,7 +19,8 @@ def _make_producer(brokers):
                                api_version=mjolnir.kafka.BROKER_VERSION)
 
 
-def produce_queries(df, brokers, run_id, create_es_query, topic=mjolnir.kafka.TOPIC_REQUEST):
+def produce_queries(df, brokers, run_id, create_es_query, meta_keys,
+                    topic=mjolnir.kafka.TOPIC_REQUEST):
     """Push feature collection queries into kafka.
 
     Write out the feature requests as elasticsearch multi-search queries to kafka.
@@ -39,6 +40,9 @@ def produce_queries(df, brokers, run_id, create_es_query, topic=mjolnir.kafka.TO
         containing an elasticsearch query.
     topic : str, optional
         The topic to produce queries to
+    meta_keys : list of str
+        List of Row fields to include in the message metadata. These will be returned
+        when consuming responses.
 
     Returns
     -------
@@ -46,18 +50,19 @@ def produce_queries(df, brokers, run_id, create_es_query, topic=mjolnir.kafka.TO
         The number of end run sigils to wait for in the complete topic.
     """
 
+    meta_keys = set(meta_keys)
+
     def produce_partition(rows):
         producer = _make_producer(brokers)
         for row in rows:
             producer.send(topic, json.dumps({
                 'run_id': run_id,
                 'request': create_es_query(row),
-                'wikiid': row.wikiid,
-                'query': row.query,
-            }))
+                'meta': {k: v for k, v in row.asDict().items() if k in meta_keys},
+            }).encode('utf8'))
         producer.close()
 
-    mjolnir.spark.assert_columns(df, ['wikiid', 'query', 'hit_page_ids'])
+    mjolnir.spark.assert_columns(df, meta_keys)
     df.rdd.foreachPartition(produce_partition)
 
     # Send a sigil value to indicate this run is complete. The consumer will copy this
@@ -69,7 +74,7 @@ def produce_queries(df, brokers, run_id, create_es_query, topic=mjolnir.kafka.TO
             'run_id': run_id,
             'complete': True,
             'partition': p
-        }))
+        }).encode('utf8'))
     producer.close()
     return len(partitions)
 
@@ -128,7 +133,7 @@ def get_offset_end(brokers, run_id, num_end_sigils, topic=mjolnir.kafka.TOPIC_CO
                                    # containing only reflected end run sigils. To make
                                    # sure we don't miss one start at the beginning.
                                    auto_offset_reset='earliest',
-                                   value_deserializer=json.loads,
+                                   value_deserializer=lambda x: json.loads(x.decode('utf8')),
                                    api_version=mjolnir.kafka.BROKER_VERSION)
     parts = consumer.partitions_for_topic(topic=mjolnir.kafka.TOPIC_COMPLETE)
     if parts is None:
