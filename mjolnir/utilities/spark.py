@@ -406,40 +406,69 @@ def subprocess_check_call(args, env=None):
             raise Exception("Subprocess returned non-zero exit code: %d" % (retval))
 
 
-# Past here are the actual command definitions
+# Registration of available CLI commands
 
-def collect(global_profile, profiles):
-    """Run mjolnir data pipeline"""
+COMMANDS = {}
+
+
+def register_command(needed):
+    def inner(fn):
+        COMMANDS[fn.__name__] = {
+            'fn': fn,
+            'needed': needed
+        }
+    return inner
+
+# Helpers for running profiles from CLI commands
+
+
+def run_all_profiles(global_profile, profiles, command):
     all_wikis = [wiki for group in profiles.values() for wiki in group['wikis']]
     config = global_profile['commands']['data_pipeline']
-
     cmd = build_spark_command(config) + build_mjolnir_utility(config) + all_wikis
     subprocess_check_call(cmd, env=config['environment'])
 
 
+def run_each_profile(global_profile, profiles, command):
+    for name, profile in profiles.items():
+        config = profile['commands'][command]
+        cmd = build_spark_command(config) + build_mjolnir_utility(config) + profile['wikis']
+        subprocess_check_call(cmd, env=config['environment'])
+
+
+def run_shell(global_profile, profiles, command):
+    """Start the pyspark shell"""
+    config = global_profile['commands'][command]
+    cmd = build_spark_command(config)
+    subprocess_check_call(cmd, env=config['environment'])
+
+
+# Individual CLI command definitions
+
+@register_command(['data_pipeline'])
+def collect(global_profile, profiles):
+    """Run mjolnir data pipeline"""
+    run_all_profiles(global_profile, profiles, 'data_pipeline')
+
+
+@register_command(['feature_selection'])
 def feature_selection(global_profile, profiles):
     """Run feature selection against collected data"""
-    all_wikis = [wiki for group in profiles.values() for wiki in group['wikis']]
-    config = global_profile['commands']['feature_selection']
-    cmd = build_spark_command(config) + build_mjolnir_utility(config) + all_wikis
-    subprocess_check_call(cmd, env=config['environment'])
+    run_all_profiles(global_profile, profiles, 'feature_selection')
 
 
+@register_command(['make_folds'])
 def make_folds(global_profile, profiles):
-    for name, profile in profiles.items():
-        config = profile['commands']['make_folds']
-        cmd = build_spark_command(config) + build_mjolnir_utility(config) + profile['wikis']
-        subprocess_check_call(cmd, env=config['environment'])
+    run_each_profile(global_profile, profiles, 'make_folds')
 
 
+@register_command(['training_pipeline'])
 def train(global_profile, profiles):
     """Run mjolnir training pipeline"""
-    for name, profile in profiles.items():
-        config = profile['commands']['training_pipeline']
-        cmd = build_spark_command(config) + build_mjolnir_utility(config) + profile['wikis']
-        subprocess_check_call(cmd, env=config['environment'])
+    run_each_profile(global_profile, profiles, 'training_pipeline')
 
 
+@register_command(['data_pipeline', 'feature_selection', 'make_folds', 'training_pipeline'])
 def collect_and_train(global_profile, profiles):
     """Run data and training pipelines"""
     collect(global_profile, profiles)
@@ -453,11 +482,17 @@ def collect_and_train(global_profile, profiles):
     subprocess_check_call(['hdfs', 'dfs', '-rm', '-r', '-f', hdfs_training_data_path])
 
 
-def shell(command, global_profile, profiles):
-    """Start the pyspark shell"""
-    config = global_profile['commands'][command]
-    cmd = build_spark_command(config)
-    subprocess_check_call(cmd, env=config['environment'])
+@register_command(['pyspark'])
+def shell(global_profile, profiles):
+    run_shell(global_profile, profiles, 'pyspark')
+
+
+@register_command(['pyspark_train'])
+def shell_train(global_profile, profiles):
+    run_shell(global_profile, profiles, 'pyspark_train')
+
+
+# CLI Argument Handling
 
 
 class KeyValueAction(argparse.Action):
@@ -479,38 +514,6 @@ class KeyValueAction(argparse.Action):
         if '=' not in value:
             raise argparse.ArgumentTypeError('%s is not a k=v string' % (value))
         return tuple(value.split('=', 2))
-
-
-COMMANDS = {
-    'collect': {
-        'func': collect,
-        'needed': ['data_pipeline'],
-    },
-    'train': {
-        'func': train,
-        'needed': ['training_pipeline'],
-    },
-    'feature_selection': {
-        'func': feature_selection,
-        'needed': ['feature_selection'],
-    },
-    'make_folds': {
-        'func': make_folds,
-        'needed': ['make_folds'],
-    },
-    'collect_and_train': {
-        'func': collect_and_train,
-        'needed': ['data_pipeline', 'feature_selection', 'make_folds', 'training_pipeline'],
-    },
-    'shell': {
-        'func': lambda x, y: shell('pyspark', x, y),
-        'needed': []
-    },
-    'shell_train': {
-        'func': lambda x, y: shell('pyspark_train', x, y),
-        'needed': []
-    }
-}
 
 
 def arg_parser():
