@@ -4,6 +4,7 @@ global_config:
       cmd_args:
         feature-definitions: featureset:enwiki_v1
         input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
+        kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
         min-sessions: '10'
         output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
         samples-per-wiki: '35000000'
@@ -219,6 +220,7 @@ profiles:
         cmd_args:
           feature-definitions: featureset:enwiki_v1
           input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
+          kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
           min-sessions: '10'
           output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
           samples-per-wiki: '35000000'
@@ -438,6 +440,7 @@ profiles:
         cmd_args:
           feature-definitions: featureset:enwiki_v1
           input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
+          kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
           min-sessions: '10'
           output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
           samples-per-wiki: '35000000'
@@ -659,6 +662,7 @@ profiles:
         cmd_args:
           feature-definitions: featureset:enwiki_v1
           input: hdfs://analytics-hadoop/wmf/data/discovery/query_clicks/daily/year=*/month=*/day=*
+          kafka: kafka-jumbo1001.eqiad.wmnet,kafka-jumbo1002.eqiad.wmnet,kafka-jumbo1003.eqiad.wmnet
           min-sessions: '10'
           output-dir: hdfs://analytics-hadoop/user/pytest/mjolnir/marker
           samples-per-wiki: '35000000'
