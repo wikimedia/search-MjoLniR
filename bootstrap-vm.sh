@@ -18,6 +18,7 @@ apt-get install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="-
     openjdk-8-jdk \
     confluent-kafka-2.11.7 \
     ca-certificates-java='20161107~bpo8+1' \
+    virtualenv \
     python3-virtualenv \
     git-core \
     build-essential \
@@ -69,21 +70,21 @@ systemctl enable kafka.service
 systemctl start zookeeper.service
 systemctl start kafka.service
 
-# Grab spark 2.1.0 and put it in /opt
+# Grab spark 2.3.1 and put it in /opt
 cd /opt
 if [ ! -f /usr/local/bin/pyspark ]; then
-    wget -qO - https://archive.apache.org/dist/spark/spark-2.1.0/spark-2.1.0-bin-hadoop2.6.tgz | tar -zxvf -
-    ln -s /opt/spark-2.1.0-bin-hadoop2.6/bin/pyspark /usr/local/bin
+    wget -qO - https://archive.apache.org/dist/spark/spark-2.3.1/spark-2.3.1-bin-hadoop2.6.tgz | tar -zxvf -
+    ln -s /opt/spark-2.3.1-bin-hadoop2.6/bin/pyspark /usr/local/bin
 fi
 # findspark needs a SPARK_HOME to setup pyspark
 cat >/etc/profile.d/spark.sh <<EOD
-SPARK_HOME=/opt/spark-2.1.0-bin-hadoop2.6
+SPARK_HOME=/opt/spark-2.3.1-bin-hadoop2.6
 export SPARK_HOME
 EOD
 
 # pyspark wants to put a metastore_db directory in your cwd, put it somewhere
 # else
-cat >/opt/spark-2.1.0-bin-hadoop2.6/conf/hive-site.xml <<EOD
+cat >/opt/spark-2.3.1-bin-hadoop2.6/conf/hive-site.xml <<EOD
 <configuration>
    <property>
       <name>hive.metastore.warehouse.dir</name>
@@ -98,14 +99,14 @@ cat >/opt/spark-2.1.0-bin-hadoop2.6/conf/hive-site.xml <<EOD
 EOD
 
 # pyspark wants to put a derby.log in cwd as well, put it elsewhere
-cat >> /opt/spark-2.1.0-bin-hadoop2.6/conf/spark-defaults.conf <<EOD
+cat >> /opt/spark-2.3.1-bin-hadoop2.6/conf/spark-defaults.conf <<EOD
 spark.driver.extraJavaOptions=-Dderby.stream.error.file=/tmp/derby.log
 EOD
 
 if [ ! -d /vagrant/venv ]; then
     cd /vagrant
     virtualenv -p /usr/bin/python3 venv
-    venv/bin/pip install tox
+    venv/bin/pip install --upgrade pip wheel tox
 fi
 
 # Clone xgboost for convenience. Generally we pull the appropriate jars from

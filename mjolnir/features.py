@@ -132,7 +132,7 @@ class LtrLoggingQuery(object):
             # CirrusSearch
             index = row.wikiid
         bulk_query.append('{"index": "%s"}' % (index))
-        bulk_query.append(json.dumps(self.make_search(row.hit_page_ids, row.query)))
+        bulk_query.append(json.dumps(self.make_search(row.hit_page_ids, row.query), sort_keys=True))
 
         # elasticsearch bulk format requires each item to be on a line and the
         # request to finish with a \n
