@@ -32,7 +32,7 @@ def _create_bulk_query(rows, indices, top_n):
             # CirrusSearch
             index = row.wikiid
         bulk_query.append('{"index": "%s"}' % (index))
-        bulk_query.append(json.dumps(_make_es_query(row, top_n)))
+        bulk_query.append(json.dumps(_make_es_query(row, top_n), sort_keys=True))
     return "%s\n" % ('\n'.join(bulk_query))
 
 
