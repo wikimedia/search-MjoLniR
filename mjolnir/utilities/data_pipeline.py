@@ -220,6 +220,9 @@ def arg_parser():
 
 
 def main(**kwargs):
+    if len(kwargs['brokers']) == 1 and ',' in kwargs['brokers'][0]:
+        kwargs['brokers'] = kwargs['brokers'][0].split(',')
+
     sc = SparkContext(appName="MLR: data collection pipeline")
     # spark info logging is incredibly spammy. Use warn to have some hope of
     # human decipherable output
