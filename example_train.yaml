@@ -20,13 +20,17 @@ global:
         hdfs_data_path_prefix: "hdfs://analytics-hadoop/%(data_path_prefix)s"
         local_data_path_prefix: "/mnt/hdfs/%(data_path_prefix)s"
 
-        # Path inside hdfs to the training data
+        # Path inside hdfs to the labeled data
         hdfs_labeled_data_path: "%(hdfs_data_path_prefix)s/labeled"
         local_labeled_data_path: "%(local_data_path_prefix)s/labeled"
 
+        # Path inside hdfs to labeled data with features"
+        hdfs_features_data_path: "%(hdfs_data_path_prefix)s/features"
+        local_features_data_path: "%(local_data_path_prefix)s/features"
+
         # Path inside hdfs to training data after feature selection
-        hdfs_feature_data_path: "%(hdfs_data_path_prefix)s/pruned"
-        local_feature_data_path: "%(local_data_path_prefix)s/pruned"
+        hdfs_pruned_data_path: "%(hdfs_data_path_prefix)s/pruned"
+        local_pruned_data_path: "%(local_data_path_prefix)s/pruned"
 
         # Fully qualified HDFS path to pre-folded data
         fold_data_suffix: "-folds-%(profile_name)s"
@@ -95,7 +99,7 @@ global:
         executor-memory: "%(executor_memory)s"
         # Source our jvm dependencies from archiva. 
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-1,org.wikimedia.search:mjolnir:0.3,org.apache.spark:spark-streaming-kafka-0-8_2.11:%(spark_version)s,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:%(spark_version)s,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
     spark_conf:
         spark.task.cpus: "%(cores_per_task)s"
         spark.executor.memoryOverhead: "%(executor_memory_overhead)s"
@@ -137,23 +141,26 @@ global:
             mjolnir_utility: collect_features
             paths:
                 dir_not_exist: !!set
-                    ? "%(local_feature_data_path)s"
+                    ? "%(local_features_data_path)s"
             cmd_args:
                 input: "%(hdfs_labeled_data_path)s"
-                output-dir: "%(hdfs_feature_data_path)s"
+                output-dir: "%(hdfs_features_data_path)s"
                 kafka: "%(kafka_brokers)s"
                 feature-definitions: "%(feature_definitions)s"
         feature_selection:
             spark_command: "%(SPARK_HOME)s/bin/spark-submit"
             mjolnir_utility_path: "%(mjolnir_utility_path)s"
             mjolnir_utility: feature_selection
+            paths:
+                dir_not_exist: !!set
+                    ? "%(local_pruned_data_path)s"
             spark_conf:
                 spark.locality.wait: 0
                 spark.dynamicAllocation.maxExecutors: 400
             cmd_args:
-                input: "%(hdfs_labeled_data_path)s"
+                input: "%(hdfs_features_data_path)s"
                 num-features: 50
-                output-dir: "%(hdfs_feature_data_path)s"
+                output-dir: "%(hdfs_pruned_data_path)s"
         make_folds:
             spark_command: "%(SPARK_HOME)s/bin/spark-submit"
             mjolnir_utility_path: "%(mjolnir_utility_path)s"
@@ -162,7 +169,7 @@ global:
                 spark.locality.wait: 0
                 spark.dynamicAllocation.maxExecutors: 100
             cmd_args:
-                input: "%(hdfs_feature_data_path)s"
+                input: "%(hdfs_pruned_data_path)s"
                 output-dir: "%(hdfs_fold_data_path)s"
                 num-folds: 5
                 num-workers: 1

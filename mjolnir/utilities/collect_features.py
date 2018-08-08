@@ -74,7 +74,7 @@ def collect_features(sc, sqlContext, input_dir, output_dir, wikis,
         .agg(F.count(F.lit(1)).alias('num_obs'))
         .collect())
     stats_path = os.path.join(output_dir, '_stats.json')
-    with mjolnir.utils.as_output_file(stats_path) as f:
+    with mjolnir.utils.as_output_file(stats_path, 'w') as f:
         f.write(json.dumps({
             'num_features': len(features),
             'num_obs': {row.wikiid: row.num_obs for row in counts}

@@ -88,7 +88,7 @@ def run_pipeline(sc, sqlContext, input_dir, output_dir, algo, num_features, pre_
         .groupBy('wikiid')
         .agg(F.count(F.lit(1)).alias('num_obs'))
         .collect())
-    with mjolnir.utils.as_output_file(stats_path) as f:
+    with mjolnir.utils.as_output_file(stats_path, 'w') as f:
         f.write(json.dumps({
             'num_features': len(pre_selected) if pre_selected else num_features,
             'num_obs': {row.wikiid: row.num_obs for row in counts}

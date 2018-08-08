@@ -69,7 +69,7 @@ def write_wiki_folds(sc, df, num_workers, fold_col, path_format, features):
         for pair in rows:
             i, row = pair
             with as_local_paths(row.values(), with_query=True) as local_inputs, \
-                    as_output_files([path + '.xgb' for path in row.values()]) as local_outputs:
+                    as_output_files([path + '.xgb' for path in row.values()], 'wb') as local_outputs:
                 for local_input, local_output in zip(local_inputs, local_outputs):
                     write_xgb(local_input, local_output.name)
 
@@ -171,7 +171,7 @@ def make_folds(sc, sqlContext, input_dir, output_dir, wikis, zero_features, num_
     finally:
         df_fold.unpersist()
 
-    with as_output_file(os.path.join(output_dir, 'stats.json')) as f:
+    with as_output_file(os.path.join(output_dir, 'stats.json'), 'w') as f:
         f.write(json.dumps({
             'input_dir': input_dir,
             'wikis': wiki_stats,

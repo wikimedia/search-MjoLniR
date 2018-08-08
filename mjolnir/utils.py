@@ -20,9 +20,9 @@ def temp_dir():
 
 def multi_with(f):
     @contextlib.contextmanager
-    def manager(inputs, **kwargs):
+    def manager(inputs, *args, **kwargs):
         def make_child(data):
-            with f(data, **kwargs) as inner:
+            with f(data, *args, **kwargs) as inner:
                 yield inner
 
         # children list keeps the children alive until the end of the function.
@@ -53,16 +53,16 @@ def multi_with(f):
 
 
 @contextlib.contextmanager
-def as_output_file(path):
+def as_output_file(path, mode='w'):
     if path[:7] == 'hdfs://':
-        f = tempfile.NamedTemporaryFile(dir=temp_dir())
+        f = tempfile.NamedTemporaryFile(dir=temp_dir(), mode=mode)
         yield f
         f.flush()
         subprocess.check_call(['hdfs', 'dfs', '-copyFromLocal', f.name, path])
     else:
         if path[:len("file:/")] == "file:/":
             path = path[len("file:"):]
-        with open(path, 'w') as f:
+        with open(path, mode) as f:
             yield f
 
 

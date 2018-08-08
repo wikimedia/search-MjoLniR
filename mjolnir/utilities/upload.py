@@ -166,7 +166,7 @@ def upload_models(input_dir, search_clusters, wikis, yes):
         # TODO: v1?
         model_name = '%s_%s_v1' % (name, wiki)
 
-        answer = input('\tUpload model %s? ' % (model_name)).lower()
+        answer = 'y' if yes else input('\tUpload model %s? ' % (model_name)).lower()
         if answer != 'y':
             print('\tSkipping.')
             print('')
@@ -189,10 +189,16 @@ def upload_models(input_dir, search_clusters, wikis, yes):
             }
         }
 
+        # Handle per-wiki feature variation due to feature selection
+        if 'wiki_features' in tune['metadata']['dataset']:
+            wiki_features = tune['metadata']['dataset']['wiki_features'][wiki]
+        else:
+            wiki_features = tune['metadata']['dataset']['features']
+
         feature_store_name, feature_set_name = choose_feature_set(
             search_clusters,
             tune['metadata']['dataset']['feature_definitions'],
-            tune['metadata']['dataset']['wiki_features'][wiki])
+            wiki_features)
         url_pattern = '%%s/_ltr/%s_featureset/%s/_createmodel' % (
             '' if feature_store_name is None else feature_store_name + '/',
             feature_set_name)

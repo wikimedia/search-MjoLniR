@@ -112,6 +112,9 @@ def select_features(sc, df, all_features, n_features, pool, n_partitions=None, a
     -------
     list of str
     """
+    if n_features >= len(all_features):
+        # Requested more features than we have, return them all
+        return all_features
 
     if n_partitions is None:
         # The lib suggests we should have no more than 1 partition

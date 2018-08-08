@@ -511,6 +511,7 @@ def register_command(needed):
             'desc': desc,
             'needed': needed,
         }
+        return fn
     return inner
 
 
