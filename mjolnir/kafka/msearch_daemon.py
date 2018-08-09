@@ -54,7 +54,7 @@ class Daemon(object):
                                        group_id='mjolnir',
                                        enable_auto_commit=True,
                                        auto_offset_reset='latest',
-                                       value_deserializer=json.loads,
+                                       value_deserializer=lambda x: json.loads(x.decode('utf8')),
                                        api_version=mjolnir.kafka.BROKER_VERSION)
 
         try:
@@ -124,7 +124,7 @@ class Daemon(object):
 
         log.info('reflecting end sigil for run %s and partition %d' %
                  (record.value['run_id'], record.value['partition']))
-        future = self.ack_all_producer.send(self.topic_complete, json.dumps(record.value))
+        future = self.ack_all_producer.send(self.topic_complete, json.dumps(record.value).encode('utf8'))
         future.add_errback(self._log_error_on_end_run)
         # TODO: Is this enough to guarantee delivery? Not sure what failures cases are.
         future.get()
@@ -198,11 +198,10 @@ class Daemon(object):
                                                    record.value['request'], reuse_url=True)
             future = self.producer.send(self.topic_result, json.dumps({
                 'run_id': record.value['run_id'],
-                'wikiid': record.value['wikiid'],
-                'query': record.value['query'],
+                'meta': record.value['meta'],
                 'status_code': response.status_code,
                 'text': response.text,
-            }))
+            }).encode('utf8'))
             future.add_errback(self._log_error_on_send)
             return True
         finally:
