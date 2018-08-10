@@ -23,6 +23,9 @@ def arg_parser():
         '-w', '--num-workers', dest='n_workers', type=int, default=1,
         help='Number of workers to issue elasticsearch queries in parallel. '
              + 'Defaults to 1.')
+    parser.add_argument(
+        '--prometheus-port', dest='prometheus_port', default=9161, type=int, required=False,
+        help='Port to export prometheus metrics over.')
     return parser
 
 

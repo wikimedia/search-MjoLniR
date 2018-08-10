@@ -1,5 +1,4 @@
-from __future__ import absolute_import
-import contextlib
+from contextlib import contextmanager
 import os
 import random
 import re
@@ -19,7 +18,7 @@ def temp_dir():
 
 
 def multi_with(f):
-    @contextlib.contextmanager
+    @contextmanager
     def manager(inputs, *args, **kwargs):
         def make_child(data):
             with f(data, *args, **kwargs) as inner:
@@ -52,7 +51,7 @@ def multi_with(f):
     return manager
 
 
-@contextlib.contextmanager
+@contextmanager
 def as_output_file(path, mode='w'):
     if path[:7] == 'hdfs://':
         f = tempfile.NamedTemporaryFile(dir=temp_dir(), mode=mode)
@@ -66,7 +65,7 @@ def as_output_file(path, mode='w'):
             yield f
 
 
-@contextlib.contextmanager
+@contextmanager
 def as_local_path(path, with_query=False):
     if path[0] == '/':
         yield path
@@ -122,7 +121,7 @@ def hdfs_rmdir(path):
         shutil.rmtree(path)
 
 
-@contextlib.contextmanager
+@contextmanager
 def hdfs_open_read(path):
     if path[:7] == 'hdfs://':
         parts = urllib.parse.urlparse(path)

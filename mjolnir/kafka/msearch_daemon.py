@@ -16,6 +16,7 @@ from elasticsearch import Elasticsearch
 import kafka
 import kafka.common
 import kafka.consumer.subscription_state
+import prometheus_client
 import requests
 
 import mjolnir.cirrus
@@ -23,6 +24,22 @@ import mjolnir.kafka
 
 
 log = logging.getLogger(__name__)
+
+
+class Metric(object):
+    """A namespace for our runtime metrics"""
+    RECORDS_PROCESSED = prometheus_client.Counter(
+        'mjolnir_msearch_records_total',
+        'Number of kafka records processed')
+    INTERVAL_VALUE = prometheus_client.Gauge(
+        'mjolnir_msearch_interval_sec',
+        'Seconds between polling elasticsearch for qps stats')
+    EMA = prometheus_client.Gauge(
+        'mjolnir_msearch_ema_qps',
+        'Local estimate of canary index qps')
+    PROCESS_BATCH = prometheus_client.Summary(
+        'mjolnir_msearch_process_batch_seconds',
+        'Time taken to process a batch of records from kafka')
 
 
 def iter_queue(queue):
@@ -38,7 +55,7 @@ def iter_queue(queue):
 class Daemon(object):
     def __init__(self, brokers, n_workers=5, topic_work=mjolnir.kafka.TOPIC_REQUEST,
                  topic_result=mjolnir.kafka.TOPIC_RESULT, topic_complete=mjolnir.kafka.TOPIC_COMPLETE,
-                 max_request_size=4*1024*1024, query_total_threshold=100):
+                 max_request_size=4*1024*1024, query_total_threshold=100, prometheus_port=9161):
         """Initialize the msearch daemon
 
         Parameters
@@ -59,12 +76,15 @@ class Daemon(object):
             A threshold for the number of shard queries per second to the enwiki_content
             full_text stats group.  When above this threshold the daemon will not consume
             records and will not generate load on the cluster.
+        prometheus_port : int
+            Port to expose prometheus metrics collection at
         """
         self.brokers = brokers
         self.n_workers = n_workers
         self.topic_work = topic_work
         self.topic_result = topic_result
         self.topic_complete = topic_complete
+        self.prometheus_port = prometheus_port
         # Standard producer for query results
         self.producer = kafka.KafkaProducer(bootstrap_servers=brokers,
                                             max_request_size=max_request_size,
@@ -87,6 +107,7 @@ class Daemon(object):
                 threshold=query_total_threshold)
 
     def run(self):
+        prometheus_client.start_http_server(self.prometheus_port)
         try:
             while True:
                 # If we are seeing production traffic do nothing and sit around.
@@ -104,7 +125,11 @@ class Daemon(object):
                                        enable_auto_commit=True,
                                        auto_offset_reset='latest',
                                        value_deserializer=lambda x: json.loads(x.decode('utf8')),
-                                       api_version=mjolnir.kafka.BROKER_VERSION)
+                                       api_version=mjolnir.kafka.BROKER_VERSION,
+                                       # Msearch requests are relatively heavy at a few tens of ms each.
+                                       # 50 requests at 50ms each gives us ~2.5s to process a batch. We
+                                       # keep this low so kafka regularly gets re-pinged.
+                                       max_poll_records=min(500, 50 * self.n_workers))
         consumer.subscribe([self.topic_work])
         try:
             while self.load_monitor.is_below_threshold:
@@ -115,14 +140,16 @@ class Daemon(object):
                 if not poll_response:
                     continue
                 offsets = {}
-                for tp, records in poll_response.items():
-                    for record in records:
-                        self.load_monitor.notify()
-                        yield record.value
-                    offsets[tp] = kafka.OffsetAndMetadata(records[-1].offset + 1, '')
-                # Wait for all the work to complete
-                self.work_queue.join()
+                with Metric.PROCESS_BATCH.time():
+                    for tp, records in poll_response.items():
+                        for record in records:
+                            self.load_monitor.notify()
+                            yield record.value
+                        offsets[tp] = kafka.OffsetAndMetadata(records[-1].offset + 1, '')
+                    # Wait for all the work to complete
+                    self.work_queue.join()
                 consumer.commit_async(offsets)
+                Metric.RECORDS_PROCESSED.inc(sum(len(x) for x in poll_response.values()))
         finally:
             consumer.close()
 
@@ -238,6 +265,7 @@ class FlexibleInterval(object):
         self.ratio = ratio
         self.clock = clock
         self.value = self.min_value
+        Metric.INTERVAL_VALUE.set_function(lambda: self.value)
 
     def decrease(self):
         self.value = self.min_value
@@ -300,6 +328,7 @@ class StreamingEMA(object):
         self.prev_count = None
         self.prev_time = None
         self.value = None
+        Metric.EMA.set_function(lambda: self.value)
 
     @property
     def is_valid(self):

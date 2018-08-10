@@ -2,9 +2,9 @@
 Daemon to collect elasticsearch bulk indexing requests from kafka
 and push them into elasticsearch.
 """
-from __future__ import absolute_import
 import argparse
 import logging
+
 import mjolnir.kafka.bulk_daemon
 
 
@@ -22,6 +22,9 @@ def arg_parser():
     parser.add_argument(
         '-g', '--group-id', dest='group_id', type=str, default='TODO',
         help='Kafka consumer group to join')
+    parser.add_argument(
+        '--prometheus-port', dest='prometheus_port', default=9160, type=int, required=False,
+        help='Port to export prometheus metrics over.')
     return parser
 
 
