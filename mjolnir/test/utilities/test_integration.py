@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from itertools import islice
 import json
+import mjolnir.training.xgboost
 from mjolnir.utilities.data_pipeline import run_pipeline as run_data_pipeline
 from mjolnir.utilities.collect_features import collect_features
 from mjolnir.utilities.feature_selection import run_pipeline as run_feature_selection_pipeline
@@ -13,6 +14,7 @@ import pytest
 import random
 import shutil
 import tempfile
+import threading
 import xgboost
 
 
@@ -79,12 +81,31 @@ def tempdir():
         shutil.rmtree(dir)
 
 
+def wrap_mutex(fn):
+    mutex = threading.Lock()
+
+    def inner(*args, **kwargs):
+        with mutex:
+            return fn(*args, **kwargs)
+    return inner
+
+
+@contextmanager
+def xgboost_mutex():
+    old_train = mjolnir.training.xgboost.train
+    mjolnir.training.xgboost.train = wrap_mutex(old_train)
+    try:
+        yield
+    finally:
+        mjolnir.training.xgboost.train = old_train
+
+
 def test_integration(spark_context, hive_context, make_requests_session):
     """Happy path end-to-end test"""
     def session_factory():
         return make_requests_session('requests/test_integration.sqlite3')
 
-    with tempdir() as dir:
+    with tempdir() as dir, xgboost_mutex():
         input_dir = os.path.join(dir, 'input')
         labeled_dir = os.path.join(dir, 'labeled')
         collect_dir = os.path.join(dir, 'features')
