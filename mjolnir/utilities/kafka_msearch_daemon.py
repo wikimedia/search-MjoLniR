@@ -17,12 +17,12 @@ def arg_parser():
         help='Kafka brokers to bootstrap from as a comma separated list of <host>:<port>')
     parser.add_argument(
         '-m', '--max-request-size', dest='max_request_size', type=int, default=4*1024*1024*10,
-        help='Max size of requets sent to the kafka broker'
+        help='Max size of requsets sent to the kafka broker'
              + 'Defaults to 40MB.')
     parser.add_argument(
-        '-w', '--num-workers', dest='n_workers', type=int, default=5,
+        '-w', '--num-workers', dest='n_workers', type=int, default=1,
         help='Number of workers to issue elasticsearch queries in parallel. '
-             + 'Defaults to 5.')
+             + 'Defaults to 1.')
     return parser
 
 
