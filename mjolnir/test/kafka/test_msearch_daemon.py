@@ -15,8 +15,6 @@ def test_consume_nothing(mocker):
 def test_consume_end_sigil(mocker, monkeypatch):
     # simple mock we can observe
     monkeypatch.setattr('kafka.KafkaProducer', MockProducer)
-    # Don't let reflect sit around forever
-    monkeypatch.setattr(Daemon, 'REFLECT_WAIT', 0.01)
     # Fetching result offsets uses the consumer
     mock = mocker.patch('kafka.KafkaConsumer')
     mock.partitions_for_topic.return_value = [0]

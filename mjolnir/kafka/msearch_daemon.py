@@ -159,10 +159,6 @@ class Daemon(object):
             while self.work_queue.qsize() > 0:
                 work_fn()
 
-    # Time to wait before reflecting a sigil to hope that everything
-    # has completed.
-    REFLECT_WAIT = 10
-
     def _reflect_end_run(self, record):
         """Reflect and end run sigil into the complete topic
 
@@ -175,23 +171,6 @@ class Daemon(object):
         record : dict
            Deserialized end run sigil
         """
-        log.info('received end run sigil. Waiting for queue to drain')
-        self.work_queue.join()
-
-        log.info('work drained. Waiting around to make sure everything really finishes')
-        # Flush is perhaps not strictly necessary, the producer sends almost immediately, but
-        # lets be explicit here.
-        self.producer.flush()
-        # Also give time for the messages to make it around the kafka cluster. No clue what
-        # an appropriate time is here. This can't be too long, or the consumer group coordinator
-        # will kick us out of the group and this end run sigil will get re-processed.
-        # This is equal to the default broker replica.lag.time.max.ms, which controls how
-        # much a replica can fall behind the master.
-        # TODO: The kafka protocol docs suggest offset requests always go to the leader,
-        # this might be unnecessary.
-        time.sleep(self.REFLECT_WAIT)
-        record['offsets'] = self._get_result_offsets()
-
         log.info('reflecting end sigil for run %s and partition %d' %
                  (record['run_id'], record['partition']))
         # Wait for everything to at least start processing. We don't
@@ -203,19 +182,6 @@ class Daemon(object):
             'Failed to send the "end run" message: %s', e))
         # Wait for ack (or failure to ack)
         future.get()
-
-    def _get_result_offsets(self):
-        """Get the latest offsets for all partitions in topic"""
-        consumer = kafka.KafkaConsumer(bootstrap_servers=self.brokers,
-                                       auto_offset_reset='latest',
-                                       api_version=mjolnir.kafka.BROKER_VERSION)
-        partitions = [kafka.TopicPartition(self.topic_result, p)
-                      for p in consumer.partitions_for_topic(self.topic_result)]
-        consumer.assign(partitions)
-        consumer.seek_to_end()
-        offsets = [consumer.position(tp) for tp in partitions]
-        consumer.close()
-        return offsets
 
     def _handle_records(self, work):
         """Handle a single kafka record from request topic

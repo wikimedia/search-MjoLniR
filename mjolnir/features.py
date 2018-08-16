@@ -3,14 +3,12 @@ Integration for collecting feature vectors from elasticsearch ltr plugin
 """
 
 from __future__ import absolute_import
-import base64
 from collections import defaultdict, OrderedDict
 import json
 import mjolnir.cirrus
 import mjolnir.kafka.client
 import mjolnir.spark
 import mjolnir.utils
-import os
 from pyspark.accumulators import AccumulatorParam
 from pyspark.ml.linalg import Vectors
 from pyspark.sql import functions as F
@@ -330,27 +328,13 @@ def collect_from_ltr_plugin_and_kafka(df, brokers, model, feature_names_accu, in
         for hit_page_id, features in extract_ltr_log_feature_values(response, feature_names_accu):
             yield [meta['wikiid'], meta['query'], hit_page_id, features]
 
-    run_id = base64.b64encode(os.urandom(16)).decode('ascii')
-    offsets_start = mjolnir.kafka.client.get_offset_start(brokers)
-    print('producing queries to kafka')
-    num_end_sigils = mjolnir.kafka.client.produce_queries(
-        df.groupBy('wikiid', 'query').agg(F.collect_set('hit_page_id').alias('hit_page_ids')),
-        brokers, run_id,
-        create_es_query=lambda row: log_query.make_msearch(row, indices),
-        meta_keys=['wikiid', 'query'])
-    print('waiting for end run sigils')
-    offsets_end = mjolnir.kafka.client.get_offset_end(brokers, run_id, num_end_sigils)
-    print('reading results from:')
-    for p, (start, end) in enumerate(zip(offsets_start, offsets_end)):
-        print('%d : %d to %d' % (p, start, end))
     return (
-        mjolnir.kafka.client.collect_results(
-            df._sc,
-            brokers,
-            kafka_handle_response,
-            offsets_start,
-            offsets_end,
-            run_id)
+        mjolnir.kafka.client.msearch(
+            df.groupBy('wikiid', 'query').agg(F.collect_set('hit_page_id').alias('hit_page_ids')),
+            brokers=brokers,
+            meta_keys=['wikiid', 'query'],
+            create_es_query=lambda row: log_query.make_msearch(row, indices),
+            handle_response=kafka_handle_response)
         .toDF(['wikiid', 'query', 'hit_page_id', 'features'])
         # We could have gotten duplicate data from kafka. Clean them up.
         .drop_duplicates(['wikiid', 'query', 'hit_page_id']))

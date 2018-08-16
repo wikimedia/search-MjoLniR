@@ -4,13 +4,17 @@ back from a second kafka topic. This runs on the analytics side as part of featu
 collection.
 """
 
-from __future__ import absolute_import
+import base64
 import json
-import mjolnir.spark
-import mjolnir.kafka
-from pyspark.streaming.kafka import KafkaUtils, OffsetRange
+import os
+import time
+
 import kafka
 import kafka.common
+from pyspark.streaming.kafka import KafkaUtils, OffsetRange
+
+import mjolnir.spark
+import mjolnir.kafka
 
 
 def _make_producer(brokers):
@@ -21,10 +25,10 @@ def _make_producer(brokers):
 
 def produce_queries(df, brokers, run_id, create_es_query, meta_keys,
                     topic=mjolnir.kafka.TOPIC_REQUEST):
-    """Push feature collection queries into kafka.
+    """Push msearch queries into kafka.
 
-    Write out the feature requests as elasticsearch multi-search queries to kafka.
-    These will be picked up by the daemon on relforge, and the collected back in
+    Write out the dataframe rows to kafka as elasticsearch multi-search queries.
+    These will be picked up by the msearch daemon, and the collected back in
     the collect_results function.
 
     Parameters
@@ -79,38 +83,74 @@ def produce_queries(df, brokers, run_id, create_es_query, meta_keys,
     return len(partitions)
 
 
-def get_offset_start(brokers, topic=mjolnir.kafka.TOPIC_RESULT):
-    """Find the current ending offset for all partitions in topic.
+def offsets_for_times(consumer, partitions, timestamp):
+    """Augment KafkaConsumer.offsets_for_times to not return None
 
-    By calling this prior to producing requests we know all responses come
-    after these offsets.
-    TODO: This naming doesn't feel right...
+    Parameters
+    ----------
+    consumer : kafka.KafkaConsumer
+        This consumer must only be used for collecting metadata, and not
+        consuming. API's will be used that invalidate consuming.
+    partitions : list of kafka.TopicPartition
+    timestamp : number
+        Timestamp, in seconds since unix epoch, to return offsets for.
+
+    Returns
+    -------
+    dict from kafka.TopicPartition to integer offset
+    """
+    # Kafka uses millisecond timestamps
+    timestamp_ms = int(timestamp * 1000)
+    response = consumer.offsets_for_times({p: timestamp_ms for p in partitions})
+    offsets = {}
+    for tp, offset_and_timestamp in response.items():
+        if offset_and_timestamp is None:
+            # No messages exist after timestamp. Fetch latest offset.
+            consumer.assign([tp])
+            consumer.seek_to_end(tp)
+            offsets[tp] = consumer.position(tp)
+        else:
+            offsets[tp] = offset_and_timestamp.offset
+    return offsets
+
+
+def offset_range_for_timestamp_range(brokers, start, end, topic=mjolnir.kafka.TOPIC_RESULT):
+    """Determine OffsetRange for a given timestamp range
 
     Parameters
     ----------
     brokers : list of str
+        List of kafka broker hostport to bootstrap kafka connection with
+    start : number
+        Unix timestamp in seconds
+    end : number
+        Unix timestamp in seconds
     topic : str
+        Kafka topic to retrieve offsets for
 
     Returns
     -------
-    list of int
+    list of pyspark.streaming.kafka.OffsetRange or None
+        Per-partition ranges of offsets to read
     """
     consumer = kafka.KafkaConsumer(bootstrap_servers=brokers, api_version=mjolnir.kafka.BROKER_VERSION)
-    parts = consumer.partitions_for_topic(topic)
-    if parts is None:
+    partitions = consumer.partitions_for_topic(topic)
+    if partitions is None:
+        # Topic does not exist.
         return None
-    partitions = [kafka.TopicPartition(topic, p) for p in parts]
-    consumer.assign(partitions)
-    return [consumer.position(p) for p in partitions]
+    partitions = [kafka.TopicPartition(topic, p) for p in partitions]
+    o_start = offsets_for_times(consumer, partitions, start)
+    o_end = offsets_for_times(consumer, partitions, end)
+    return [OffsetRange(tp.topic, tp.partition, o_start[tp], o_end[tp]) for tp in partitions]
 
 
-def get_offset_end(brokers, run_id, num_end_sigils, topic=mjolnir.kafka.TOPIC_COMPLETE):
-    """ Find the offset of the last message of our run
+def wait_for_sigils(brokers, run_id, num_end_sigils, topic=mjolnir.kafka.TOPIC_COMPLETE):
+    """Wait for the end run sigils to be reflected
 
-    The 'end run' message gets reflected, by the client running on relforge,
-    back into TOPIC_COMPLETE into all partitions. This reads those partitions
-    and looks for the ending offset of all partitions based on that reflected
-    message
+    The 'end run' message gets reflected, by the client running the msearch
+    daemon, back into TOPIC_COMPLETE into all partitions. This waits until
+    all sigils that were sent have been reflected, indicating everything sent
+    before the sigil has been processed and is available in the result topic.
 
     Parameters
     ----------
@@ -122,11 +162,6 @@ def get_offset_end(brokers, run_id, num_end_sigils, topic=mjolnir.kafka.TOPIC_CO
         of the topic requests were produced to.
     topic : str, optional
         Topic to look for end run messages in
-
-    Returns
-    -------
-    list of ints
-        The offset of the end run message for all partitions
     """
     consumer = kafka.KafkaConsumer(bootstrap_servers=brokers,
                                    # The topic we are reading from is very low volume,
@@ -135,46 +170,41 @@ def get_offset_end(brokers, run_id, num_end_sigils, topic=mjolnir.kafka.TOPIC_CO
                                    auto_offset_reset='earliest',
                                    value_deserializer=lambda x: json.loads(x.decode('utf8')),
                                    api_version=mjolnir.kafka.BROKER_VERSION)
-    parts = consumer.partitions_for_topic(topic=mjolnir.kafka.TOPIC_COMPLETE)
+    parts = consumer.partitions_for_topic(topic)
     if parts is None:
         raise RuntimeError("topic %s missing" % topic)
 
-    partitions = [kafka.TopicPartition(topic, p) for p in consumer.partitions_for_topic(topic)]
-    consumer.assign(partitions)
-    # Tracks the maximum reported offset in the response topic
-    offsets_end = [-1] * num_end_sigils
     # Tracks the sigils that have been seen for the request topics
     # Uses a set incase duplicate messages are sent somehow, to ensure
     # we see a message for all expected partitions
     seen_sigils = set()
-    for message in consumer:
-        if 'run_id' in message.value and message.value['run_id'] == run_id and 'complete' in message.value:
-            print('found sigil for run %s and partition %d' % (message.value['run_id'], message.value['partition']))
-            for partition, offset in enumerate(message.value['offsets']):
-                offsets_end[partition] = max(offsets_end[partition], offset)
-            seen_sigils.add(message.value['partition'])
-            # Keep reading until all sigils have been reflected.
-            if len(seen_sigils) >= num_end_sigils:
-                consumer.close()
-                return offsets_end
-    consumer.close()
-    raise RuntimeError("Finished consuming, but %d partitions remain" % (len(partitions) - len(seen_sigils)))
+    consumer.subscribe([topic])
+    try:
+        for message in consumer:
+            if 'run_id' in message.value and message.value['run_id'] == run_id and 'complete' in message.value:
+                print('found sigil for run %s and partition %d' % (message.value['run_id'], message.value['partition']))
+                seen_sigils.add(message.value['partition'])
+                # Keep reading until all sigils have been reflected.
+                if len(seen_sigils) >= num_end_sigils:
+                    return
+        raise RuntimeError("Finished consuming, but %d partitions remain" % (num_end_sigils - len(seen_sigils)))
+    finally:
+        consumer.close()
 
 
-def collect_results(sc, brokers, receive_record, offsets_start, offsets_end, run_id):
+def collect_results(sc, brokers, receive_record, start, end, run_id):
     """
     Parameters
     ----------
     sc : pyspark.SparkContext
     brokers : list of str
     receive_record : callable
-        Callable receiving a json decoded record from kafka. It must return
-        either an empty list on error, or a 3 item tuple containing
-        hit_page_id as int, query as str, and features as DenseVector
-    offsets_start : list of int
-        Per-partition offsets to start reading at
-    offsets_end : list of int
-        Per-partition offsets to end reading at
+        Callable receiving a json decoded record from kafka. It should return
+        a list and the resulting rdd will have a record per result returned.
+    start : int
+        Timestamp, in seconds since unix epoch, at which to start looking for records
+    end : int
+        Timestamp at which to stop looking for records.
     run_id : str
         unique identifier for this run
 
@@ -183,16 +213,11 @@ def collect_results(sc, brokers, receive_record, offsets_start, offsets_end, run
     pyspark.RDD
         RDD containing results of receive_record
     """
+    # Decide what offsets we need.
+    offset_ranges = offset_range_for_timestamp_range(brokers, start, end)
+    if offset_ranges is None:
+        raise RuntimeError('Could not retrieve offset ranges for result topic. Does it exist?')
 
-    offset_ranges = []
-    if offsets_start is None:
-        offsets_start = get_offset_start(brokers, mjolnir.kafka.TOPIC_RESULT)
-
-    if offsets_start is None:
-        raise RuntimeError("Cannot fetch offset_start, topic %s should have been created" % mjolnir.kafka.TOPIC_RESULT)
-    for partition, (start, end) in enumerate(zip(offsets_start, offsets_end)):
-        offset_ranges.append(OffsetRange(mjolnir.kafka.TOPIC_RESULT, partition, start, end))
-    # TODO: how can we force the kafka api_version here?
     kafka_params = {
         'metadata.broker.list': ','.join(brokers),
         # Set high fetch size values so we don't fail because of large messages
@@ -207,3 +232,37 @@ def collect_results(sc, brokers, receive_record, offsets_start, offsets_end, run
         .map(lambda x: json.loads(x[1]))
         .filter(lambda rec: 'run_id' in rec and rec['run_id'] == run_id)
         .flatMap(receive_record))
+
+
+def msearch(df, brokers, meta_keys, create_es_query, handle_response):
+    """Run an msearch against each row of the input dataframe
+
+    Parameters
+    ----------
+    df : pyspark.sql.DataFrame
+    brokers : list of str
+        List of kafka broker hostport to bootstrap kafka connection with
+    meta_keys : list of str
+        List of fields in df to pass through to handle_response
+    create_es_query : callable
+        Transform row from df into a valid elasticsearch bulk request. This
+        must be a str ready for POST exactly following the msearch spec.
+    handle_response : callable
+        Processes individual responses from elasticesarch. A single dict argument
+        is provided with the keys `status_code`, `text` and `meta`. Status code is
+        the http status code. Text contains the raw text result. Meta is a dict
+        containing the key/value pairs from meta_keys.
+
+    Returns
+    -------
+    pyspark.RDD
+        The result of running msearch on the input. The shape is determined
+        by the results of the `handle_response` argument
+    """
+    run_id = base64.b64encode(os.urandom(16)).decode('ascii')
+    # Adjust the start/end times by one minute to give a little flexibility in data arriving.
+    start = time.time() - 60
+    num_end_sigils = produce_queries(df, brokers, run_id, create_es_query, meta_keys)
+    wait_for_sigils(brokers, run_id, num_end_sigils)
+    end = time.time() + 60
+    return collect_results(df._sc, brokers, handle_response, start, end, run_id)

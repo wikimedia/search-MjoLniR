@@ -3,11 +3,9 @@ Collect hit page ids for queries from elasticsearch
 """
 
 from __future__ import absolute_import
-import base64
 import json
 import mjolnir.cirrus
 import mjolnir.spark
-import os
 import random
 import requests
 
@@ -70,18 +68,11 @@ def transform_from_kafka(df, brokers, indices=None, batch_size=15, top_n=5, sess
             # ordering matches toDF([...]) call that names them
             yield (meta['wikiid'], meta['query'], meta['norm_query'], hit_page_ids)
 
-    run_id = base64.b64encode(os.urandom(16)).decode('ascii')
-    offsets_start = mjolnir.kafka.client.get_offset_start(brokers)
-    print('producing queries to kafka')
-    num_end_sigils = mjolnir.kafka.client.produce_queries(
-            df, brokers, run_id,
-            create_es_query=lambda row: _create_bulk_query([row], indices, top_n),
-            meta_keys=['wikiid', 'query', 'norm_query'])
-    offsets_end = mjolnir.kafka.client.get_offset_end(brokers, run_id, num_end_sigils)
     return (
-        mjolnir.kafka.client.collect_results(
-            df._sc, brokers, kafka_handle_response,
-            offsets_start, offsets_end, run_id)
+        mjolnir.kafka.client.msearch(
+            df, brokers,
+            create_es_query=lambda row: _create_bulk_query([row], indices, top_n),
+            handle_response=kafka_handle_response)
         .toDF(['wikiid', 'query', 'norm_query', 'hit_page_ids']))
 
 
