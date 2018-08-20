@@ -19,7 +19,16 @@ import time
 
 
 log = logging.getLogger(__name__)
-REPORT_IDLE_SIGL = 'report idle'
+
+
+def iter_queue(queue):
+    """Yield items from a queue"""
+    while True:
+        record = queue.get()
+        # Queue is finished, nothing more will arrive
+        if record is None:
+            return
+        yield record
 
 
 class Daemon(object):
@@ -49,7 +58,13 @@ class Daemon(object):
         self.work_queue = queue.Queue(10)
 
     def run(self):
-        worker_pool = multiprocessing.dummy.Pool(self.n_workers, self._produce)
+        try:
+            self.consume(self.iter_records())
+        finally:
+            self.producer.close()
+            self.ack_all_producer.close()
+
+    def iter_records(self):
         consumer = kafka.KafkaConsumer(bootstrap_servers=self.brokers,
                                        group_id='mjolnir',
                                        enable_auto_commit=True,
@@ -57,10 +72,31 @@ class Daemon(object):
                                        value_deserializer=lambda x: json.loads(x.decode('utf8')),
                                        api_version=mjolnir.kafka.BROKER_VERSION)
 
+        consumer.subscribe([self.topic_work])
         try:
-            consumer.subscribe([self.topic_work])
-            for record in consumer:
-                if 'complete' in record.value:
+            while True:
+                poll_response = consumer.poll(timeout_ms=60000)
+                if not poll_response:
+                    continue
+                offsets = {}
+                for tp, records in poll_response.items():
+                    for record in records:
+                        yield record.value
+                    offsets[tp] = kafka.OffsetAndMetadata(records[-1].offset + 1, '')
+                # Wait for all the work to complete
+                self.work_queue.join()
+                consumer.commit_async(offsets)
+        finally:
+            consumer.close()
+
+    def consume(self, records):
+        def work_fn():
+            self._handle_records(iter_queue(self.work_queue))
+
+        worker_pool = multiprocessing.dummy.Pool(self.n_workers, work_fn)
+        try:
+            for record in records:
+                if 'complete' in record:
                     # This is handled directly, rather than queued, because the
                     # consumer guarantees the offset won't be commited until the
                     # next record is consumed. By not consuming any more records
@@ -72,26 +108,22 @@ class Daemon(object):
             # Simply exit the work loop, let everything clean up as expected.
             pass
         finally:
-            consumer.close()
             worker_pool.close()
             for i in range(self.n_workers):
                 self.work_queue.put(None)
             worker_pool.join()
 
-        # It is possible, if some workers have errors, for the queue to not be completely
-        # emptied. Make sure it gets finished
+        # It is possible, if some workers have errors, for the queue to not be
+        # completely emptied. Make sure it gets finished
         if self.work_queue.qsize() > 0:
             log.warning('Work queue not completely drained on shut down. Draining')
-            session = requests.Session()
+            # We call repeatedly because the None values exit the iterator
             while self.work_queue.qsize() > 0:
-                try:
-                    record = self.work_queue.get_nowait()
-                    self._handle_record(session, record)
-                except Exception as e:
-                    log.error('Exception while shutting down daemon:')
-                    log.exception(e)
+                work_fn()
 
-        self.producer.close()
+    # Time to wait before reflecting a sigil to hope that everything
+    # has completed.
+    REFLECT_WAIT = 10
 
     def _reflect_end_run(self, record):
         """Reflect and end run sigil into the complete topic
@@ -102,8 +134,8 @@ class Daemon(object):
 
         Parameters
         ----------
-        record : ???
-            Kafka record containing the end run sigil
+        record : dict
+           Deserialized end run sigil
         """
         log.info('received end run sigil. Waiting for queue to drain')
         self.work_queue.join()
@@ -119,13 +151,14 @@ class Daemon(object):
         # much a replica can fall behind the master.
         # TODO: The kafka protocol docs suggest offset requests always go to the leader,
         # this might be unnecessary.
-        time.sleep(10)
-        record.value['offsets'] = self._get_result_offsets()
+        time.sleep(self.REFLECT_WAIT)
+        record['offsets'] = self._get_result_offsets()
 
         log.info('reflecting end sigil for run %s and partition %d' %
-                 (record.value['run_id'], record.value['partition']))
-        future = self.ack_all_producer.send(self.topic_complete, json.dumps(record.value).encode('utf8'))
-        future.add_errback(self._log_error_on_end_run)
+                 (record['run_id'], record['partition']))
+        future = self.ack_all_producer.send(self.topic_complete, json.dumps(record).encode('utf8'))
+        future.add_errback(lambda e: log.critical(
+            'Failed to send the "end run" message: %s', e))
         # TODO: Is this enough to guarantee delivery? Not sure what failures cases are.
         future.get()
 
@@ -142,67 +175,27 @@ class Daemon(object):
         consumer.close()
         return offsets
 
-    def _produce(self):
-        """Run elasticsearch queries from queue and push them into topic_result"""
-        session = requests.Session()
-        continue_processing = True
-        while continue_processing:
-            record = self.work_queue.get()
-            try:
-                continue_processing = self._handle_record(session, record)
-            except Exception:
-                log.exception('Exception processing record')
-
-    def _log_error_on_send(self, exception):
-        """Log an error when a failure occurs while sending a document to the broker
-
-        Parameters
-        ----------
-        exception: BaseException
-            exception raised while sending a document
-        """
-        log.error('Failed to send a message to the broker: %s', exception)
-
-    def _log_error_on_end_run(self, exception):
-        """Log an error when a failure occurs while sending a document to the broker
-
-        Parameters
-        ----------
-        exception: BaseException
-            exception raised while sending a document
-        """
-        log.critical('Failed to send the "end run" message: %s', exception)
-
-    def _handle_record(self, session, record):
+    def _handle_records(self, work):
         """Handle a single kafka record from request topic
 
         Parameters
         ----------
-        session : requests.Session
-            Session for making http requests. This must be per-thread as it is not threadsafe.
-        record : ???
-            Kafka record to handle
-
-        Returns
-        -------
-        bool
-            True if the thread should continue processing records
+        work : iterable of dict
+            Yields deserialized requests from kafka to process
         """
-        try:
-            # Consumer finished, nothing more will arrive in the queue
-            if record is None:
-                return False
-
-            # Standard execution of elasticsearch bulk query
-            response = mjolnir.cirrus.make_request('msearch', session, ['http://localhost:9200'],
-                                                   record.value['request'], reuse_url=True)
-            future = self.producer.send(self.topic_result, json.dumps({
-                'run_id': record.value['run_id'],
-                'meta': record.value['meta'],
-                'status_code': response.status_code,
-                'text': response.text,
-            }).encode('utf8'))
-            future.add_errback(self._log_error_on_send)
-            return True
-        finally:
-            self.work_queue.task_done()
+        # Standard execution of elasticsearch bulk query
+        session = requests.Session()
+        for record in work:
+            try:
+                response = mjolnir.cirrus.make_request('msearch', session, ['http://localhost:9200'],
+                                                       record['request'], reuse_url=True)
+                future = self.producer.send(self.topic_result, json.dumps({
+                    'run_id': record['run_id'],
+                    'meta': record['meta'],
+                    'status_code': response.status_code,
+                    'text': response.text,
+                }).encode('utf8'))
+                future.add_errback(lambda e: log.error(
+                    'Failed to send a message to the broker: %s', e))
+            except:  # noqa: E722
+                log.exception('Exception processing record')

@@ -26,6 +26,7 @@ test_requirements = [
     'findspark',
     'flake8',
     'pytest',
+    'pytest-mock',
     'tox',
 ]
 
