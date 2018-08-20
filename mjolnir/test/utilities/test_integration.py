@@ -100,6 +100,7 @@ def xgboost_mutex():
         mjolnir.training.xgboost.train = old_train
 
 
+@pytest.mark.skip(reason="Fails with `Rabit call after finalize` too often in CI")
 def test_integration(spark_context, hive_context, make_requests_session):
     """Happy path end-to-end test"""
     def session_factory():
