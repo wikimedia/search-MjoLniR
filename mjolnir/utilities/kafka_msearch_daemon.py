@@ -26,6 +26,18 @@ def arg_parser():
     parser.add_argument(
         '--prometheus-port', dest='prometheus_port', default=9161, type=int, required=False,
         help='Port to export prometheus metrics over.')
+    parser.add_argument(
+        '--input-topic', dest='topic_request', default=mjolnir.kafka.TOPIC_REQUEST,
+        help='Topic to read msearch requests from')
+    parser.add_argument(
+        '--output-topic', dest='topic_result', default=mjolnir.kafka.TOPIC_RESULT,
+        help='Topic to write msearch responses to')
+    parser.add_argument(
+        '--group-id', dest='group_id', default='mjolnir_msearch',
+        help='Kafka consumer group to join')
+    parser.add_argument(
+        '--max-concurrent-searches', dest='max_concurrent_searches', type=int, default=1,
+        help='Maximum number of queries in a single msearch request that will run in parallel')
     return parser
 
 

@@ -41,11 +41,12 @@ def _msearch_success(response):
     return True
 
 
-def make_request(mode, session, url_list, bulk_query, num_retries=5, reuse_url=False):
+def make_request(mode, session, url_list, bulk_query, num_retries=5, reuse_url=False, query_string=None):
     http_verb, url_suffix, is_success = {
         'msearch': ('GET', '/_msearch', _msearch_success)
     }[mode]
-
+    if query_string:
+        url_suffix += '?' + urllib.parse.urlencode(query_string)
     failures = 0
     last_ex = None
     while True:

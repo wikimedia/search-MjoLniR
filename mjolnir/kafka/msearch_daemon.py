@@ -58,7 +58,8 @@ def iter_queue(queue):
 class Daemon(object):
     def __init__(self, brokers, n_workers=5, topic_work=mjolnir.kafka.TOPIC_REQUEST,
                  topic_result=mjolnir.kafka.TOPIC_RESULT, topic_complete=mjolnir.kafka.TOPIC_COMPLETE,
-                 max_request_size=4*1024*1024, query_total_threshold=100, prometheus_port=9161):
+                 max_request_size=4*1024*1024, query_total_threshold=100, prometheus_port=9161,
+                 group_id='mjolnir_msearch', max_concurrent_searches=1):
         """Initialize the msearch daemon
 
         Parameters
@@ -81,6 +82,12 @@ class Daemon(object):
             records and will not generate load on the cluster.
         prometheus_port : int
             Port to expose prometheus metrics collection at
+        group_id : str
+            Kafka consumer group to join
+        max_concurrent_searches : int
+            The maximum number of search requests within a single msearch to run in parallel. The
+            total concurrent queries possible to issue across a deployment will be:
+                    max_concurrent_searches * n_workers * n_kafka_partitions * n_elastic_shards
         """
         self.brokers = brokers
         self.n_workers = n_workers
@@ -88,6 +95,8 @@ class Daemon(object):
         self.topic_result = topic_result
         self.topic_complete = topic_complete
         self.prometheus_port = prometheus_port
+        self.group_id = group_id
+        self.max_concurrent_searches = max_concurrent_searches
         # Standard producer for query results
         self.producer = kafka.KafkaProducer(bootstrap_servers=brokers,
                                             max_request_size=max_request_size,
@@ -124,7 +133,7 @@ class Daemon(object):
 
     def iter_records(self):
         consumer = kafka.KafkaConsumer(bootstrap_servers=self.brokers,
-                                       group_id='mjolnir_msearch',
+                                       group_id=self.group_id,
                                        enable_auto_commit=True,
                                        auto_offset_reset='latest',
                                        value_deserializer=lambda x: json.loads(x.decode('utf8')),
@@ -225,8 +234,9 @@ class Daemon(object):
         session = requests.Session()
         for record in work:
             try:
-                response = mjolnir.cirrus.make_request('msearch', session, ['http://localhost:9200'],
-                                                       record['request'], reuse_url=True)
+                response = mjolnir.cirrus.make_request(
+                    'msearch', session, ['http://localhost:9200'], record['request'], reuse_url=True,
+                    query_string={'max_concurrent_searches': self.max_concurrent_searches})
                 future = self.producer.send(self.topic_result, json.dumps({
                     'run_id': record['run_id'],
                     'meta': record['meta'],
