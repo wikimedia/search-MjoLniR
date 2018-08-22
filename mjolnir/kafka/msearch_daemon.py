@@ -46,10 +46,13 @@ def iter_queue(queue):
     """Yield items from a queue"""
     while True:
         record = queue.get()
-        # Queue is finished, nothing more will arrive
-        if record is None:
-            return
-        yield record
+        try:
+            # Queue is finished, nothing more will arrive
+            if record is None:
+                return
+            yield record
+        finally:
+            queue.task_done()
 
 
 class Daemon(object):
