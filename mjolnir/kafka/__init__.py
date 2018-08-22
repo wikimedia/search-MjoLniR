@@ -5,4 +5,4 @@ TOPIC_REQUEST = 'mjolnir_request'
 # Topic containing elasticsearch results
 TOPIC_RESULT = 'mjolnir_result'
 # Force version to avoid protocol negotiation
-BROKER_VERSION = (0, 10)
+BROKER_VERSION = (1, 1, 0)
