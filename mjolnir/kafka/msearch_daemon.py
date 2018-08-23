@@ -133,8 +133,8 @@ class Daemon(object):
 
     def iter_records(self):
         consumer = kafka.KafkaConsumer(bootstrap_servers=self.brokers,
-                                       group_id=self.group_id,
-                                       enable_auto_commit=True,
+                                       group_id='mjolnir_msearch',
+                                       enable_auto_commit=False,
                                        auto_offset_reset='latest',
                                        value_deserializer=lambda x: json.loads(x.decode('utf8')),
                                        api_version=mjolnir.kafka.BROKER_VERSION,
@@ -144,25 +144,34 @@ class Daemon(object):
                                        max_poll_records=min(500, 50 * self.n_workers))
         consumer.subscribe([self.topic_work])
         try:
+            last_commit = 0
+            offset_commit_interval_sec = 60
+            offsets = {}
             while self.load_monitor.is_below_threshold:
+                now = time.monotonic()
+                if offsets and now - last_commit > offset_commit_interval_sec:
+                    consumer.commit_async(offsets)
+                    last_commit = now
+                    offsets = {}
                 # By polling directly, rather than using the iter based api, we
                 # have the opportunity to regularly re-check the load monitor
                 # and transition out of the consuming state if needed.
                 poll_response = consumer.poll(timeout_ms=60000)
                 if not poll_response:
                     continue
-                offsets = {}
                 with Metric.PROCESS_BATCH.time():
                     for tp, records in poll_response.items():
                         for record in records:
                             self.load_monitor.notify()
                             yield record.value
-                        offsets[tp] = kafka.OffsetAndMetadata(records[-1].offset + 1, '')
                     # Wait for all the work to complete
                     self.work_queue.join()
-                consumer.commit_async(offsets)
+                for tp, records in poll_response.items():
+                    offsets[tp] = kafka.OffsetAndMetadata(records[-1].offset + 1, '')
                 Metric.RECORDS_PROCESSED.inc(sum(len(x) for x in poll_response.values()))
         finally:
+            if offsets:
+                consumer.commit(offsets)
             consumer.close()
 
     def consume(self, records):

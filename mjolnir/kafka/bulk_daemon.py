@@ -213,7 +213,16 @@ def run(brokers, es_clusters, topics, group_id, prometheus_port):
     log.info('Subscribing to: %s', ', '.join(topics))
     consumer.subscribe(topics)
     try:
+        offset_commit_interval_sec = 60
+        last_commit = 0
+        offsets = {}
         while True:
+            now = time.monotonic()
+            if offsets and now - last_commit > offset_commit_interval_sec:
+                consumer.commit_async(offsets)
+                last_commit = now
+                offsets = {}
+
             batch = consumer.poll(timeout_ms=60000)
             # Did the poll time out?
             if not batch:
@@ -228,9 +237,9 @@ def run(brokers, es_clusters, topics, group_id, prometheus_port):
                     if records:
                         stream_to_es(cluster, records)
             # Tell kafka we did the work
-            offsets = {}
             for tp, records in batch.items():
                 offsets[tp] = kafka.OffsetAndMetadata(records[-1].offset + 1, '')
-            consumer.commit_async(offsets)
     finally:
+        if offsets:
+            consumer.commit(offsets)
         consumer.close()

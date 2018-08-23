@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 requirements = [
     # mjolnir requirements
     'requests',
-    'kafka',
+    'kafka-python',
     'pyyaml',
     'hyperopt',
     'elasticsearch>=5.0.0,<6.0.0',
