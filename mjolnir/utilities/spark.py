@@ -640,7 +640,7 @@ def arg_parser():
         description='\n'.join(description),
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
-        '-c', '--config', dest='config', type=str, required=True,
+        '-c', '--config', dest='config', type=str, required=False,
         default='/etc/mjolnir/spark.yaml',
         help='Path to yaml configuration file.')
     parser.add_argument(
