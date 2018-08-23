@@ -71,6 +71,7 @@ def transform_from_kafka(df, brokers, indices=None, batch_size=15, top_n=5, sess
     return (
         mjolnir.kafka.client.msearch(
             df, brokers,
+            meta_keys=['wikiid', 'query', 'norm_query'],
             create_es_query=lambda row: _create_bulk_query([row], indices, top_n),
             handle_response=kafka_handle_response)
         .toDF(['wikiid', 'query', 'norm_query', 'hit_page_ids']))
