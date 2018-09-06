@@ -27,7 +27,7 @@ def arg_parser():
         '--prometheus-port', dest='prometheus_port', default=9161, type=int, required=False,
         help='Port to export prometheus metrics over.')
     parser.add_argument(
-        '--input-topic', dest='topic_request', default=mjolnir.kafka.TOPIC_REQUEST,
+        '--input-topic', dest='topic_work', default=mjolnir.kafka.TOPIC_REQUEST,
         help='Topic to read msearch requests from')
     parser.add_argument(
         '--output-topic', dest='topic_result', default=mjolnir.kafka.TOPIC_RESULT,
