@@ -23,7 +23,7 @@ def arg_parser():
         '-g', '--group-id', dest='group_id', type=str, default='TODO',
         help='Kafka consumer group to join')
     parser.add_argument(
-        '--prometheus-port', dest='prometheus_port', default=9160, type=int, required=False,
+        '--prometheus-port', dest='prometheus_port', default=9170, type=int, required=False,
         help='Port to export prometheus metrics over.')
     return parser
 

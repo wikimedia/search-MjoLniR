@@ -24,7 +24,7 @@ def arg_parser():
         help='Number of workers to issue elasticsearch queries in parallel. '
              + 'Defaults to 1.')
     parser.add_argument(
-        '--prometheus-port', dest='prometheus_port', default=9161, type=int, required=False,
+        '--prometheus-port', dest='prometheus_port', default=9171, type=int, required=False,
         help='Port to export prometheus metrics over.')
     parser.add_argument(
         '--input-topic', dest='topic_work', default=mjolnir.kafka.TOPIC_REQUEST,
