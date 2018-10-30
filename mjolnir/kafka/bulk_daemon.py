@@ -73,6 +73,7 @@ def expand_action(message):
             '_index': message['_index'],
             '_type': 'page',
             '_id': message['_id'],
+            'retry_on_conflict': 3,
         }
     }
 
