@@ -21,9 +21,9 @@ if not hasattr(hyperopt.FMinIter, '_mjolnir_hack'):
         fminiter_orig_init(self, *args, **kwargs)
         if type(self.trials) == ThreadingTrials:
             # We have to set this here, rather than letting it
-            # autodetect from self.trials.async, because then
+            # autodetect from self.trials.asynchronous, because then
             # it will try, and fail, to pickle the domain object
-            self.async = True
+            self.asynchronous = True
             # Since domain wasn't pickled and provided we have
             # to do it manually
             self.trials.attachments['domain'] = self.domain
