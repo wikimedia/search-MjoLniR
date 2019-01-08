@@ -1,3 +1,4 @@
+from elasticsearch import Elasticsearch
 from mjolnir.kafka import bulk_daemon
 import pytest
 
@@ -49,3 +50,43 @@ def test_stream_to_es_stats_collection(mocker, expected, records, mock):
         # almost certainly fragile
         data = metric._samples()[0][2]
         assert data == expected_value
+
+
+def test_to_http_url():
+    assert bulk_daemon.to_http_url('elastic1020.eqiad.wmnet:9500') == 'http://elastic1020.eqiad.wmnet:9400'
+    assert bulk_daemon.to_http_url('elastic1020.eqiad.wmnet:9300') == 'http://elastic1020.eqiad.wmnet:9200'
+
+
+def test_get_hosts_from_crosscluster_conf():
+    conf = {
+        "persistent": {
+            "search": {
+                "remote": {
+                    "omega": {
+                        "seeds": [
+                            "elastic1026.eqiad.wmnet:9500",
+                            "elastic1028.eqiad.wmnet:9500",
+                            "elastic1029.eqiad.wmnet:9500",
+                        ]
+                    },
+                    "psi": {
+                        "seeds": [
+                            "elastic1020.eqiad.wmnet:9700",
+                            "elastic1023.eqiad.wmnet:9700",
+                            "elastic1026.eqiad.wmnet:9700",
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    new_hosts = bulk_daemon.get_hosts_from_crosscluster_conf(conf)
+    assert 'omega' in new_hosts
+    assert 'psi' in new_hosts
+    psi = new_hosts['psi']
+    assert isinstance(psi, Elasticsearch)
+    expected_hosts = [{'host': 'elastic1020.eqiad.wmnet', 'port': 9600},
+                      {'host': 'elastic1023.eqiad.wmnet', 'port': 9600},
+                      {'host': 'elastic1026.eqiad.wmnet', 'port': 9600}]
+    assert psi.transport.hosts == expected_hosts
+    assert bulk_daemon.get_hosts_from_crosscluster_conf({}) == {}

@@ -1,3 +1,4 @@
+import re
 from collections import namedtuple
 import json
 import logging
@@ -188,7 +189,40 @@ def make_es_clusters(bootstrap_hosts):
                 info['cluster_name'], info['cluster_uuid'])
         seen.add(info['cluster_uuid'])
         log.info('Connected to elasticsearch %s', info['cluster_name'])
+    for cluster in clusters:
+        new_hosts = get_hosts_from_crosscluster_conf(cluster.cluster.get_settings)
+        for name, new_host in new_hosts.items():
+            info = new_host.info()
+            if info['cluster_uuid'] in seen:
+                continue
+            seen.add(info['cluster_uuid'])
+            clusters.append(new_host)
     return clusters
+
+
+def to_http_url(host):
+    if not re.match('^[a-z0-9.]+:9[3579]00$', host):
+        raise ValueError("Invalid hostname {}".format(host))
+    hostname, port = host.split(':', 1)
+    port = int(port)
+    # We don't have certs for elastic hostnames only LVS...
+    return 'http://{}:{}'.format(hostname, port - 100)
+
+
+def get_hosts_from_crosscluster_conf(conf):
+    elastichosts = {}
+    cross_clusters = {}
+
+    try:
+        cross_clusters = conf['persistent']['search']['remote']
+    except KeyError:
+        pass
+
+    for cluster_name, cluster_conf in cross_clusters.items():
+        hosts = [to_http_url(host) for host in cluster_conf['seeds']]
+        elastichosts[cluster_name] = Elasticsearch(hosts)
+
+    return elastichosts
 
 
 def run(brokers, es_clusters, topics, group_id, prometheus_port):
