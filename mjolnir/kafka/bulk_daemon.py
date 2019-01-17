@@ -190,7 +190,7 @@ def make_es_clusters(bootstrap_hosts):
         seen.add(info['cluster_uuid'])
         log.info('Connected to elasticsearch %s', info['cluster_name'])
     for cluster in clusters:
-        new_hosts = get_hosts_from_crosscluster_conf(cluster.cluster.get_settings)
+        new_hosts = get_hosts_from_crosscluster_conf(cluster.cluster.get_settings())
         for name, new_host in new_hosts.items():
             info = new_host.info()
             if info['cluster_uuid'] in seen:
