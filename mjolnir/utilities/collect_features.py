@@ -8,6 +8,7 @@ import datetime
 import json
 import logging
 import mjolnir.dbn
+import mjolnir.kafka.client
 import mjolnir.metrics
 import mjolnir.norm_query
 import mjolnir.features
@@ -20,7 +21,12 @@ import requests
 
 def collect_features(sc, sqlContext, input_dir, output_dir, wikis,
                      search_cluster, brokers, ltr_feature_definitions,
+                     kafka_request_topic, kafka_result_topic,
                      session_factory=requests.Session):
+
+    if brokers:
+        brokers = mjolnir.kafka.client.ClientConfig(
+            brokers, kafka_request_topic, kafka_result_topic)
 
     df_hits = sqlContext.read.parquet(input_dir)
 
@@ -101,6 +107,14 @@ def arg_parser():
         '-f', '--feature-definitions', dest='ltr_feature_definitions', type=str, required=True,
         help='Name of the LTR plugin feature definitions (featureset:name[@store] or '
              + 'model:name[@store])')
+    parser.add_argument(
+        '--kafka-request-topic', metavar='TOPIC', dest='kafka_request_topic',
+        default=mjolnir.kafka.TOPIC_REQUEST, type=str,
+        help='TODO')
+    parser.add_argument(
+        '--kafka-result-topic', metavar='TOPIC', dest='kafka_result_topic',
+        default=mjolnir.kafka.TOPIC_RESULT, type=str,
+        help='TODO')
     parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='+',
         help='A wiki to collect features for')

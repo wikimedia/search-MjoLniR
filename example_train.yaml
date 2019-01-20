@@ -43,6 +43,8 @@ global:
 
         # Brokers to use to bootstrap kafka connections
         kafka_brokers: kafka-jumbo1001.eqiad.wmnet:9092,kafka-jumbo1002.eqiad.wmnet:9092,kafka-jumbo1003.eqiad.wmnet:9092
+        kafka_request_topic: mjolnir_request
+        kafka_result_topic: mjolnir_result
 
         # Number of cpu cores to assign per task. Must be a multiple of
         # cores_per_executor. Spark can't take advantage of this being > 1, but
@@ -134,6 +136,8 @@ global:
                 # than requestsed, 35M turns into 25 or 30M.
                 samples-per-wiki: 35000000
                 kafka: "%(kafka_brokers)s"
+                kafka-request-topic: "%(kafka_request_topic)s"
+                kafka-result-topic: "%(kafka_result_topic)s"
                 min-sessions: "%(min_sessions_per_query)s"
         collect_features:
             spark_command: "%(SPARK_HOME)s/bin/spark-submit"
@@ -146,6 +150,8 @@ global:
                 input: "%(hdfs_labeled_data_path)s"
                 output-dir: "%(hdfs_features_data_path)s"
                 kafka: "%(kafka_brokers)s"
+                kafka-request-topic: "%(kafka_request_topic)s"
+                kafka-result-topic: "%(kafka_result_topic)s"
                 feature-definitions: "%(feature_definitions)s"
         feature_selection:
             spark_command: "%(SPARK_HOME)s/bin/spark-submit"

@@ -154,8 +154,8 @@ def transform(df, url_list=None, brokers=None, indices=None, batch_size=30, top_
     df : pyspark.sql.DataFrame
     url_list : list of str
         List of urls for elasticsearch servers
-    brokers : list of str
-        List of host:port pairs to bootstrap kafka with. Must provide either
+    brokers : mjolnir.kafka.client.ClientConfig or list of str
+        ClientConfig or list of host:port pairs to bootstrap kafka with. Must provide either
         brokers or url_list, but not both.
     indices : dict, optional
         Map from wikiid to the elasticsearch index to query. If a wiki is not provided

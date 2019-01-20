@@ -331,7 +331,7 @@ def collect_from_ltr_plugin_and_kafka(df, brokers, model, feature_names_accu, in
     return (
         mjolnir.kafka.client.msearch(
             df.groupBy('wikiid', 'query').agg(F.collect_set('hit_page_id').alias('hit_page_ids')),
-            brokers=brokers,
+            client_config=brokers,
             meta_keys=['wikiid', 'query'],
             create_es_query=lambda row: log_query.make_msearch(row, indices),
             handle_response=kafka_handle_response)

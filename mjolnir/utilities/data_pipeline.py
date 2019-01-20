@@ -7,6 +7,7 @@ import argparse
 import datetime
 import logging
 import mjolnir.dbn
+import mjolnir.kafka.client
 import mjolnir.metrics
 import mjolnir.norm_query
 import mjolnir.features
@@ -19,7 +20,13 @@ import requests
 
 def run_pipeline(sc, sqlContext, input_dir, output_dir, wikis, samples_per_wiki,
                  min_sessions_per_query, search_cluster, brokers,
-                 samples_size_tolerance, session_factory=requests.Session):
+                 samples_size_tolerance, kafka_request_topic, kafka_result_topic,
+                 session_factory=requests.Session):
+
+    if brokers:
+        brokers = mjolnir.kafka.client.ClientConfig(
+            brokers, kafka_request_topic, kafka_result_topic)
+
     sqlContext.sql("DROP TEMPORARY FUNCTION IF EXISTS stemmer")
     sqlContext.sql("CREATE TEMPORARY FUNCTION stemmer AS 'org.wikimedia.analytics.refinery.hive.StemmerUDF'")
 
@@ -190,6 +197,14 @@ def arg_parser():
         help='Collect feature vectors via kafka using specified broker in <host>:<port> '
              + ' form to bootstrap access. Query normalization will still use the '
              + ' --search-cluster option')
+    parser.add_argument(
+        '--kafka-request-topic', metavar='TOPIC', dest='kafka_request_topic',
+        default=mjolnir.kafka.TOPIC_REQUEST, type=str,
+        help='TODO')
+    parser.add_argument(
+        '--kafka-result-topic', metavar='TOPIC', dest='kafka_result_topic',
+        default=mjolnir.kafka.TOPIC_RESULT, type=str,
+        help='TODO')
     parser.add_argument(
         'wikis', metavar='wiki', type=str, nargs='+',
         help='A wiki to generate labels for')
