@@ -74,7 +74,8 @@ def expand_action(message):
             '_index': message['_index'],
             '_type': 'page',
             '_id': message['_id'],
-            'retry_on_conflict': 3,
+            # TODO: switch to retry_on_conflict (no _) with elastic 6.x
+            '_retry_on_conflict': 3,
         }
     }
 
