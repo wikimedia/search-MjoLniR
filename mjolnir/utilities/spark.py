@@ -405,7 +405,7 @@ def subprocess_check_call(args, env=None):
         return 0
     else:
         retval = subprocess.check_call(args, env=env)
-        if retval is not 0:
+        if retval != 0:
             raise Exception("Subprocess returned non-zero exit code: %d" % (retval))
 
 # Autodetection of parameters to run with, primarily spark configuration to
