@@ -283,7 +283,7 @@ def rescore():
                         {
                             "script_score": {
                                 "script": {
-                                    "inline": "pow(doc['popularity_score'].value , 0.8) / ( pow(doc['popularity_score'].value, 0.8) + pow(8.0E-6,0.8))", # noqa:E501
+                                    "inline": "pow(doc['popularity_score'].value , 0.8) / ( pow(doc['popularity_score'].value, 0.8) + pow(8.0E-6,0.8))",  # noqa:E501
                                     "lang": "expression"
                                 }
                             },
@@ -292,7 +292,7 @@ def rescore():
                         {
                             "script_score": {
                                 "script": {
-                                    "inline": "pow(doc['incoming_links'].value , 0.7) / ( pow(doc['incoming_links'].value, 0.7) + pow(30,0.7))", # noqa:E501
+                                    "inline": "pow(doc['incoming_links'].value , 0.7) / ( pow(doc['incoming_links'].value, 0.7) + pow(30,0.7))",  # noqa:E501
                                     "lang": "expression"
                                 }
                             },
