@@ -9,6 +9,8 @@ import mjolnir.spark
 import random
 import requests
 
+from pyspark.sql import types as T
+
 
 def _make_es_query(row, top_n):
     return {
@@ -68,13 +70,11 @@ def transform_from_kafka(df, brokers, indices=None, batch_size=15, top_n=5, sess
             # ordering matches toDF([...]) call that names them
             yield (meta['wikiid'], meta['query'], meta['norm_query'], hit_page_ids)
 
-    return (
-        mjolnir.kafka.client.msearch(
+    return mjolnir.kafka.client.msearch(
             df, brokers,
             meta_keys=['wikiid', 'query', 'norm_query'],
             create_es_query=lambda row: _create_bulk_query([row], indices, top_n),
             handle_response=kafka_handle_response)
-        .toDF(['wikiid', 'query', 'norm_query', 'hit_page_ids']))
 
 
 def transform_from_elasticsearch(df, url_list, indices=None, batch_size=15, top_n=5, session_factory=requests.Session):
@@ -96,7 +96,7 @@ def transform_from_elasticsearch(df, url_list, indices=None, batch_size=15, top_
 
     Returns
     -------
-    pyspark.sql.DataFrame
+    pyspark.RDD
     """
     mjolnir.spark.assert_columns(df, ['wikiid', 'query', 'norm_query'])
     if indices is None:
@@ -131,16 +131,19 @@ def transform_from_elasticsearch(df, url_list, indices=None, batch_size=15, top_
     if df.rdd.getNumPartitions() > max_executors:
         df = df.coalesce(max_executors)
 
-    return (
-        df
-        .rdd.mapPartitions(collect_partition_hit_page_ids)
-        .toDF(['wikiid', 'query', 'norm_query', 'hit_page_ids']))
+    return df.rdd.mapPartitions(collect_partition_hit_page_ids)
 
 
 def transform(df, url_list=None, brokers=None, **kwargs):
     if brokers and url_list:
         raise ValueError('cannot specify brokers and url_list')
     if brokers:
-        return transform_from_kafka(df, brokers, **kwargs)
+        rdd = transform_from_kafka(df, brokers, **kwargs)
     else:
-        return transform_from_elasticsearch(df, url_list, **kwargs)
+        rdd = transform_from_elasticsearch(df, url_list, **kwargs)
+    return df.sql_ctx.createDataFrame(rdd, T.StructType([
+        df.schema['wikiid'],
+        df.schema['query'],
+        df.schema['norm_query'],
+        T.StructField('hit_page_ids', T.ArrayType(T.IntegerType()), nullable=False),
+    ]))
