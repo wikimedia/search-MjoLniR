@@ -21,6 +21,8 @@ requirements = [
     # pyspark requirements
     'py4j',
     'numpy',
+    # for wmf logging integration
+    'python-json-logger',
 ]
 
 test_requirements = [
