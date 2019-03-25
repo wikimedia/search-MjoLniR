@@ -81,11 +81,12 @@ def expand_action(message, cluster):
     }
 
     script_key = 'source' if cluster.major_version >= 6 else 'inline'
+    script_lang = 'super_detect_noop' if cluster.major_version >= 6 else 'native'
     noop_handlers = {field: FIELD_CONFIG[field] for field in message['_source'].keys()}
     source = {
         'script': {
             script_key: 'super_detect_noop',
-            'lang': 'native',
+            'lang': script_lang,
             'params': {
                 'handlers': noop_handlers,
                 'source': message['_source'],
