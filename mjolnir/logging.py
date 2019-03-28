@@ -20,5 +20,5 @@ class CustomJsonFormatter(JsonFormatter):
 class StructuredLoggingHandler(logging.StreamHandler):
     def __init__(self, fmt, rsyslog=False):
         super(StructuredLoggingHandler, self).__init__()
-        prefix = '@cee' if rsyslog else ''
+        prefix = '@cee: ' if rsyslog else ''
         self.formatter = CustomJsonFormatter(fmt=fmt, prefix=prefix)
