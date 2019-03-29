@@ -132,7 +132,8 @@ class MockSession(object):
     def get(self, url, data=None):
         return self.request('GET', url, data=data)
 
-    def request(self, method, url, data=None):
+    def request(self, method, url, data=None, headers=None):
+        # headers parameter intentionall ignored.
         # TODO: This hash is far from a uniqueness guarantee, it's
         # not really even best effort in the face of hash collisions
         md5 = hashlib.md5()

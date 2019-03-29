@@ -4,10 +4,14 @@ to make those queries against an elasticsearch cluster.
 """
 
 from __future__ import absolute_import
+import json
+import logging
 import random
 import requests
 import urllib.parse
 
+
+LOG = logging.getLogger('mjolnir.cirrus')
 
 # TODO: These are probably inaccessible because the access is through a firewall hole that
 # ops wasn't thrilled to put in place. Because the firewall is in the routers and not
@@ -34,10 +38,19 @@ def _msearch_success(response):
     """
     parsed = response.json()
     if 'responses' not in parsed:
+        LOG.warn("msearch response does not contain 'responses'", extra={
+            "error": response.text,
+        })
         return False
+    errors = []
     for result in parsed['responses']:
         if result['status'] != 200:
-            return False
+            errors.append(result)
+    if errors:
+        LOG.warn("msearch failed to return all 200 status codes", extra={
+            "error": json.dumps(errors)
+        })
+        return False
     return True
 
 
@@ -56,7 +69,9 @@ def make_request(mode, session, url_list, bulk_query, num_retries=5, reuse_url=F
             raise last_ex
         try:
             url = url_list[-1] + url_suffix
-            result = session.request(http_verb, url, data=bulk_query)
+            result = session.request(http_verb, url, data=bulk_query, headers={
+                'Content-Type': 'application/x-ndjson',
+            })
             if is_success(result):
                 return result
             last_ex = RuntimeError('Too many failures or no urls left')
