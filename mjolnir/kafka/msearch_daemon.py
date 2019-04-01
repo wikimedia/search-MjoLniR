@@ -350,7 +350,7 @@ class StreamingEMA(object):
         self.prev_count = None
         self.prev_time = None
         self.value = None
-        Metric.EMA.set_function(lambda: self.value)
+        Metric.EMA.set_function(lambda: 'nan' if self.value is None else self.value)
 
     @property
     def is_valid(self):
