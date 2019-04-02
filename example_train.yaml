@@ -101,7 +101,7 @@ global:
         executor-memory: "%(executor_memory)s"
         # Source our jvm dependencies from archiva. 
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
-        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:%(spark_version)s,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
     spark_conf:
         spark.task.cpus: "%(cores_per_task)s"
         spark.executor.memoryOverhead: "%(executor_memory_overhead)s"

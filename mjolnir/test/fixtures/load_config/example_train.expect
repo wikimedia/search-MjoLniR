@@ -40,7 +40,7 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
       spark_command: /usr/lib/spark2/bin/spark-submit
       spark_conf:
@@ -90,7 +90,7 @@ global_config:
         files: /usr/lib/libhdfs.so.0.0.0
         jars: hdfs://analytics-hadoop/wmf/refinery/current/artifacts/refinery-hive.jar
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
       spark_command: /usr/lib/spark2/bin/spark-submit
       spark_conf:
@@ -135,7 +135,7 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
       spark_command: /usr/lib/spark2/bin/spark-submit
       spark_conf:
@@ -182,7 +182,7 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
       spark_command: /usr/lib/spark2/bin/spark-submit
       spark_conf:
@@ -221,7 +221,7 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
       spark_command: /usr/lib/spark2/bin/pyspark
       spark_conf:
@@ -258,7 +258,7 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
       spark_command: /usr/lib/spark2/bin/pyspark
       spark_conf:
@@ -302,7 +302,7 @@ global_config:
         executor-memory: 2G
         files: /usr/lib/libhdfs.so.0.0.0
         master: yarn
-        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+        packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
         repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
       spark_command: /usr/lib/spark2/bin/spark-submit
       spark_conf:
@@ -355,7 +355,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -405,7 +405,7 @@ profiles:
           files: /usr/lib/libhdfs.so.0.0.0
           jars: hdfs://analytics-hadoop/wmf/refinery/current/artifacts/refinery-hive.jar
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -450,7 +450,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -497,7 +497,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -536,7 +536,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
@@ -573,7 +573,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
@@ -619,7 +619,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -674,7 +674,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -724,7 +724,7 @@ profiles:
           files: /usr/lib/libhdfs.so.0.0.0
           jars: hdfs://analytics-hadoop/wmf/refinery/current/artifacts/refinery-hive.jar
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -769,7 +769,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -816,7 +816,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -855,7 +855,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
@@ -892,7 +892,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
@@ -938,7 +938,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -995,7 +995,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -1045,7 +1045,7 @@ profiles:
           files: /usr/lib/libhdfs.so.0.0.0
           jars: hdfs://analytics-hadoop/wmf/refinery/current/artifacts/refinery-hive.jar
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -1090,7 +1090,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -1137,7 +1137,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:
@@ -1176,7 +1176,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
@@ -1213,7 +1213,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/pyspark
         spark_conf:
@@ -1259,7 +1259,7 @@ profiles:
           executor-memory: 2G
           files: /usr/lib/libhdfs.so.0.0.0
           master: yarn
-          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.2,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
+          packages: ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT,org.wikimedia.search:mjolnir:0.4-SNAPSHOT,sramirez:spark-infotheoretic-feature-selection:1.4.4,sramirez:spark-MDLP-discretization:1.4.1
           repositories: https://archiva.wikimedia.org/repository/releases,https://archiva.wikimedia.org/repository/snapshots,https://archiva.wikimedia.org/repository/mirrored
         spark_command: /usr/lib/spark2/bin/spark-submit
         spark_conf:

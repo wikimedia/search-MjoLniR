@@ -11,12 +11,11 @@ import os
 import time
 
 import kafka
-import kafka.common
-from pyspark.streaming.kafka import KafkaUtils, OffsetRange
 
 import mjolnir.spark
 import mjolnir.kafka
 
+# Kafka client configuration
 ClientConfig = namedtuple('ClientConfig', [
     'brokers', 'req_topic', 'resp_topic', 'control_topic'])
 # 4 fields and 3 defaults means brokers is still required
@@ -24,6 +23,9 @@ ClientConfig.__new__.__defaults__ = (
     mjolnir.kafka.TOPIC_REQUEST,
     mjolnir.kafka.TOPIC_RESULT,
     mjolnir.kafka.TOPIC_COMPLETE)
+
+# A specific range of a kafka.TopicPartition
+OffsetRange = namedtuple('OffsetRange', ['tp', 'start', 'end'])
 
 
 def _make_producer(client_config):
@@ -133,7 +135,7 @@ def offset_range_for_timestamp_range(brokers, start, end, topic):
 
     Returns
     -------
-    list of pyspark.streaming.kafka.OffsetRange or None
+    list of OffsetRange or None
         Per-partition ranges of offsets to read
     """
     consumer = kafka.KafkaConsumer(bootstrap_servers=brokers)
@@ -144,7 +146,7 @@ def offset_range_for_timestamp_range(brokers, start, end, topic):
     partitions = [kafka.TopicPartition(topic, p) for p in partitions]
     o_start = offsets_for_times(consumer, partitions, start)
     o_end = offsets_for_times(consumer, partitions, end)
-    return [OffsetRange(tp.topic, tp.partition, o_start[tp], o_end[tp]) for tp in partitions]
+    return [OffsetRange(tp, o_start[tp], o_end[tp]) for tp in partitions]
 
 
 def wait_for_sigils(client_config, run_id, num_end_sigils):
@@ -192,6 +194,55 @@ def wait_for_sigils(client_config, run_id, num_end_sigils):
         consumer.close()
 
 
+def kafka_to_rdd(sc, client_config, offset_ranges):
+    """Read ranges of kafka partitions into an RDD.
+
+    Parameters
+    ----------
+    sc : pyspark.SparkContext
+    client_config : ClientConfig
+    offset_ranges : list of OffsetRange
+        List of topic partitions along with ranges to read. Start
+        and end of range are inclusive.
+
+    Returns
+    -------
+    pyspark.RDD
+        Contents of the specified offset_ranges
+    """
+    def read_offset_range(offset_range):
+        if offset_range.end <= offset_range.start:
+            # Raise exception?
+            return
+        # After serialization round trip these fail an isinstance check.
+        # re-instantiate so we have the expected thing.
+        tp = kafka.TopicPartition(*offset_range.tp)
+        consumer = kafka.KafkaConsumer(bootstrap_servers=client_config.brokers,
+                                       value_deserializer=lambda x: json.loads(x.decode('utf8')))
+        try:
+            consumer.assign([tp])
+            consumer.seek(tp, offset_range.start)
+            while True:
+                poll_response = consumer.poll(timeout_ms=10000)
+                if poll_response and tp in poll_response:
+                    for message in poll_response[tp]:
+                        if message.offset > offset_range.end:
+                            break
+                        yield message.value
+                if consumer.position(tp) >= offset_range.end:
+                    break
+        finally:
+            consumer.close()
+
+    return (
+        # TODO: This isn't the same as assigning each offset_range to a separate
+        # partition, but it doesn't seem like pyspark allows us to do that. Often
+        # enough this seems to achieve the same thing, but without guarantees.
+        sc.parallelize(offset_ranges, len(offset_ranges))
+        .flatMap(read_offset_range)
+    )
+
+
 def collect_results(sc, client_config, receive_record, start, end, run_id):
     """
     Parameters
@@ -219,18 +270,10 @@ def collect_results(sc, client_config, receive_record, start, end, run_id):
     if offset_ranges is None:
         raise RuntimeError('Could not retrieve offset ranges for result topic. Does it exist?')
 
-    kafka_params = {
-        'metadata.broker.list': ','.join(client_config.brokers),
-        # Set high fetch size values so we don't fail because of large messages
-        'max.partition.fetch.bytes': '40000000',
-        'fetch.message.max.bytes': '40000000'
-    }
-
     # If this ends up being too much data from kafka, blowing up memory in the
     # spark executors, we could chunk the offsets and union together multiple RDD's.
     return (
-        KafkaUtils.createRDD(sc, kafka_params, offset_ranges)
-        .map(lambda x: json.loads(x[1]))
+        kafka_to_rdd(sc, client_config, offset_ranges)
         .filter(lambda rec: 'run_id' in rec and rec['run_id'] == run_id)
         .flatMap(receive_record))
 
