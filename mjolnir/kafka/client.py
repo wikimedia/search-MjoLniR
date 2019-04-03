@@ -33,7 +33,34 @@ def _make_producer(client_config):
                                compression_type='gzip')
 
 
-def produce_queries(df, client_config, run_id, create_es_query, meta_keys):
+def ratelimit(rows, rate, clock=time.monotonic):
+    """Apply per-second rate limit to iterable.
+
+    Parameters
+    ----------
+    rows : iterable
+    rate : int
+        Number of rows to allow through per second
+    clock : callable
+        0-arity function returning current time in seconds
+    """
+    next_reset = clock() + 1
+    num_rows = 0
+    for row in rows:
+        time_remaining = next_reset - clock()
+        if time_remaining < 0 or num_rows >= rate:
+            if time_remaining > 0:
+                time.sleep(time_remaining)
+            num_rows = 0
+            next_reset = clock() + 1
+        num_rows += 1
+        yield row
+
+
+def produce_queries(
+        df, client_config, run_id, create_es_query, meta_keys,
+        max_concurrent_producer=20, rate_limit_per_sec=1500
+):
     """Push msearch queries into kafka.
 
     Write out the dataframe rows to kafka as elasticsearch multi-search queries.
@@ -51,8 +78,14 @@ def produce_queries(df, client_config, run_id, create_es_query, meta_keys):
         Function accepting a row from df that returns a string
         containing an elasticsearch query.
     meta_keys : list of str
-        List of Row fields to include in the message metadata. These will be returned
-        when consuming responses.
+        List of Row fields to include in the message metadata. These
+        will be returned when consuming responses.
+    max_concurrent_producer : int
+        Maximum number of concurrent producers to use. This helps keep
+        unnecessary load off of the kafka clusters.
+    rate_limit_per_sec : int
+        Maximum number of records to produce per second to kafka
+        across all producers
 
     Returns
     -------
@@ -61,10 +94,16 @@ def produce_queries(df, client_config, run_id, create_es_query, meta_keys):
     """
 
     meta_keys = set(meta_keys)
+    # If we have less than max_concurrent_producer partitions this
+    # wont change anything.
+    rdd = df.rdd.coalesce(max_concurrent_producer)
+    # No guarantee spark will run all of the partitions concurrently,
+    # but set the per-partition rate limit assuming all of them are.
+    partition_rate_limit = rate_limit_per_sec / rdd.getNumPartitions()
 
     def produce_partition(rows):
         producer = _make_producer(client_config)
-        for row in rows:
+        for row in ratelimit(rows, partition_rate_limit):
             producer.send(client_config.req_topic, json.dumps({
                 'run_id': run_id,
                 'request': create_es_query(row),
@@ -73,7 +112,7 @@ def produce_queries(df, client_config, run_id, create_es_query, meta_keys):
         producer.close()
 
     mjolnir.spark.assert_columns(df, meta_keys)
-    df.rdd.foreachPartition(produce_partition)
+    rdd.foreachPartition(produce_partition)
 
     # Send a sigil value to indicate this run is complete. The consumer will copy this
     # into TOPIC_COMPLETE so we know it's done.
