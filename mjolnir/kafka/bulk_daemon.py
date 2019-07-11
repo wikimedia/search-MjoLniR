@@ -10,9 +10,11 @@ import gzip
 import json
 import logging
 import os
+import re
 from tempfile import TemporaryDirectory
 
 from elasticsearch.helpers import parallel_bulk
+import elasticsearch.exceptions
 import jsonschema
 import kafka
 import prometheus_client
@@ -26,6 +28,12 @@ Message = namedtuple('Message', ('container', 'object_prefix', 'action'))
 CONFIG = {
     # key is the name of the swift container files were uploaded to
     'search_popularity_score': lambda *args: ImportExistingIndices(*args).run(),
+    'search_glent': lambda *args: ImportAndPromote(
+        *args,
+        # TODO: Should be externally configurable
+        index_pattern='glent_{prefix}',
+        alias='glent_production',
+        alias_rollback='glent_rollback').run(),
 }
 
 
@@ -70,6 +78,13 @@ VALIDATOR = jsonschema.Draft4Validator({
         "object_prefix": {"type": "string"}
     }
 })
+
+SANITIZE_PATTERN = re.compile('[^a-zA-Z0-9]')
+
+
+def sanitize_index_name(name):
+    """Limit the characters allowed into index names for our own sanity"""
+    return SANITIZE_PATTERN.sub('_', name)
 
 
 def load_and_validate(poll_response, config=CONFIG):
@@ -171,6 +186,12 @@ def bulk_import(**kwargs):
 
 
 class MalformedUploadException(Exception):
+    """A file downloaded from swift cannot be processed"""
+    pass
+
+
+class ImportFailedException(Exception):
+    """The import has failed and must not be retried"""
     pass
 
 
@@ -222,6 +243,120 @@ class ImportExistingIndices(UploadAction):
                         expand_action_callback=lambda x: x)
 
 
+class ImportAndPromote(UploadAction):
+    """
+    Import file(s) to an elasticsearch index, and promote that index to own a specific alias.
+    Imported file(s) must not specify index name or doc type.
+
+    Process is roughly as follows:
+
+    1. A kafka message is received indicating the swift container and prefix of files that must be imported.
+    2. Referenced files are all pushed through the bulk indexing pipeline, expecting index auto creation
+       with index templates to take care of configuring the index.
+    3. The new index is promoted to production usage by changing an alias.
+    4. Indices previously assigned to the prod alias are assigned to the rollback alias.
+    5. Indices previously assigned to the rollback alias are deleted.
+
+    While this tracks indices for rollback purposes, no rollbacking mechanism is provided.
+    To perform a rollback an operator must use the elasticsearch index aliases api to clear
+    the current production alias and add the indices from the rollback alias to the production
+    alias. In this way the rollback alias i never used directly, but is instead used to hold
+    the state of which index should be rolled back to.
+    """
+
+    def __init__(self, client_for_index, swift, message, index_pattern, alias, alias_rollback):
+        super(ImportAndPromote, self).__init__(client_for_index, swift, message)
+        self.base_index_name = index_pattern.format(prefix=message.object_prefix)
+        self.elastic = client_for_index(alias)
+        self.alias = alias
+        self.alias_rollback = alias_rollback
+        self.good_imports = 0
+        self.errored_imports = 0
+
+    def pre_check(self):
+        """Find an available index name to import to
+
+        If an import fails we keep it around for debugging purposes. To allow
+        retrying an import we need to select a new index name for each attempt.
+        """
+        i = 0
+        self.index_name = self.base_index_name
+        for i in range(10):
+            if not self.elastic.indices.exists(self.index_name):
+                break
+            self.index_name = '{}-{}'.format(self.base_index_name, i)
+        else:
+            raise ImportFailedException(
+                'Could not find an available index name. Last tried: {}'
+                .format(self.index_name))
+        log.info('Importing to index {}'.format(self.index_name))
+
+    def on_file_available(self, path):
+        """Import a file in elasticsearch bulk import format."""
+        log.info('Importing from path %s', path)
+        with open_by_suffix(path, 'rt') as f:
+            good, missing, errors = bulk_import(
+                client=self.elastic,
+                index=self.index_name,
+                doc_type="_doc",
+                actions=pair(line.strip() for line in f),
+                expand_action_callback=lambda x: x)
+            self.good_imports += good
+            self.errored_imports += errors
+
+    def on_download_complete(self):
+        if self.good_imports == 0 or self.errored_imports > 0:
+            # TODO: Delete failed index? Keep for debugging?
+            log.critical('Failed import for index %s with %d success and %d failures',
+                         self.index_name, self.good_imports, self.errored_imports)
+        else:
+            def get_alias(name):
+                try:
+                    return self.elastic.indices.get_alias(name=name).keys()
+                except elasticsearch.exceptions.NotFoundError:
+                    return []
+
+            old_rollback_aliases = get_alias(self.alias_rollback)
+            new_rollback_aliases = get_alias(self.alias)
+            self.promote(old_rollback_aliases, new_rollback_aliases)
+            self.delete_unused_indices(old_rollback_aliases, new_rollback_aliases)
+
+    def promote(self, old_rollback_aliases, new_rollback_aliases):
+        """Promote index to control an alias.
+
+        Uses a two step promotion to hopefully ease rollbacks. When a new index
+        is promoted the previous aliases are assigned to a rollback alias. When
+        an index is removed from the rollback state it is deleted from the cluster.
+        """
+
+        actions = [{'add': {'alias': self.alias, 'index': self.index_name}}]
+        for index in old_rollback_aliases:
+            actions.append({'remove': {'alias': self.alias_rollback, 'index': index}})
+        for index in new_rollback_aliases:
+            actions.append({'remove': {'alias': self.alias, 'index': index}})
+            actions.append({'add': {'alias': self.alias_rollback, 'index': index}})
+
+        res = self.elastic.indices.update_aliases({'actions': actions})
+        if res['acknowledged'] is not True:
+            res_str = str(res)
+            log.critical("Failed update_aliases: %s", res_str[:1024])
+            raise Exception(res_str)
+        log.info('Promoted %s to own the %s alias', self.index_name, self.alias)
+
+    def delete_unused_indices(self, old_rollback_aliases, new_rollback_aliases):
+        # Don't accidentally delete an alias we still need even if something
+        # external has rewritten our aliases to contain duplicates.
+        used_indices = {self.index_name}.union(new_rollback_aliases)
+        indices_to_delete = set(old_rollback_aliases) - used_indices
+        if indices_to_delete:
+            res = self.elastic.indices.delete(','.join(indices_to_delete))
+            if res['acknowledged'] is not True:
+                res_str = str(res)
+                log.critical("Failed delete orphaned indices: %s", res_str[:1024])
+                raise Exception(res_str)
+            log.info('Deleted orphaned indices: %s', ','.join(indices_to_delete))
+
+
 def run(brokers, client_for_index, topics, group_id):
     log.info('Starting swift daemon')
     swift = SwiftService()
@@ -253,7 +388,7 @@ def run(brokers, client_for_index, topics, group_id):
                 log.info('Received message: %s', str(message))
                 try:
                     message.action(client_for_index, swift, message)
-                except MalformedUploadException:
+                except (ImportFailedException, MalformedUploadException):
                     # If the upload is malformed retrying isn't going to help,
                     # ack and go on with our business. Other errors, such
                     # as connection problems, pass through and cause the
