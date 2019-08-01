@@ -21,16 +21,17 @@ def test_sanitize_index_name():
 
 @pytest.mark.parametrize('expected,records', [
     # standard parse
-    [[bulk_daemon.Message('a', 'b', True)], [_record({'container': 'a', 'object_prefix': 'b'})]],
+    [[bulk_daemon.Message('a', 'b', 'c', True)],
+     [_record({'swift_container': 'a', 'swift_object_prefix': 'b', 'swift_prefix_uri': 'c'})]],
     # swift container must be configured
-    [[], [_record({'container': 'unk', 'object_prefix': 'b'})]],
+    [[], [_record({'container': 'unk', 'object_prefix': 'b', 'swift_prefix_uri': 'c'})]],
     # Extra fields -> invalid
-    [[], [_record({'container': 'a', 'object_prefix': 'b', 'extra': 'c'})]],
+    [[], [_record({'container': 'a', 'object_prefix': 'b', 'extra': 'c', 'swift_prefix_uri': 'c'})]],
     # Missing fields -> invalid
-    [[], [_record({'container': 'a'})]],
-    [[], [_record({'object_prefix': 'b'})]],
+    [[], [_record({'container': 'a', 'swift_prefix_uri': 'c'})]],
+    [[], [_record({'object_prefix': 'b', 'swift_prefix_uri': 'c'})]],
     # Case sensitive
-    [[], [_record({'CONTAINER': 'a', 'OBJECT_PREFIX': 'b'})]],
+    [[], [_record({'CONTAINER': 'a', 'OBJECT_PREFIX': 'b', 'SWIFT_PREFIX_URI': 'c'})]],
 
 ])
 def test_load_and_validate(expected, records):
@@ -52,7 +53,7 @@ def test_bulk_import(mocker):
         # Missing document
         (False, {'index': {'status': 404}}),
         # Failed document (ex: bad script)
-        (False, {'index': {'status': 500}}),
+        (False, {'index': {'status': 400}}),
     ]
     # Not much left to test after mocking parallel_bulk.
     good, missing, errors = bulk_daemon.bulk_import()
@@ -71,8 +72,8 @@ def test_ImportAndPromote_pre_check(expected_index_name, exists):
     elastic = Mock()
     elastic.indices.exists.side_effect = lambda name: name in exists
 
-    message = bulk_daemon.Message('test_container', 'prefix', None)
-    action = bulk_daemon.ImportAndPromote(lambda x: elastic, None, message, 'test_{prefix}', 'a', 'b')
+    message = bulk_daemon.Message('test_container', 'prefix', 'http://fake', None)
+    action = bulk_daemon.ImportAndPromote(lambda x: elastic, message, 'test_{prefix}', 'a', 'b')
     try:
         action.pre_check()
     except bulk_daemon.ImportFailedException:
@@ -147,8 +148,8 @@ def test_promotion(expect_actions, expect_delete, aliases):
     elastic.indices.update_aliases = update_aliases
     elastic.indices.delete = delete
 
-    message = bulk_daemon.Message('test_container', 'pickles', None)
-    action = bulk_daemon.ImportAndPromote(lambda x: elastic, None, message, 'test_{prefix}', 'alias', 'alias_rollback')
+    message = bulk_daemon.Message('test_container', 'pickles', 'http://fake', None)
+    action = bulk_daemon.ImportAndPromote(lambda x: elastic, message, 'test_{prefix}', 'alias', 'alias_rollback')
     action.pre_check()
     action.good_imports = 1
     action.on_download_complete()

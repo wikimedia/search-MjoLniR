@@ -11,19 +11,19 @@ import json
 import logging
 import os
 import re
-from tempfile import TemporaryDirectory
+import shutil
+from tempfile import NamedTemporaryFile
 
 from elasticsearch.helpers import parallel_bulk
 import elasticsearch.exceptions
 import jsonschema
 import kafka
 import prometheus_client
-from swiftclient.service import SwiftError, SwiftService
+import requests
 
 import mjolnir.kafka
 
 log = logging.getLogger(__name__)
-Message = namedtuple('Message', ('container', 'object_prefix', 'action'))
 
 CONFIG = {
     # key is the name of the swift container files were uploaded to
@@ -68,23 +68,26 @@ class Metric:
     FAILED = _BULK_ACTION_RESULT.labels(result='failed')
 
 
-# namedtuple and jsonschema of incoming requests
+# namedtuple and jsonschema of incoming requests. This is a subset of
+# swift.upload.complete schema v1.0.0 from mediawiki-event-schemas
+Message = namedtuple('Message', ('container', 'object_prefix', 'prefix_uri', 'action'))
 VALIDATOR = jsonschema.Draft4Validator({
     "type": "object",
-    "additionalProperties": False,
-    "required": ["container", "object_prefix"],
+    "additionalProperties": True,
+    "required": ["swift_container", "swift_object_prefix", "swift_prefix_uri"],
     "properties": {
-        "container": {"type": "string"},
-        "object_prefix": {"type": "string"}
+        "swift_container": {"type": "string"},
+        "swift_object_prefix": {"type": "string"},
+        "swift_prefix_uri": {"type": "string"}
     }
 })
 
-SANITIZE_PATTERN = re.compile('[^a-zA-Z0-9]')
+SANITIZE_PATTERN = re.compile('[^a-z0-9]')
 
 
 def sanitize_index_name(name):
     """Limit the characters allowed into index names for our own sanity"""
-    return SANITIZE_PATTERN.sub('_', name)
+    return SANITIZE_PATTERN.sub('_', name.lower())
 
 
 def load_and_validate(poll_response, config=CONFIG):
@@ -109,40 +112,85 @@ def load_and_validate(poll_response, config=CONFIG):
                 continue
 
             try:
-                action = config[value['container']]
+                action = config[value['swift_container']]
             except KeyError:
                 Metric.FAIL_NO_CONFIG.inc()
-                log.warning("Unknown swift container: %s", value['container'])
+                log.warning("Unknown swift container: %s", value['swift_container'])
                 continue
 
-            yield Message(value['container'], value['object_prefix'], action)
+            yield Message(value['swift_container'], value['swift_object_prefix'], value['swift_prefix_uri'], action)
 
 
-def download_from_swift(swift, message):
-    """Download files from swift and yield them as they become available"""
-    with TemporaryDirectory() as tempdir:
-        try:
-            for download in swift.download(container=message.container, options={
-                'prefix': message.object_prefix,
-                'out_directory': tempdir,
-            }):
-                if download.get('success'):
-                    yield download['path']
-                    os.unlink(download['path'])
+def swift_fetch_prefix_uri(prefix_uri):
+    """Fetch swift listing and report available objects
+
+    Parameters
+    ----------
+    prefix_uri : str
+         Absolute url to fetch swift listing
+
+    Yields
+    ------
+    str
+        Absolute url to found swift objects
+    """
+    # prefix_uri is of the form http://host:port/v1/user/container?prefix=hihihi
+    # Grab everything before the ? as the base uri
+    container_uri = prefix_uri.split('?', 1)[0]
+    res = requests.get(prefix_uri)
+    if res.status_code < 200 or res.status_code > 299:
+        raise Exception('Failed to fetch swift listing: {}'.format(res.text))
+
+    for path in res.text.split('\n'):
+        if path == '' or os.path.basename(path)[0] == '_':
+            # _ prefixed files are hidden files wrt hadoop, they either have metadata
+            # or are empty markers based on the filename.
+            continue
+        yield os.path.join(container_uri, path)
+
+
+def swift_download_from_prefix(message, abort_on_failure):
+    """Download files from swift and yield them as they become available
+
+    Downloads remote files to disk, rather than streaming directly, to support compressed
+    files. The python gzip module doesn't support streaming directly and implementing
+    directly with zlib seemed more error prone than writing to disk.
+
+    Parameters
+    ----------
+    message : Message
+    abort_on_failure : bool
+
+    Yields
+    ------
+    str
+        Full uri of the object in swift
+    iterable of str
+        Lines from the object stream
+    """
+    for file_uri in swift_fetch_prefix_uri(message.prefix_uri):
+        suffix = os.path.splitext(file_uri)[1]
+        with requests.get(file_uri, stream=True) as res:
+            if res.status_code < 200 or res.status_code > 299:
+                if abort_on_failure:
+                    if res.status_code == 404:
+                        raise SwiftNotFoundException(file_uri)
+                    else:
+                        raise Exception('Failed to fetch uri, status code {}: {}'.format(res.status_code, file_uri))
                 else:
-                    log.critical('Failure downloading from swift: %s', str(download)[:1024])
-                    raise Exception(download.get('error', 'Malformed response from swift'))
-        except SwiftError:
-            # TODO: Are some errors handleable?
-            raise
+                    log.warning("Failed fetching from swift, status code %d: %s", res.status_code, file_uri)
+                    continue
 
-
-def open_by_suffix(filename, mode):
-    """Open a file for reading, taking into account suffixes such as .gz"""
-    if filename.endswith('.gz'):
-        return gzip.open(filename, mode)
-    else:
-        return open(filename, mode)
+            if suffix == '.gz':
+                with NamedTemporaryFile(suffix=suffix) as f_temp:
+                    shutil.copyfileobj(res.raw, f_temp)
+                    f_temp.flush()
+                    with gzip.open(f_temp.name, 'rt') as f_out:
+                        yield file_uri, f_out
+            else:
+                # Raw emits bytes, decode into str
+                lines = (line.decode('utf8') for line in res.raw)
+                yield file_uri, lines
 
 
 def pair(it):
@@ -163,31 +211,74 @@ def bulk_import(**kwargs):
     """
     log.info('Starting bulk import')
     good, missing, errors = 0, 0, 0
-    for ok, result in parallel_bulk(raise_on_error=False, **kwargs):
+    for ok, result in parallel_bulk(raise_on_exception=False, raise_on_error=False, **kwargs):
         action, result = result.popitem()
+        status_code = result.get('status', 500)
         if ok:
             good += 1
             try:
                 Metric.ACTION_RESULTS[result['result']].inc()
             except KeyError:
                 Metric.OK_UNKNOWN.inc()
-        elif result.get('status') == 404:
+        elif status_code == 404:
             # 404 are quite common so we log them separately. The analytics
             # side doesn't know the namespace mappings and attempts to send all
             # updates to <wiki>_content, letting the docs that don't exist fail
             missing += 1
             Metric.MISSING.inc()
-        else:
+        elif status_code >= 400 and status_code < 500:
+            # Bulk contained invalid records, can't do much beyond logging
             Metric.FAILED.inc()
             log.warning('Failed bulk %s request: %s', action, str(result)[:1024])
             errors += 1
+        elif status_code >= 500 and status_code < 600:
+            # primary not available, etc. Internal elasticsearch errors. Should be retryable
+            raise Exception(
+                "Internal elasticsearch error on {}, status code {}: {}".format(action, status_code, str(result)))
+        else:
+            raise Exception(
+                "Unexpected response on {}, status code {}: {}".format(action, status_code, str(result)))
+
     log.info('Completed import with %d success %d missing and %d errors', good, missing, errors)
     return good, missing, errors
 
 
-class MalformedUploadException(Exception):
-    """A file downloaded from swift cannot be processed"""
-    pass
+def expand_string_actions(pair):
+    """Expand meta in a (meta, doc) bulk import pair
+
+    Passing already encoded strings through the elasticsearch bulk helpers generally works,
+    but when reporting failures the _process_bulk_chunk helper tries to determine the op_type
+    and fails due to the following. Decode the string as necessary so error handling works.
+        op_type, action = data[0].copy().popitem()
+    """
+    meta, doc = pair
+    if isinstance(pair[0], str):
+        return json.loads(pair[0]), pair[1]
+    else:
+        return pair
+
+
+class Peekable:
+    """Wrap an iterable to allow peeking at the next value"""
+    def __init__(self, it):
+        self.it = it
+        self.cache = None
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.cache is None:
+            return next(self.it)
+        else:
+            value = self.cache
+            self.cache = None
+            return value
+
+    def peek(self):
+        if self.cache is None:
+            self.cache = next(self.it)
+        return self.cache
 
 
 class ImportFailedException(Exception):
@@ -195,24 +286,40 @@ class ImportFailedException(Exception):
     pass
 
 
+class MalformedUploadException(ImportFailedException):
+    """A file downloaded from swift cannot be processed"""
+    pass
+
+
+class SwiftNotFoundException(ImportFailedException):
+    """An object requested from swift returned 404"""
+    pass
+
+
 class UploadAction:
     """Perform an action based on a new file upload(s) becoming available"""
-    def __init__(self, client_for_index, swift, message):
+    abort_on_failure = True
+
+    def __init__(self, client_for_index, message):
         self.client_for_index = client_for_index
-        self.swift = swift
         self.message = message
 
     @Metric.PROCESS_MESSAGE.time()
     def run(self):
         self.pre_check()
-        for path in download_from_swift(self.swift, self.message):
-            self.on_file_available(path)
+        for uri, lines in swift_download_from_prefix(self.message, self.abort_on_failure):
+            try:
+                self.on_file_available(uri, lines)
+            except ImportFailedException:
+                if self.abort_on_failure:
+                    raise
+                log.exception('Failed processing file %s', uri)
         self.on_download_complete()
 
     def pre_check(self):
         pass
 
-    def on_file_available(self, path):
+    def on_file_available(self, uri, lines):
         raise NotImplementedError()
 
     def on_download_complete(self):
@@ -225,22 +332,27 @@ class ImportExistingIndices(UploadAction):
     Imported file(s) must specify both index name and doc type. A single
     file must not contain updates for multiple indices.
     """
-    def on_file_available(self, path):
+
+    # If individual files somehow fail that is unfortunate, but keep processing the remaining
+    # files. TODO: Some sort of circuit breaker that doesn't send 100M invalid updates when
+    # invalid files are published might be nice.
+    abort_on_failure = False
+
+    def on_file_available(self, uri, lines):
+        lines = Peekable(lines)
         try:
-            with open_by_suffix(path, 'rt') as f:
-                header = json.loads(next(iter(f)))
+            header = json.loads(lines.peek())
             action, meta = header.popitem()
             index_name = meta['_index']
         except (ValueError, KeyError):
             raise MalformedUploadException(
-                "Loaded file is malformed and cannot be processed: {}".format(path))
+                "Loaded file is malformed and cannot be processed: {}".format(uri))
 
-        with open_by_suffix(path, 'rt') as f:
-            # Ignoring errors, can't do anything useful with them. They still
-            # get logged and counted.
-            bulk_import(client=self.client_for_index(index_name),
-                        actions=pair(line.strip() for line in f),
-                        expand_action_callback=lambda x: x)
+        # Ignoring errors, can't do anything useful with them. They still
+        # get logged and counted.
+        bulk_import(client=self.client_for_index(index_name),
+                    actions=pair(line.strip() for line in lines),
+                    expand_action_callback=expand_string_actions)
 
 
 class ImportAndPromote(UploadAction):
@@ -263,9 +375,8 @@ class ImportAndPromote(UploadAction):
     alias. In this way the rollback alias i never used directly, but is instead used to hold
     the state of which index should be rolled back to.
     """
-
-    def __init__(self, client_for_index, swift, message, index_pattern, alias, alias_rollback):
-        super(ImportAndPromote, self).__init__(client_for_index, swift, message)
+    def __init__(self, client_for_index, message, index_pattern, alias, alias_rollback):
+        super(ImportAndPromote, self).__init__(client_for_index, message)
         self.base_index_name = index_pattern.format(prefix=message.object_prefix)
         self.elastic = client_for_index(alias)
         self.alias = alias
@@ -281,28 +392,28 @@ class ImportAndPromote(UploadAction):
         """
         i = 0
         self.index_name = self.base_index_name
-        for i in range(10):
-            if not self.elastic.indices.exists(self.index_name):
-                break
-            self.index_name = '{}-{}'.format(self.base_index_name, i)
-        else:
-            raise ImportFailedException(
-                'Could not find an available index name. Last tried: {}'
-                .format(self.index_name))
+        if self.elastic.indices.exists(self.index_name):
+            for i in range(10):
+                self.index_name = '{}-{}'.format(self.base_index_name, i)
+                if not self.elastic.indices.exists(self.index_name):
+                    break
+            else:
+                raise ImportFailedException(
+                    'Could not find an available index name. Last tried: {}'
+                    .format(self.index_name))
         log.info('Importing to index {}'.format(self.index_name))
 
-    def on_file_available(self, path):
+    def on_file_available(self, uri, lines):
         """Import a file in elasticsearch bulk import format."""
-        log.info('Importing from path %s', path)
-        with open_by_suffix(path, 'rt') as f:
-            good, missing, errors = bulk_import(
-                client=self.elastic,
-                index=self.index_name,
-                doc_type="_doc",
-                actions=pair(line.strip() for line in f),
-                expand_action_callback=lambda x: x)
-            self.good_imports += good
-            self.errored_imports += errors
+        log.info('Importing from uri %s', uri)
+        good, missing, errors = bulk_import(
+            client=self.elastic,
+            index=self.index_name,
+            doc_type="_doc",
+            actions=pair(line.strip() for line in lines),
+            expand_action_callback=expand_string_actions)
+        self.good_imports += good
+        self.errored_imports += errors
 
     def on_download_complete(self):
         if self.good_imports == 0 or self.errored_imports > 0:
@@ -344,6 +455,16 @@ class ImportAndPromote(UploadAction):
         log.info('Promoted %s to own the %s alias', self.index_name, self.alias)
 
     def delete_unused_indices(self, old_rollback_aliases, new_rollback_aliases):
+        """Delete indices that are no longer necessary
+
+        As new indices are promoted old indices become unused. Delete the
+        unused indices to keep cruft from building up
+
+        Parameters
+        ----------
+        old_rollback_aliases : list of str
+        new_rollback_aliases : list of str
+        """
         # Don't accidentally delete an alias we still need even if something
         # external has rewritten our aliases to contain duplicates.
         used_indices = {self.index_name}.union(new_rollback_aliases)
@@ -359,7 +480,6 @@ class ImportAndPromote(UploadAction):
 
 def run(brokers, client_for_index, topics, group_id):
     log.info('Starting swift daemon')
-    swift = SwiftService()
     consumer = kafka.KafkaConsumer(
         bootstrap_servers=brokers,
         group_id=group_id,
@@ -387,9 +507,9 @@ def run(brokers, client_for_index, topics, group_id):
             for message in load_and_validate(batch):
                 log.info('Received message: %s', str(message))
                 try:
-                    message.action(client_for_index, swift, message)
-                except (ImportFailedException, MalformedUploadException):
-                    # If the upload is malformed retrying isn't going to help,
+                    message.action(client_for_index, message)
+                except ImportFailedException:
+                    # If the import failed retrying isn't going to help,
                     # ack and go on with our business. Other errors, such
                     # as connection problems, pass through and cause the
                     # daemon to restart without ack'ing.

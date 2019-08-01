@@ -11,8 +11,6 @@ requirements = [
     'elasticsearch>=5.0.0,<6.0.0',
     'jsonschema',
     'prometheus_client',
-    # bulk import from swift to elasticsearch
-    'python-swiftclient',
     # python xgboost is only used for building
     # binary datasets. Primary usage is from jvm.
     # The underlying xgboost version needs to stay
