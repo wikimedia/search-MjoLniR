@@ -494,6 +494,10 @@ def run(brokers, client_for_index, topics, group_id):
         # We kick off large import jobs and wait for them to complete, take in only
         # one at a time.
         max_poll_records=1,
+        # Our jobs take quite awhile to run, increase from default of 5 min
+        # to 15 min to account for the long running imports. Expect all messages
+        # to process in < 10 min each.
+        max_poll_interval_ms=900000,
     )
 
     log.info('Subscribing to: %s', ', '.join(topics))
