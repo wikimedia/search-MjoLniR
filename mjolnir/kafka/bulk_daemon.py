@@ -361,7 +361,7 @@ class ImportExistingIndices(UploadAction):
     """
 
     def __init__(self, client_for_index, message, **kwargs):
-        super(ImportAndPromote, self).__init__(client_for_index, message)
+        super(ImportExistingIndices, self).__init__(client_for_index, message)
         self.bulk_kwargs = kwargs
 
     # If individual files somehow fail that is unfortunate, but keep processing the remaining
