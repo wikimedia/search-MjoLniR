@@ -85,7 +85,7 @@ class Metric:
     OK_UNKNOWN = _BULK_ACTION_RESULT.labels(result='ok_unknown')
     MISSING = _BULK_ACTION_RESULT.labels(result='missing')
     FAILED = _BULK_ACTION_RESULT.labels(result='failed')
-    TIMEOUT = _BULK_ACTION_RESULT.labels(result='timeout'),
+    TIMEOUT = _BULK_ACTION_RESULT.labels(result='timeout')
 
 
 # namedtuple and jsonschema of incoming requests. This is a subset of
@@ -159,7 +159,7 @@ def swift_fetch_prefix_uri(prefix_uri):
     container_uri = prefix_uri.split('?', 1)[0]
     res = requests.get(prefix_uri)
     if res.status_code < 200 or res.status_code > 299:
-        raise Exception('Failed to fetch swift listing: {}'.format(res.text))
+        raise Exception('Failed to fetch swift listing, status_code {}: {}'.format(res.status_code, res.text))
 
     for path in res.text.split('\n'):
         if path == '' or os.path.basename(path)[0] == '_':
@@ -281,7 +281,6 @@ def expand_string_actions(pair):
     and fails due to the following. Decode the string as necessary so error handling works.
         op_type, action = data[0].copy().popitem()
     """
-    meta, doc = pair
     if isinstance(pair[0], str):
         return json.loads(pair[0]), pair[1]
     else:
@@ -476,7 +475,6 @@ class ImportAndPromote(UploadAction):
         is promoted the previous aliases are assigned to a rollback alias. When
         an index is removed from the rollback state it is deleted from the cluster.
         """
-
         actions = [{'add': {'alias': self.alias, 'index': self.index_name}}]
         for index in old_rollback_aliases:
             actions.append({'remove': {'alias': self.alias_rollback, 'index': index}})
