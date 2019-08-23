@@ -22,38 +22,29 @@ Usage:
 from __future__ import absolute_import
 import logging
 import logging.config
-import os
 import sys
 import traceback
-import yaml
 from importlib import import_module
+
+from mjolnir.config import load_config
 
 USAGE = """Usage:
     mjolnir (-h | --help)
     mjolnir <utility> [-h|--help]\n"""
 
-
-DEFAULT_LOGGING_CONFIG = [os.path.join(d, "logging_config.yaml") for d in ('./', '/etc/mjolnir')]
 DEFAULT_LOGGING_FORMAT = "%(asctime)s %(levelname)s:%(name)s -- %(message)s"
-
 log = logging.getLogger(__name__)
 
 
 def configure_logging(log_level=None, logging_config=None, **kwargs):
-    if logging_config is None:
-        for path in DEFAULT_LOGGING_CONFIG:
-            if os.path.exists(path):
-                logging_config = path
-                break
+    logging_config = load_config(logging_config, 'logging_config.yaml')
 
     if logging_config is None:
         logging.basicConfig(level=logging.INFO, format=DEFAULT_LOGGING_FORMAT)
         # requests is spammy past info
         logging.getLogger('requests').setLevel(logging.INFO)
     else:
-        log.info('Loading logging configuration from %s', logging_config)
-        with open(logging_config) as f:
-            logging.config.dictConfig(yaml.safe_load(f))
+        logging.config.dictConfig(logging_config)
 
         # If running from console mirror logs there
         if sys.stdin.isatty():
