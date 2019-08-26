@@ -4,12 +4,14 @@ and pushing the results into a second kafka topic. This runs on the production
 side of the network to have access to relforge servers.
 """
 
+from abc import ABC, abstractmethod
 import json
 import logging
 import multiprocessing.dummy
 import queue
 import threading
 import time
+from typing import cast, Callable, Dict, Generator, Generic, Iterable, List, Mapping, Optional, Tuple, TypeVar
 
 import elasticsearch
 from elasticsearch import Elasticsearch
@@ -24,6 +26,8 @@ import mjolnir.kafka
 
 
 log = logging.getLogger(__name__)
+T = TypeVar('T')
+Clock = Callable[[], float]
 
 
 class Metric(object):
@@ -42,7 +46,16 @@ class Metric(object):
         'Time taken to process a batch of records from kafka')
 
 
-def iter_queue(queue):
+class TypedQueue(Generic[T]):
+    def __init__(self, maxsize: int = 0): ...
+    def get(self) -> Optional[T]: ...
+    def join(self) -> None: ...
+    def put(self, item: T): ...
+    def qsize(self) -> int: ...
+    def task_done(self) -> None: ...
+
+
+def iter_queue(queue: TypedQueue[Optional[T]]) -> Generator[T, None, None]:
     """Yield items from a queue"""
     while True:
         record = queue.get()
@@ -56,10 +69,12 @@ def iter_queue(queue):
 
 
 class Daemon(object):
-    def __init__(self, brokers, n_workers=5, topic_work=mjolnir.kafka.TOPIC_REQUEST,
-                 topic_result=mjolnir.kafka.TOPIC_RESULT, topic_complete=mjolnir.kafka.TOPIC_COMPLETE,
-                 max_request_size=4*1024*1024, query_total_threshold=100, prometheus_port=9161,
-                 group_id='mjolnir_msearch', max_concurrent_searches=1):
+    def __init__(self, brokers: List[str], n_workers: int = 5, topic_work: str = mjolnir.kafka.TOPIC_REQUEST,
+                 topic_result: str = mjolnir.kafka.TOPIC_RESULT,
+                 topic_complete: str = mjolnir.kafka.TOPIC_COMPLETE,
+                 max_request_size: int = 4*1024*1024,
+                 query_total_threshold: int = 100, prometheus_port: int = 9161,
+                 group_id: str = 'mjolnir_msearch', max_concurrent_searches: int = 1) -> None:
         """Initialize the msearch daemon
 
         Parameters
@@ -112,13 +127,13 @@ class Daemon(object):
         # We want enough to keep the workers busy, but not so many that the
         # commited offsets are siginficantly ahead of the work actually being
         # performed.
-        self.work_queue = queue.Queue(n_workers)
+        self.work_queue = cast(TypedQueue[Optional[Mapping]], queue.Queue(n_workers))
         # Toggle our kafka subscription on/off based on qps of a canary index
         self.load_monitor = MetricMonitor.es_query_total(
                 Elasticsearch(), 'enwiki_content', 'full_text',
                 threshold=query_total_threshold)
 
-    def run(self):
+    def run(self) -> None:
         prometheus_client.start_http_server(self.prometheus_port)
         try:
             while True:
@@ -131,7 +146,7 @@ class Daemon(object):
             self.producer.close()
             self.ack_all_producer.close()
 
-    def iter_records(self):
+    def iter_records(self) -> Generator[Mapping, None, None]:
         consumer = kafka.KafkaConsumer(bootstrap_servers=self.brokers,
                                        group_id='mjolnir_msearch',
                                        enable_auto_commit=False,
@@ -144,9 +159,9 @@ class Daemon(object):
                                        max_poll_records=min(500, 50 * self.n_workers))
         consumer.subscribe([self.topic_work])
         try:
-            last_commit = 0
+            last_commit = 0.0
             offset_commit_interval_sec = 60
-            offsets = {}
+            offsets = cast(Dict[kafka.TopicPartition, kafka.OffsetAndMetadata], dict())
             while self.load_monitor.is_below_threshold:
                 now = time.monotonic()
                 if offsets and now - last_commit > offset_commit_interval_sec:
@@ -174,8 +189,8 @@ class Daemon(object):
                 consumer.commit(offsets)
             consumer.close()
 
-    def consume(self, records):
-        def work_fn():
+    def consume(self, records: Iterable[Mapping]) -> None:
+        def work_fn() -> None:
             self._handle_records(iter_queue(self.work_queue))
 
         # Use the dummy pool since these workers will primarily wait on elasticsearch
@@ -207,7 +222,7 @@ class Daemon(object):
             while self.work_queue.qsize() > 0:
                 work_fn()
 
-    def _reflect_end_run(self, record):
+    def _reflect_end_run(self, record: Mapping) -> None:
         """Reflect and end run sigil into the complete topic
 
         This is handled directly in the consumer thread, rather than as part of the
@@ -231,7 +246,7 @@ class Daemon(object):
         # Wait for ack (or failure to ack)
         future.get()
 
-    def _handle_records(self, work):
+    def _handle_records(self, work: Iterable[Mapping]) -> None:
         """Handle a single kafka record from request topic
 
         Parameters
@@ -258,7 +273,17 @@ class Daemon(object):
                 log.exception('Exception processing record')
 
 
-class FlexibleInterval(object):
+class Interval(ABC):
+    @abstractmethod
+    def start(self, fn: Callable[[], None]) -> Callable[[], None]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def decrease(self) -> None:
+        raise NotImplementedError()
+
+
+class FlexibleInterval(Interval):
     """Interval that scales up and down
 
     Interval that increases in length unless regularly reset. When the interval
@@ -281,7 +306,8 @@ class FlexibleInterval(object):
         0 arity function returning the current time in seconds
     """
 
-    def __init__(self, min_value=15, max_value=600, ratio=0.4, clock=time.monotonic):
+    def __init__(self, min_value: float = 15, max_value: float = 600, ratio: float = 0.4,
+                 clock: Clock = time.monotonic) -> None:
         self.min_value = min_value
         self.max_value = max_value
         self.ratio = ratio
@@ -289,14 +315,14 @@ class FlexibleInterval(object):
         self.value = self.min_value
         Metric.INTERVAL_VALUE.set_function(lambda: self.value)
 
-    def decrease(self):
+    def decrease(self) -> None:
         self.value = self.min_value
 
-    def increase(self):
+    def increase(self) -> None:
         next_value = self.value * (1 + self.ratio)
         self.value = min(self.max_value, next_value)
 
-    def start(self, fn):
+    def start(self, fn: Callable) -> Callable[[], None]:
         stopped = threading.Event()
 
         def inner():
@@ -320,7 +346,17 @@ class FlexibleInterval(object):
         return stopped.set
 
 
-class StreamingEMA(object):
+class StreamingMetric(ABC):
+    @abstractmethod
+    def update(self, value: float) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def is_below_threshold(self, threshold: float) -> bool:
+        raise NotImplementedError
+
+
+class StreamingEMA(StreamingMetric):
     """Maintain a streaming exponential moving average
 
     Accepts a total count of operations performed since an unknown time and
@@ -342,25 +378,30 @@ class StreamingEMA(object):
         when transitioning from low volume to high volume updates.
     """
 
-    def __init__(self, alpha=0.1, max_sec_valid=660, clock=time.monotonic):
+    def __init__(self, alpha: float = 0.1, max_sec_valid: float = 660.0, clock: Clock = time.monotonic):
         self.alpha = alpha
         self.clock = clock
         self.max_sec_valid = max_sec_valid
-        self.count = 0
-        self.prev_count = None
-        self.prev_time = None
-        self.value = None
-        Metric.EMA.set_function(lambda: 'nan' if self.value is None else self.value)
+        self.count = 0.0
+        self.prev_count = cast(Optional[float], None)
+        self.prev_time = cast(Optional[float], None)
+        self.value = cast(Optional[float], None)
+        Metric.EMA.set_function(lambda: float('nan') if self.value is None else self.value)
 
     @property
-    def is_valid(self):
-        return self.value is not None \
-                and self.clock() < self.prev_time + self.max_sec_valid
+    def is_valid(self) -> bool:
+        if self.value is None:
+            return False
+        assert self.prev_time is not None
+        return self.clock() < self.prev_time + self.max_sec_valid
 
-    def is_below_threshold(self, threshold):
-        return self.is_valid and self.value < threshold
+    def is_below_threshold(self, threshold: float) -> bool:
+        if not self.is_valid:
+            return False
+        assert self.value is not None
+        return self.value < threshold
 
-    def update(self, count):
+    def update(self, count: float) -> None:
         """Update EMA estimation
 
         Parameters
@@ -387,14 +428,16 @@ class StreamingEMA(object):
                 # well enough
                 for _ in range(int(time_delta)):
                     self.value = (per_second * self.alpha) + \
-                            (self.value * (1 - self.alpha))
+                            (self.value * (1 - self.alpha))  # type: ignore
         # Track our previous values so we can calculate the next
         self.prev_count = count
         self.prev_time = now
 
-    def _calc_deltas(self, new_time, new_count):
+    def _calc_deltas(self, new_time: float, new_count: float) -> Tuple[float, Optional[float]]:
+        assert self.prev_time is not None
+        assert self.prev_count is not None
         time_delta = new_time - self.prev_time
-        per_second = None
+        per_second = cast(Optional[float], None)
         # If data comes in too fast ignore it
         if time_delta >= 1:
             count_delta = new_count - self.prev_count
@@ -416,19 +459,20 @@ class MetricMonitor(object):
     Provides values to a streaming metric on irregular intervals. After providing
     a value checks if the metric is below a threshold.
     """
-    def __init__(self, fetch_stat, metric, threshold=50, interval=FlexibleInterval()):
+    def __init__(self, fetch_stat: Callable[[], Optional[float]], metric: StreamingMetric, threshold: int = 50,
+                 interval: Optional[Interval] = None) -> None:
         self.fetch_stat = fetch_stat
         self.metric = metric
         self.threshold = threshold
         # Starts in the False state
         self._is_below_threshold = threading.Event()
-        self.interval = interval
+        self.interval = FlexibleInterval() if interval is None else interval
         # Calling _stop will stop the update interval. Only for pytest.
-        self._stop = interval.start(self.update_metric)
+        self._stop = self.interval.start(self.update_metric)
 
     @classmethod
-    def es_query_total(cls, cluster, index, group, **kwargs):
-        def fetch_stat():
+    def es_query_total(cls, cluster: Elasticsearch, index: str, group: str, **kwargs) -> 'MetricMonitor':
+        def fetch_stat() -> Optional[float]:
             try:
                 response = cluster.indices.stats(index=index, groups=[group], metric='search')
             except elasticsearch.NotFoundError:
@@ -452,21 +496,21 @@ class MetricMonitor(object):
                 # prod traffic is run through. I'm a bit wary of always
                 # returning 0, but it is correct.
                 log.info('No stats in index %s for group %s', index, group)
-                return 0
+                return 0.0
         return cls(fetch_stat, StreamingEMA(), **kwargs)
 
     @property
-    def is_below_threshold(self):
+    def is_below_threshold(self) -> bool:
         return self._is_below_threshold.is_set()
 
-    def notify(self):
+    def notify(self) -> None:
         """Notify the monitor that work is actively being processed"""
         self.interval.decrease()
 
-    def wait_until_below_threshold(self):
+    def wait_until_below_threshold(self) -> None:
         self._is_below_threshold.wait()
 
-    def update_metric(self):
+    def update_metric(self) -> None:
         update = self.fetch_stat()
         if update is None:
             # Error fetching stat. Mark as unavailable until it resolves.
