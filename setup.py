@@ -34,7 +34,7 @@ test_requirements = [
 ]
 
 setup(
-    name='mjolnir',
+    name='wmf_mjolnir',
     version='0.0.1',
     author='Wikimedia Search Team',
     author_email='discovery@lists.wikimedia.org',
