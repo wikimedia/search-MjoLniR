@@ -5,7 +5,7 @@ from __future__ import absolute_import
 import json
 from pyspark import SparkContext
 from pyspark.sql import Column, functions as F
-from pyspark.sql.column import _to_java_column, _to_seq
+from pyspark.sql.column import _to_java_column, _to_seq  # type: ignore
 
 
 def assert_columns(df, columns):

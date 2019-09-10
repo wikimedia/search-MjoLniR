@@ -18,8 +18,9 @@ import mjolnir.kafka
 # Kafka client configuration
 ClientConfig = namedtuple('ClientConfig', [
     'brokers', 'req_topic', 'resp_topic', 'control_topic'])
-# 4 fields and 3 defaults means brokers is still required
-ClientConfig.__new__.__defaults__ = (
+# 4 fields and 3 defaults means brokers is still required.
+# TODO: This is basically a hack, mypy doesn't like it. Remove?
+ClientConfig.__new__.__defaults__ = (  # type: ignore
     mjolnir.kafka.TOPIC_REQUEST,
     mjolnir.kafka.TOPIC_RESULT,
     mjolnir.kafka.TOPIC_COMPLETE)

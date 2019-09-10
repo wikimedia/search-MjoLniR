@@ -70,7 +70,8 @@ def spark_context(request):
         .setMaster("local[2]")
         .setAppName("pytest-pyspark-local-testing")
         # Local jvm package. Compiled by the tox `jvm` testenv
-        .set('spark.jars', os.path.join(base_dir, 'jvm/target/mjolnir-0.4-SNAPSHOT.jar'))
+        # TODO: Source version number from somewhere.
+        .set('spark.jars', os.path.join(base_dir, 'jvm/target/mjolnir-0.5-SNAPSHOT.jar'))
         # Maven coordinates of jvm dependencies
         .set('spark.jars.packages', ','.join([
             # SNAPSHOT to allow loading of binary dmatrix in distributed training
