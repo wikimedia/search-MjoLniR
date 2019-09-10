@@ -35,7 +35,7 @@ test_requirements = [
 
 setup(
     name='wmf_mjolnir',
-    version='0.0.1',
+    version='0.0.2',
     author='Wikimedia Search Team',
     author_email='discovery@lists.wikimedia.org',
     description='A plumbing library for Machine Learned Ranking at Wikimedia',
