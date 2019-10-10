@@ -3,8 +3,8 @@ import os
 import mjolnir.dbn
 
 
-def test_dbn_train(hive_context, fixtures_dir):
-    df = hive_context.read.json(os.path.join(fixtures_dir, "dbn_input.json"))
+def test_dbn_train(spark, fixtures_dir):
+    df = spark.read.json(os.path.join(fixtures_dir, "dbn_input.json"))
     labeled = mjolnir.dbn.train(df, {
         # Don't use this config for prod, it's specifically for small testing
         'MIN_DOCS_PER_QUERY': 1,

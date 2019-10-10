@@ -93,6 +93,7 @@ def wrap_mutex(fn):
 @contextmanager
 def xgboost_mutex():
     old_train = mjolnir.training.xgboost.train
+    # TODO: Explain why we need this
     mjolnir.training.xgboost.train = wrap_mutex(old_train)
     try:
         yield
@@ -101,7 +102,7 @@ def xgboost_mutex():
 
 
 @pytest.mark.skip(reason="Fails with `Rabit call after finalize` too often in CI")
-def test_integration(spark_context, hive_context, make_requests_session):
+def test_integration(spark, spark_context, make_requests_session):
     """Happy path end-to-end test"""
     def session_factory():
         return make_requests_session('requests/test_integration.sqlite3')
@@ -115,14 +116,14 @@ def test_integration(spark_context, hive_context, make_requests_session):
         trained_dir = os.path.join(dir, 'trained')
 
         # Generate some fake sessions and write them out
-        hive_context.createDataFrame(
+        spark.createDataFrame(
             spark_context.parallelize(islice(make_fake_rows(), 0, 2000)),
             INPUT_SCHEMA
         ).write.parquet(input_dir)
 
         # Apply data collection to those sessions.
         run_data_pipeline(
-            spark_context, hive_context, input_dir, labeled_dir,
+            spark_context, spark, input_dir, labeled_dir,
             wikis=["enwiki"], samples_per_wiki=5000,
             min_sessions_per_query=1, search_cluster='localhost',
             brokers=None, samples_size_tolerance=0.5,
@@ -132,19 +133,19 @@ def test_integration(spark_context, hive_context, make_requests_session):
         # When building the fixture the featureset has to actually exist on
         # whatever elasticsearch is serving up results.
         collect_features(
-            spark_context, hive_context, labeled_dir, collect_dir,
+            spark_context, spark, labeled_dir, collect_dir,
             wikis=['enwiki'], search_cluster='localhost',
             brokers=None, ltr_feature_definitions='featureset:enwiki_v1',
             session_factory=session_factory)
 
         # Run feature selection
         run_feature_selection_pipeline(
-            spark_context, hive_context, input_dir=collect_dir, output_dir=feature_sel_dir,
+            spark_context, spark, input_dir=collect_dir, output_dir=feature_sel_dir,
             algo='mrmr', num_features=10, pre_selected=None, wikis=None)
 
         # Generate folds to feed into training
         make_folds(
-            spark_context, hive_context, feature_sel_dir, folds_dir,
+            spark.sparkContext, spark, feature_sel_dir, folds_dir,
             wikis=["enwiki"], zero_features=None, num_folds=2,
             num_workers=1, max_executors=2)
 
@@ -156,7 +157,7 @@ def test_integration(spark_context, hive_context, make_requests_session):
         # directory to be created by the caller.
         os.mkdir(trained_dir)
         run_train_pipeline(
-            spark_context, hive_context, folds_dir, trained_dir,
+            spark_context, spark, folds_dir, trained_dir,
             wikis=["enwiki"], initial_num_trees=10, final_num_trees=None,
             num_cv_jobs=1, iterations=3)
 
@@ -177,8 +178,8 @@ def test_integration(spark_context, hive_context, make_requests_session):
         # We have to coalesce(1) because for tests all executors run in same
         # JVM and it isn't thread safe to call into xgboost from multiple
         # executor threads in parallel.
-        # model = XGBoostModel.loadModelFromLocalFile(spark_context, model_file)
-        # df_data = hive_context.read.parquet(data_dir)
+        # model = XGBoostModel.loadBoosterFromLocalFile(model_file)
+        # df_data = spark.read.parquet(data_dir)
         # eval_df = model.eval(df_data.coalesce(1))
 
         # Our fake data has a hard time passing this test, because ndcg

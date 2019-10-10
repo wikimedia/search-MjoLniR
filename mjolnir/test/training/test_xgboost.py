@@ -5,7 +5,7 @@ import pytest
 
 
 @pytest.fixture()
-def df_prep_training(spark_context, hive_context):
+def df_prep_training(spark_context):
     rdd1 = spark_context.parallelize([
         ('foowiki', 'foo', 4, Vectors.dense([1., 2.])),
         ('foowiki', 'foo', 2, Vectors.dense([2., 1.])),
@@ -81,7 +81,7 @@ def test_path(fixtures_dir):
 
 
 @pytest.fixture()
-def df_train(spark_context, hive_context):
+def df_train(spark_context):
     rdd1 = spark_context.parallelize([
         ('foowiki', 'foo', 2, Vectors.dense([2.2])),
     ])

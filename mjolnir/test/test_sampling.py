@@ -7,10 +7,7 @@ from pyspark.sql import functions as F
 import string
 
 
-def test_sampling_selects_all_if_less_than_samples_per_wiki(spark_context, hive_context):
-    # Although hive_context is not used directly, it must be requested so it
-    # can monkey-patch pyspark.RDD
-
+def test_sampling_selects_all_if_less_than_samples_per_wiki(spark_context):
     # Generate a sample dataframe with only 10 queries, then ask for 10000
     df = spark_context.parallelize([
         ('foo', 'a', 1, 'aaa', list(range(3))),
@@ -28,7 +25,7 @@ def test_sampling_selects_all_if_less_than_samples_per_wiki(spark_context, hive_
     assert len(sampled) == 5
 
 
-def test_sampling_general_approach(spark_context, hive_context):
+def test_sampling_general_approach(spark_context):
     """Generate a dataframe and see if sampling it has same general shape"""
 
     # Create wikis with different looking long tail distributions

@@ -5,7 +5,7 @@ import numpy as np
 import pyspark.sql
 
 
-def test_collect_ltr_plugin(spark_context, hive_context, make_requests_session):
+def test_collect_ltr_plugin(spark_context, make_requests_session):
     def session_factory():
         return make_requests_session('requests/test_features.sqlite3')
 

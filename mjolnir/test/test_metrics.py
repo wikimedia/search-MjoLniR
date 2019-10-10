@@ -3,7 +3,7 @@ import mjolnir.metrics
 import pytest
 
 
-def test_ndcg_doesnt_completely_fail(spark_context, hive_context):
+def test_ndcg_doesnt_completely_fail(spark_context):
     "Mediocre test that just looks for a happy path"
     df = spark_context.parallelize([
         [4, 0, 'foo', 'barwiki'],
@@ -23,7 +23,7 @@ def test_ndcg_doesnt_completely_fail(spark_context, hive_context):
     assert 0.9788 == pytest.approx(ndcg_at_4['barwiki'], abs=0.0001)
 
 
-def test_query_can_be_multiple_columns(spark_context, hive_context):
+def test_query_can_be_multiple_columns(spark_context):
     df_a = spark_context.parallelize([
         [4, 0, 'foo', 'bar'],
         [3, 1, 'foo', 'bar'],
@@ -49,7 +49,7 @@ def test_query_can_be_multiple_columns(spark_context, hive_context):
     assert ndcg_merged['wot'] == ndcg_b['wot']
 
 
-def test_arbitrary_column_names(spark_context, hive_context):
+def test_arbitrary_column_names(spark_context):
     df = spark_context.parallelize([
         [4, 0, 'foo', 'barwiki'],
         [3, 1, 'foo', 'barwiki'],

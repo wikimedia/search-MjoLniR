@@ -7,7 +7,7 @@ import mjolnir.spark
 from pyspark.sql import Window
 
 
-def test_at_least_n_distinct(spark_context, hive_context):
+def test_at_least_n_distinct(spark_context):
     df = spark_context.parallelize([
         ('foo', 'bar', 'baz'),
         ('foo', 'bar', 'bang'),

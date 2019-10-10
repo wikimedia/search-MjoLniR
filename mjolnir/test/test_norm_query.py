@@ -7,19 +7,19 @@ import pytest
 
 
 @pytest.fixture
-def df_love(spark_context, hive_context, fixtures_dir):
+def df_love(spark, fixtures_dir):
     path = os.path.join(fixtures_dir, 'love.json')
-    return hive_context.read.json(path)
+    return spark.read.json(path)
 
 
-def test_norm_query(df_love, hive_context, make_requests_session):
+def test_norm_query(df_love, spark, make_requests_session):
     """Very basic happy path test of query normalization"""
     def session_factory():
         return make_requests_session('requests/test_norm_query.sqlite3')
 
     # Make a fake stemmer() udf. We know everything in df_love
     # stems to 'love' because that's how it was generated
-    hive_context.registerFunction("stemmer", lambda x, y: "love")
+    spark.udf.register("stemmer", lambda x, y: "love")
 
     df_res = mjolnir.norm_query.transform(
         df_love,

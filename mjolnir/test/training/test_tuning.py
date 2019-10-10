@@ -6,9 +6,9 @@ from pyspark.sql import functions as F
 import pytest
 
 
-def test_split(spark_context, hive_context):
+def test_split(spark):
     df = (
-        hive_context
+        spark
         .range(1, 100 * 100)
         # convert into 100 "queries" with 100 values each. We need a
         # sufficiently large number of queries, or the split wont have
