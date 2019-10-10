@@ -8,126 +8,401 @@ exceptions.
 FIXME: template parameters are awkward
 """
 
-from __future__ import absolute_import
-import os
-import requests
+from typing import Any, Iterable, Mapping, Optional, Sequence, TypeVar, Union
+
+from elasticsearch import Elasticsearch
+from elasticsearch.client.utils import AddonClient, NamespacedClient, query_params, _make_path
 
 
-class Ltr(object):
-    def __init__(self, host='localhost', port=9200, session_factory=None, base_path=None):
-        if base_path is None:
-            self.base_path = 'http://%s:%d/_ltr/' % (host, port)
-        else:
-            self.base_path = base_path + '/_ltr/'
-        self.session = session_factory() if session_factory else requests.Session()
-
-    def list_feature_stores(self):
-        return self.request('GET')
-
-    def get_feature_store(self, name=None):
-        return LtrFeatureStore(self, name)
-
-    def request(self, method, path='', **kwargs):
-        url = os.path.join(self.base_path, path)
-        res = self.session.request(method, url, **kwargs).json()
-        if 'error' in res:
-            e = Exception("LTR failure: " + str(res['error']))
-            e.res = res
-            raise e
-        return res
+_T = TypeVar('_T')
 
 
-class LtrFeatureStore(object):
-    def __init__(self, ltr, name=None):
-        self.ltr = ltr
+class FeatureStoreClient(NamespacedClient):
+    """CRUD operations for feature store indices"""
+    @query_params()
+    def create(self, store: Optional[str] = None, params: Optional[Mapping] = None) -> Mapping:
+        return self.transport.perform_request('PUT', _make_path('_ltr', store), params=params)
+
+    @query_params()
+    def delete(self, store: Optional[str] = None, params: Optional[Mapping] = None) -> Mapping:
+        return self.transport.perform_request('DELETE', _make_path('_ltr', store), params=params)
+
+    @query_params()
+    def exists(self, store: Optional[str] = None, params: Optional[Mapping] = None) -> bool:
+        if params is None:
+            params = {}
+        response = self.search(**params)
+        if store is None:
+            store = '_default_'
+        return 'stores' in response and store in response['stores']
+
+    @query_params()
+    def search(self, params: Optional[Mapping] = None) -> Mapping:
+        """List available feature stores"""
+        return self.transport.perform_request('GET', _make_path('_ltr'), params=params)
+
+
+class CrudClient(NamespacedClient):
+    """CRUD operations for data stored in the ltr plugin.
+
+    Base class for objects stored in the ltr plugin. Should be subclassed
+    per use case."""
+    def __init__(self, client: Elasticsearch, store_type: str):
+        super().__init__(client)
+        self.store_type = '_' + store_type
+
+    def _req(
+        self, method: str, store: Optional[str], suffix: Iterable[str],
+        body: Optional[Mapping], params: Optional[Mapping]
+    ) -> Mapping:
+        path = _make_path('_ltr', store, self.store_type, *suffix)
+        return self.transport.perform_request(method, path, body=body, params=params)
+
+    @query_params()
+    def create(
+        self, name: str, body: Mapping,
+        store: Optional[str] = None, params: Optional[Mapping] = None
+    ) -> Mapping:
+        """Create a new named object.
+
+        Parameters
+        ----------
+        name:
+            The name of the object to create
+        body:
+            Object definition
+        store:
+            The name of the feature store to scope operation to. When
+            None the default feature store is selected.
+        """
+        return self._req('PUT', store, [name], body, params)
+
+    @query_params()
+    def update(
+        self, name: str, body: Mapping,
+        store: Optional[str] = None, params: Optional[Mapping] = None
+    ) -> Mapping:
+        """Update a named object.
+
+        Parameters
+        ----------
+        name:
+            The name of the object to update
+        body:
+            Object definition
+        store:
+            The name of the feature store to scope operation to. When
+            None the default feature store is selected.
+        """
+        return self._req('POST', store, [name], body, params)
+
+    @query_params('routing')
+    def delete(self, name: str, store: Optional[str] = None, params: Optional[Mapping] = None) -> Mapping:
+        """Delete a named object.
+
+        Parameters
+        ----------
+        name:
+            The name of the object to delete
+        store:
+            The name of the feature store to scope operation to. When
+            None the default feature store is selected.
+        routing: str
+            Specific routing value
+
+        Throws
+        ------
+        elasticsearch.exceptions.NotFoundError:
+            when the object does not exist.
+        """
+        return self._req('DELETE', store, [name], None, params)
+
+    @query_params('routing')
+    def get(
+        self, name: str, store: Optional[str] = None,
+        params: Optional[Mapping] = None
+    ) -> Mapping:
+        """Get a named object.
+
+        Parameters
+        ----------
+        name:
+            The name of the object to fetch
+        store:
+            The name of the feature store to scope operation to. When
+            None the default feature store is selected.
+        routing: str
+            Specific routing value
+
+        Throws
+        ------
+        elasticsearch.exceptions.NotFoundError:
+            when the object does not exist.
+        """
+        return self._req('GET', store, [name], None, params)
+
+    @query_params('routing')
+    def exists(self, name: str, store: Optional[str] = None, params: Optional[Mapping] = None) -> bool:
+        """Check existence of named object.
+
+        Parameters
+        ----------
+        name:
+            The name of the object to fetch
+        store:
+            The name of the feature store to scope operation to. When
+            None the default feature store is selected.
+        routing: str
+            Specific routing value
+        """
+        response = self._req('HEAD', store, [name], None, params)
+        # The return type signature for _req is a lie, the value depends on the
+        # request. HEAD requests returns bool.
+        return response  # type: ignore
+
+    @query_params('prefix', 'from', 'size')
+    def search(self, store: Optional[str] = None, params: Optional[Mapping] = None) -> Mapping:
+        """List objects stored in the ltr plugin
+
+        Parameters
+        ----------
+        store:
+            The name of the feature store to scope operation to. When
+            None the default feature store is selected.
+        prefix: str
+            Prefix of stored named to search for
+        from: int
+            Offset to start results at
+        size: int
+            Maximum number of returned results
+        """
+        return self._req('GET', store, [], None, params)
+
+
+class CacheClient(NamespacedClient):
+    @query_params()
+    def clear(self, store: Optional[str] = None, params: Optional[Mapping] = None) -> Mapping:
+        """Clear the ltr model cache
+
+        Parameters
+        ----------
+        store:
+            The name of the feature store to scope operation to. When
+            None the default feature store is selected.
+        """
+        path = _make_path('_ltr', store, '_clearcache')
+        return self.transport.perform_request('POST', path, params=params)
+
+    @query_params()
+    def stats(self, params: Optional[Mapping] = None) -> Mapping:
+        """Query the ltr model cache stats api
+
+        The cache stats api retieves cluster-wide stats about the ltr model cache.
+        """
+        path = _make_path('_ltr', '_cachestats')
+        return self.transport.perform_request('GET', path)
+
+
+class FeatureClient(CrudClient):
+    """Manage individually stored features"""
+    def __init__(self, client: Elasticsearch):
+        super().__init__(client, 'feature')
+
+
+class FeatureSetClient(CrudClient):
+    """Manage sets of stored features"""
+    def __init__(self, client: Elasticsearch):
+        super().__init__(client, 'featureset')
+
+    # TODO: self._req('POST', store, [feature_set_name, '_createmodel'], body, params)
+    # TODO: self._req('POST', store, [feature_set_name, '_addfeatures', feature_prefix_query], params=params)
+
+    @query_params('merge')
+    def add_features(
+        self,
+        feature_set_name: str,
+        body: Mapping,
+        store: Optional[str] = None,
+        params: Optional[Mapping] = None
+    ) -> Mapping:
+        """Add feature definitions to existing feature set.
+
+        Parameters
+        ----------
+        feature_set_name:
+            The name of the feature set to scope operation to
+        body:
+            Feature definitions
+        store:
+            The name of the feature store to scope operation to. When
+            None the default feature store is selected.
+        merge: bool
+            If true, update set by merging features, feature with
+            same names are updated new features are appended.
+        """
+        return self._req('POST', store, [feature_set_name, '_addfeatures'], body, params)
+
+
+class ModelClient(CrudClient):
+    """Manage stored ranking models"""
+    def __init__(self, client: Elasticsearch):
+        super().__init__(client, 'model')
+
+
+class LtrClient(AddonClient):
+    """Elasticsearch-learning-to-rank low-level client.
+
+    The instance has attributes ``cache``, ``store``, ``feature``,
+    ``feature_set``, and ``model`` that provide access to instances of
+    :class:`~mjolnir.esltr.CacheClient`,
+    :class:`~mjolnir.esltr.FeatureStoreClient`,
+    :class:`~mjolnir.esltr.FeatureClient`,
+    :class:`~mjolnir.esltr.FeatureSetClient` and
+    :class:`~mjolnir.esltr.ModelClient` respectively.
+
+    As a low-level client the operations only throw exceptions on
+    non-2xx responses. All 2xx responses from the plugin return the
+    decoded json response.
+    """
+    namespace = 'ltr'
+
+    def __init__(self, client: Elasticsearch):
+        super().__init__(client)
+        self.cache = CacheClient(client)
+        self.store = FeatureStoreClient(client)
+        self.feature = FeatureClient(client)
+        self.feature_set = FeatureSetClient(client)
+        self.model = ModelClient(client)
+
+
+# Domain objects stored in the plugin. These offer a very simple interface for
+# constructing requests and interpreting results of objects stored in the ltr
+# plugin.
+#
+# Note that when encoding these objects to send to the plugin they are almost always
+# wrapped in a single-value dict containing the type. So for example to add a feature
+# to a feature store:
+#
+#  feature = StoredFeature('test', ['keywords'], 'mustache', {"match":{"title":"{{keywords}}"}})
+#  response = ltr_client.feature.create(feature.name, {'feature': feature.to_dict()})
+
+class StoredFeature:
+    """A single named ltr feature"""
+    def __init__(
+        self, name: str, params: Sequence[str],
+        template_language: str, template: Union[str, Mapping]
+    ) -> None:
         self.name = name
-        if name:
-            if name[0] == '_':
-                raise ValueError('Invalid name [%s]: must not start with _' % (name))
-            if '/' in name:
-                raise ValueError('Invalid name [%s]: cannot contain /' % (name))
-            self.base_path = name
-        else:
-            self.base_path = ''
-            self.name = '_default_'
+        self.params = params
+        self.template_language = template_language
+        self.template = template
 
-    def fullname(self):
-        return self.name
+    @classmethod
+    def from_dict(cls, response: Mapping) -> 'StoredFeature':
+        return cls(**response)
 
-    def create(self):
-        return self.request('PUT')
+    @classmethod
+    def get(cls, client: LtrClient, name: str, store: Optional[str] = None) -> 'StoredFeature':
+        response = client.feature.get(name, store)
+        return cls.from_dict(response['_source']['feature'])
 
-    def delete(self):
-        return self.request('DELETE')
+    def create(self, client: LtrClient, store: Optional[str] = None) -> Mapping:
+        return client.feature.create(self.name, {'feature': self.to_dict()}, store)
 
-    def exists(self):
-        res = self.request('GET')
-        if self.name == '_default_' and 'stores' in res and self.name in res['stores']:
-            return True
-        elif 'exists' in res and res['exists']:
-            return True
-        else:
-            return False
-
-    def list_features(self, prefix=None):
-        return self._list('_features/', prefix)
-
-    def list_feature_sets(self, prefix=None):
-        return self._list('_featureset/', prefix)
-
-    def _list(self, path, prefix):
-        params = {}
-        if prefix:
-            params['prefix'] = prefix
-        return self.request('GET', path, params=params)
-
-    def get_feature_set(self, name, validation=None):
-        return LtrFeatureSet(self, name, validation)
-
-    def request(self, method, path='', **kwargs):
-        combined_path = os.path.join(self.base_path, path)
-        return self.ltr.request(method, combined_path, **kwargs)
+    def to_dict(self) -> Mapping[str, Any]:
+        return {
+            'name': self.name,
+            'params': list(self.params),
+            'template_language': self.template_language,
+            'template': self.template
+        }
 
 
-class LtrFeatureSet(object):
-    def __init__(self, store, name, validation=None):
-        self.store = store
-        if name[0] == '_':
-            raise ValueError('Invalid name [%s]: must not start with _' % (name))
-        if '/' in name:
-            raise ValueError('Invalid name [%s]: cannot contain /' % (name))
+class StoredFeatureSet:
+    """A named set of ltr features"""
+    def __init__(self, name: str, features: Sequence[StoredFeature]) -> None:
         self.name = name
-        self.base_path = '_featureset/%s' % (name)
-        self.validation = validation
+        self.features = features
 
-    def fullname(self):
-        return '%s.%s' % (self.store.fullname(), self.name)
+    @classmethod
+    def from_dict(cls, response: Mapping) -> 'StoredFeatureSet':
+        defs = [StoredFeature.from_dict(child) for child in response['features']]
+        return cls(response['name'], defs)
 
-    def create(self, features):
-        req = {}
-        if features:
-            req['features'] = features
-        if self.validation:
-            req['validation'] = self.validation
+    @classmethod
+    def get(cls, client: LtrClient, name: str, store: Optional[str] = None) -> 'StoredFeatureSet':
+        response = client.feature_set.get(name, store)
+        return cls.from_dict(response['_source']['featureset'])
 
-        return self.request('PUT', json=req)
+    def create(self, client: LtrClient, store: Optional[str] = None) -> Mapping:
+        return client.feature_set.create(self.name, {'featureset': self.to_dict()}, store)
 
-    def delete(self):
-        return self.request('DELETE')
+    def to_dict(self) -> Mapping[str, Any]:
+        return {
+            'name': self.name,
+            'features': [feature.to_dict() for feature in self.features]
+        }
 
-    def exists(self):
-        res = self.request('GET')
-        return 'found' in res and res['found']
+    @property
+    def feature_names(self) -> Sequence[str]:
+        return [f.name for f in self.features]
 
-    def list_features(self):
-        return self.request('GET')
+    def __len__(self) -> int:
+        return len(self.features)
 
-    def add_features(self, features):
-        req = {'features': features}
-        if self.validation:
-            req['validation'] = self.validation
-        return self.request('POST', '_addfeatures', json=req)
 
-    def request(self, method, path='', **kwargs):
-        combined_path = os.path.join(self.base_path, path)
-        return self.store.request(method, combined_path, **kwargs)
+class ValidationRequest:
+    def __init__(self, index: str, params: Mapping[str, Any]) -> None:
+        self.index = index
+        self.params = params
+
+    def to_dict(self):
+        return {
+            'index': self.index,
+            'params': self.params
+        }
+
+
+class StoredModel:
+    """A stored ranking model"""
+    def __init__(
+        self, name: str, feature_set: StoredFeatureSet,
+        type: str, definition: Union[str, Mapping]
+    ) -> None:
+        self.name = name
+        self.feature_set = feature_set
+        self.type = type
+        self.definition = definition
+
+    @classmethod
+    def from_dict(cls, response: Mapping) -> 'StoredModel':
+        return cls(
+            response['name'],
+            StoredFeatureSet.from_dict(response['feature_set']),
+            response['model']['type'],
+            response['model']['definition'])
+
+    @classmethod
+    def get(cls, client: LtrClient, name: str, store: Optional[str] = None) -> 'StoredModel':
+        response = client.model.get(name, store)
+        return cls.from_dict(response['_source']['model'])
+
+    def create(
+        self, client: LtrClient,
+        validation: Optional[ValidationRequest] = None,
+        store: Optional[str] = None
+    ) -> Mapping:
+        request = {'model': self.to_dict()}
+        if validation is not None:
+            request['validation'] = validation.to_dict()
+        return client.model.create(self.name, request, store)
+
+    def to_dict(self) -> Mapping[str, Any]:
+        return {
+            'name': self.name,
+            'feature_set': self.feature_set.to_dict(),
+            'model': {
+                'type': self.type,
+                'definition': self.definition,
+            }
+        }
