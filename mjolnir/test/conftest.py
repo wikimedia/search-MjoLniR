@@ -73,10 +73,7 @@ def spark():
         # TODO: Source version number from somewhere.
         .config('spark.jars', os.path.join(base_dir, 'jvm/target/mjolnir-0.5-SNAPSHOT.jar'))
         # Maven coordinates of jvm dependencies
-        .config('spark.jars.packages', ','.join([
-            'org.apache.spark:spark-streaming-kafka-0-8_2.11:2.1.0',
-            'org.wikimedia.analytics.refinery.hive:refinery-hive:0.0.57',
-            'sramirez:spark-infotheoretic-feature-selection:1.4.4']))
+        .config('spark.jars.packages', 'sramirez:spark-infotheoretic-feature-selection:1.4.4')
         # By default spark will shuffle to 200 partitions, which is
         # way too many for our small test cases. This cuts execution
         # time of the tests in half.

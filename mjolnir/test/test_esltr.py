@@ -2,7 +2,7 @@ from collections import defaultdict
 from typing import Mapping
 
 from elasticsearch import Elasticsearch
-from mjolnir.esltr import LtrClient, StoredFeature, StoredFeatureSet, StoredModel
+from mjolnir.esltr import minimize_features, LtrClient, StoredFeature, StoredFeatureSet, StoredModel
 import pytest
 
 
@@ -53,6 +53,33 @@ def test_StoredFeatureSet_round_trip(feature_set_definition: Mapping):
 def test_StoredModel_round_trip(model_definition: Mapping):
     model = StoredModel.from_dict(model_definition)
     assert model.to_dict() == model_definition
+
+
+@pytest.mark.parametrize('selected,expect', [
+    # Features with no dependencies
+    (['a'], ['a']),
+    (['b'], ['b']),
+    # Features that depend on subsets of the full set
+    (['d'], ['a', 'b', 'd']),
+    (['a', 'd'], ['a', 'b', 'd']),
+    (['d', 'a'], ['a', 'b', 'd']),
+    (['e'], ['a', 'b', 'd', 'e']),
+    (['b', 'e'], ['b', 'a', 'd', 'e']),
+    # Features that depend on the full set
+    (['a', 'b', 'c', 'd', 'e'], ['a', 'b', 'c', 'd', 'e']),
+    (['c', 'd', 'e'], ['c', 'a', 'b', 'd', 'e']),
+])
+def test_minimize_features_happy_path(selected, expect):
+    features = [
+        StoredFeature('a', [], 'mustache', {}),
+        StoredFeature('b', [], 'mustache', {}),
+        StoredFeature('c', [], 'mustache', {}),
+        StoredFeature('d', [], 'derived_expression', 'a * b'),
+        StoredFeature('e', [], 'derived_expression', 'd * b'),
+    ]
+
+    minimal = minimize_features(features, selected)
+    assert [x.name for x in minimal] == expect
 
 
 # Copied from elasticsearch-py test_elasticsearch/test_cases.py

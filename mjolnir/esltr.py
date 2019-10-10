@@ -8,10 +8,14 @@ exceptions.
 FIXME: template parameters are awkward
 """
 
-from typing import Any, Iterable, Mapping, Optional, Sequence, TypeVar, Union
+from collections import OrderedDict
+import re
+from typing import cast, Any, Dict, Iterable, Iterator, Mapping, Optional, Sequence, TypeVar, Union
 
 from elasticsearch import Elasticsearch
 from elasticsearch.client.utils import AddonClient, NamespacedClient, query_params, _make_path
+
+from mjolnir.utils import explode_ltr_model_definition
 
 
 _T = TypeVar('_T')
@@ -406,3 +410,128 @@ class StoredModel:
                 'definition': self.definition,
             }
         }
+
+
+# Utilities related to uploading models
+
+
+def minimize_features(
+    features: Sequence[StoredFeature],
+    selected: Sequence[str]
+) -> Sequence[StoredFeature]:
+    """Reduce features to the minimum necessary
+
+    The plugin will execute all features associated with a model, with no
+    concern for if the model uses it or not. Minimize a list of stored features
+    to only those required by the list of selected feature names.
+
+    The plugin will execute features in the order given. Care is taken in the result
+    to provide dependencies prior to their dependants. This order must be maintained
+    when sending to the plugin.
+
+    Parameters
+    ----------
+    features :
+        List of stored features to select from
+    selected:
+        List of selected features that must be in the result
+
+    Returns
+    -------
+        Minimal set of required features and their dependencies.
+    """
+    feat_map = {f.name: f for f in features}
+    # Names are ordered from longest to shortest otherwise overlapping
+    # names (eg: title and title_prefix) would always match the shorter
+    # if it came first.
+    names = sorted(feat_map.keys(), key=len, reverse=True)
+    names_re = '|'.join(re.escape(name) for name in names)
+    all_names_re = r'(?<!\w)({})(?!\w)'.format(names_re)
+    matcher = re.compile(all_names_re)
+
+    def deps(feature_name: str) -> Iterator[str]:
+        feature = feat_map[feature_name]
+        # TODO: Scripts can also have feature dependencies, but we don't (yet) support them.
+        if feature.template_language == 'derived_expression':
+            # Help mypy, we cant fit this in the type system without
+            # subclassing per-template language
+            assert isinstance(feature.template, str)
+            for dep_name in matcher.findall(feature.template):
+                yield from deps(dep_name)
+        # This must come after the dependencies to ensure they are available.
+        yield feature_name
+
+    # Use only the keys OrderedDict() to effectively get an OrderedSet
+    # implementation. This will return features in the order added, which
+    # ensures all dependencies are satisfied.
+    selected_features = cast(Dict[str, bool], OrderedDict())
+    for feature_name in selected:
+        for dep in deps(feature_name):
+            selected_features[dep] = True
+
+    return [feat_map[feature_name] for feature_name in selected_features.keys()]
+
+
+class LtrModelUploader:
+    # TODO: This constructor is massive, and this class is basically two functions and
+    # some configuration. This should be representable in a better way.
+    def __init__(
+        self,
+        elastic: Elasticsearch,
+        model_name: str,
+        model_type: str,
+        model: Mapping,
+        feature_source_definition: str,
+        features: Sequence[str],
+        validation: Optional[ValidationRequest]
+    ) -> None:
+        self.elastic = elastic
+        self.ltr = LtrClient(elastic)
+        self.model_name = model_name
+        self.model_type = 'model/xgboost+json'  # todo: stop hardcoding
+        self.model = model
+        self.feature_source_definition = feature_source_definition
+        # Break down def into it's pieces
+        self.feature_def_type, self.feature_set_name, self.feature_store_name = \
+            explode_ltr_model_definition(self.feature_source_definition)
+        if self.feature_def_type != 'featureset':
+            # This is actually a limitation of the forced featureset
+            # minimization, although things could be abstracted to support
+            # multiple paths.
+            raise NotImplementedError('Can only derive featuresets from other featuresets currently')
+        self.features = features
+        self.validation = validation
+
+    def _select_feature_set(self) -> StoredFeatureSet:
+        """Determine the feature set to use for uploading.
+
+        Returns the smallest possible feature set that can be used to
+        provide the required features.
+        """
+        feature_set = StoredFeatureSet.get(
+            self.ltr, self.feature_set_name, self.feature_store_name)
+        missing = set(self.features).difference(feature_set.feature_names)
+        if missing:
+            raise Exception('Missing features in feature set: %s' % (', '.join(missing)))
+
+        final_features = minimize_features(feature_set.features, self.features)
+
+        # This feature set is never stored directly as a feature set, only as a
+        # property of the model, so the name doesn't really matter.
+        name = '{}-minimized'.format(feature_set.name)
+        return StoredFeatureSet(name, final_features)
+
+    def upload(self) -> StoredModel:
+        if not self.ltr.store.exists(self.feature_store_name):
+            raise Exception('Missing feature store [{}] on cluster [{}]'.format(self.feature_store_name, self.elastic))
+
+        if self.ltr.model.exists(self.model_name, self.feature_store_name):
+            raise Exception('A model named [{}] already exists on cluster [{}]'.format(self.model_name, self.elastic))
+
+        feature_set = self._select_feature_set()
+        model = StoredModel(self.model_name, feature_set, self.model_type, self.model)
+        response = model.create(self.ltr, self.validation)
+        # TODO: Not sure how we could get 2xx without created, but lets check anyways
+        if response.get('result') != 'created':
+            raise Exception(response)
+        return model

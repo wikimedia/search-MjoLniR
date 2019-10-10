@@ -13,7 +13,7 @@ import os
 import re
 import shutil
 from tempfile import NamedTemporaryFile
-from typing import cast, Callable, Generic, Iterable, Iterator, \
+from typing import cast, Any, Callable, Dict, Generic, Iterable, Iterator, \
                    List, Mapping, Optional, Tuple, TypeVar, Union
 
 from elasticsearch import Elasticsearch
@@ -25,6 +25,7 @@ import prometheus_client
 import requests
 from requests.models import Response
 
+from mjolnir.esltr import LtrModelUploader, ValidationRequest
 import mjolnir.kafka
 
 log = logging.getLogger(__name__)
@@ -34,6 +35,9 @@ ElasticSupplier = Callable[[str], Elasticsearch]
 
 
 CONFIG = {
+    'search_mjolnir_model': lambda client_for_index, message: ImportLtrModel(  # type: ignore
+        client_for_index, message,
+    ),
     # key is the name of the swift container files were uploaded to
     'search_popularity_score': lambda client_for_index, message: ImportExistingIndices(  # type: ignore
         client_for_index, message,
@@ -112,6 +116,32 @@ VALIDATOR = jsonschema.Draft4Validator({
 
 SANITIZE_PATTERN = re.compile('[^a-z0-9]')
 
+# Subset of the model metadata we require to perform model upload
+UPLOAD_METADATA_VALIDATOR = jsonschema.Draft4Validator({
+    "type": "object",
+    "additionalProperties": True,
+    "required": ["upload"],
+    "properties": {
+        "upload": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["wikiid", "model_name", "model_type", "feature_definition", "features"],
+            "properties": {
+                "wikiid": {"type": "string"},
+                "model_name": {"type": "string"},
+                "model_type": {"type": "string"},
+                "feature_definition": {"type": "string"},
+                "features": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                # Not required
+                "validation_params": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"},
+                }
+            }
+        }
+    }
+})
+
 
 def sanitize_index_name(name: str) -> str:
     """Limit the characters allowed into index names for our own sanity"""
@@ -180,10 +210,6 @@ def swift_download_from_prefix(
 ) -> Iterator[Tuple[str, Response]]:
     """Download files from swift and yield them as they become available
 
-    Downloads remote files to disk, rather than streaming directly, to support compressed
-    files. The python gzip module doesn't support streaming directly and implementing
-    directly with zlib seemed more error prone than writing to disk.
-
     Parameters
     ----------
     message : Message
@@ -193,8 +219,8 @@ def swift_download_from_prefix(
     ------
     str
         Full uri of the object in swift
-    iterable of str
-        Lines from the object stream
+    Response
+        HTTP response with streamed content
     """
     for file_uri in swift_fetch_prefix_uri(message.prefix_uri):
         with requests.get(file_uri, stream=True) as res:
@@ -212,6 +238,12 @@ def swift_download_from_prefix(
 
 
 def _decode_response_as_text_lines(file_uri: str, res: Response) -> Iterator[str]:
+    """Decode requests response into utf8 lines
+
+    Downloads remote files to disk, rather than streaming directly, to support compressed
+    files. The python gzip module doesn't support streaming directly and implementing
+    with zlib seemed more error prone than writing to disk.
+    """
     suffix = os.path.splitext(file_uri)[1]
     if suffix == '.gz':
         with NamedTemporaryFile(suffix=suffix) as f_temp:
@@ -348,11 +380,7 @@ class UploadAction:
         self.pre_check()
         for uri, response in swift_download_from_prefix(self.message, self.abort_on_failure):
             try:
-                # The response was opened with stream=True, so we need to
-                # ensure we close the responses to return the connections to
-                # the pool.
-                with response:
-                    self.on_file_available(uri, response)
+                self.on_file_available(uri, response)
             except ImportFailedException:
                 if self.abort_on_failure:
                     raise
@@ -535,6 +563,75 @@ class ImportAndPromote(UploadAction):
                 log.critical("Failed delete orphaned indices: %s", res_str[:1024])
                 raise Exception(res_str)
             log.info('Deleted orphaned indices: %s', ','.join(indices_to_delete))
+
+
+class ImportLtrModel(UploadAction):
+    def __init__(
+        self, client_for_index: ElasticSupplier, message: Message
+    ) -> None:
+        super().__init__(client_for_index, message)
+        self.downloaded_files = cast(Dict[str, str], {})
+
+    def on_file_available(self, uri: str, response: Response) -> None:
+        # We are going to download everything from swift into the process, and
+        # then send it out after recieving everything. This should be under
+        # 100M and not a big deal.
+        suffix = os.path.splitext(uri)[1]
+        if suffix.lower() != '.json':
+            # We are only interested in a pair of json files
+            # but the upload contains binary xgb as well.
+            return
+
+        basename = os.path.basename(uri)
+        if basename in self.downloaded_files:
+            raise ImportFailedException('Duplicate files: {}'.format(uri))
+        self.downloaded_files[basename] = '\n'.join(
+            _decode_response_as_text_lines(uri, response))
+
+    def validate_input(self) -> Tuple[Mapping, Mapping[str, Any], List[str]]:
+        model = None
+        metadata = None
+        errors = []
+        try:
+            model = json.loads(self.downloaded_files['model.json'])
+        except KeyError as e:
+            errors.append('Missing model.json: {}'.format(e))
+        except json.decoder.JSONDecodeError as e:
+            errors.append('Unable to parse model.json: {}'.format(e))
+
+        try:
+            # TODO: _METADATA.JSON doesn't exist in mjolnir,only discovery-analytics.
+            metadata = json.loads(self.downloaded_files['_METADATA.JSON'])
+        except KeyError as e:
+            errors.append('Missing _METADATA.JSON: {}'.format(e))
+        except json.decoder.JSONDecodeError as e:
+            errors.append('Unable to parse _METADATA.JSON: {}'.format(e))
+        else:
+            metadata_errors = list(UPLOAD_METADATA_VALIDATOR.iter_errors(metadata))
+            if metadata_errors:
+                errors.extend(metadata_errors)
+
+        return model, metadata, errors  # type: ignore
+
+    def on_download_complete(self) -> None:
+        model, metadata, errors = self.validate_input()
+        if errors:
+            raise ImportFailedException('Invalid model upload request: {}'.format(', '.join(errors)))
+
+        upload = metadata['upload']
+        validation = None
+        if 'validation_params' in upload:
+            validation = ValidationRequest(upload['wiki'], upload['validation_params'])
+
+        LtrModelUploader(
+            self.client_for_index(upload['wikiid']),
+            upload['model_name'],
+            upload['model_type'],
+            model,
+            upload['feature_definition'],
+            upload['features'],
+            validation
+        ).upload()
 
 
 def run(brokers: str, client_for_index: ElasticSupplier, topics: List[str], group_id: str) -> None:
