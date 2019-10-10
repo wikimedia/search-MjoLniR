@@ -2,6 +2,8 @@ package org.wikimedia.search.mjolnir
 
 import org.apache.spark.sql.{Row, types => T}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.json4s.{JArray, JBool, JString}
+import org.json4s.jackson.JsonMethods
 
 import scala.io.Source
 import scala.util.Random
@@ -61,7 +63,7 @@ class DBNSuite extends SharedSparkContext {
     val ir = new InputReader(1, 20, true)
     val line = s"""hash_digest${"\t"}foo${"\t"}enwiki${"\t"}intentWeight${"\t"}["Example", ".example", "example.com"]${"\t"}layout${"\t"}[false, true, false]"""
 
-    val items = ir.read(Iterator(line))
+    val items = PyBridge.read(ir, Iterator(line))
     assert(items.length == 1)
     val item = items.head
     assert(item.clicks.length == 3)
@@ -71,7 +73,7 @@ class DBNSuite extends SharedSparkContext {
   test("compare results vs python clickmodels") {
     val file = Source.fromURL(getClass.getResource("/dbn.data"))
     val ir = new InputReader(1, 20, true)
-    val sessions = ir.read(file.getLines())
+    val sessions = PyBridge.read(ir, file.getLines())
     val config = ir.config(0.5D, 1)
     val model = new DbnModel(0.9D, config)
     val urlRelevances = model.train(sessions)
@@ -265,5 +267,58 @@ class DBNSuite extends SharedSparkContext {
     )).collect()
     val expected = pairs.groupBy(_._1).map { x => Math.min(x._2.toSet.size, 20) }.sum
     assert(res.length == expected)
+  }
+
+  // Helpers to compare python impl
+  private object PyBridge {
+    private def parseJsonBooleanArray(json: String): Array[Boolean] = {
+      JsonMethods.parse(json) match {
+        case JArray(x: List[Any]) =>
+          if (x.forall(_.isInstanceOf[JBool])) {
+            x.asInstanceOf[List[JBool]].map(_.values).toArray
+          } else {
+            new Array[Boolean](0)
+          }
+        case _ => new Array[Boolean](0)
+      }
+    }
+
+    private def parseJsonStringArray(json: String): Array[String] = {
+      JsonMethods.parse(json) match {
+        case JArray(x: List[Any]) =>
+          if (x.forall(_.isInstanceOf[JString])) {
+            x.asInstanceOf[List[JString]].map(_.values).toArray
+          } else {
+            new Array[String](0)
+          }
+        case _ => new Array[String](0)
+      }
+    }
+
+    val PIECE_HASH_DIGEST = 0
+    val PIECE_QUERY = 1
+    val PIECE_REGION = 2
+    val PIECE_INTENT_WEIGHT = 3
+    val PIECE_URLS = 4
+    val PIECE_LAYOUT = 5
+    val PIECE_CLICKS = 6
+
+    // TODO: Ideally dont use this and make session items directly without extra ser/deser overhead
+    // This is primarily for compatability with the input format of python clickmodels library.
+    def read(reader: InputReader, f: Iterator[String]): Seq[SessionItem] = {
+      val sessions = f.flatMap { line =>
+        val pieces = line.split("\t")
+        val query: String = pieces(PIECE_QUERY)
+        val region = pieces(PIECE_REGION)
+        val urls = parseJsonStringArray(pieces(PIECE_URLS))
+        val clicks = parseJsonBooleanArray(pieces(PIECE_CLICKS))
+
+        reader.makeSessionItem(query, region, urls, clicks)
+      }.toSeq
+      // Guarantee we return a materialized collection and not a lazy one
+      // which wont have properly updated our max query/url ids
+      sessions.last
+      sessions
+    }
   }
 }

@@ -19,8 +19,6 @@ import scala.collection.mutable
 import org.apache.spark.sql.{DataFrame, Row, functions => F}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.{types => T}
-import org.json4s.{JArray, JBool, JString}
-import org.json4s.jackson.JsonMethods
 
 class SessionItem(val queryId: Int, val urlIds: Array[Int], val clicks: Array[Boolean])
 class RelevanceResult(val query: String, val region: String, val url: String, val relevance: Double)
@@ -49,30 +47,6 @@ class InputReader(minDocsPerQuery: Int, maxDocsPerQuery: Int, discardNoClicks: B
     })
   }
 
-  private def parseJsonBooleanArray(json: String): Array[Boolean] = {
-    JsonMethods.parse(json) match {
-      case JArray(x: List[Any]) =>
-        if (x.forall(_.isInstanceOf[JBool])) {
-          x.asInstanceOf[List[JBool]].map(_.values).toArray
-        } else {
-          new Array[Boolean](0)
-        }
-      case _ => new Array[Boolean](0)
-    }
-  }
-
-  private def parseJsonStringArray(json: String): Array[String] = {
-    JsonMethods.parse(json) match {
-      case JArray(x: List[Any]) =>
-        if (x.forall(_.isInstanceOf[JString])) {
-          x.asInstanceOf[List[JString]].map(_.values).toArray
-        } else {
-          new Array[String](0)
-        }
-      case _ => new Array[String](0)
-    }
-  }
-
   def makeSessionItem(query: String, region: String, urls: Array[String], clicks: Array[Boolean]): Option[SessionItem] = {
     val n = math.min(maxDocsPerQuery, urls.length)
     val allClicks: Array[Boolean] = if (clicks.length >= n) {
@@ -96,32 +70,6 @@ class InputReader(minDocsPerQuery: Int, maxDocsPerQuery: Int, discardNoClicks: B
     }
   }
 
-  val PIECE_HASH_DIGEST = 0
-  val PIECE_QUERY = 1
-  val PIECE_REGION = 2
-  val PIECE_INTENT_WEIGHT = 3
-  val PIECE_URLS = 4
-  val PIECE_LAYOUT = 5
-  val PIECE_CLICKS = 6
-
-  // TODO: Ideally dont use this and make session items directly without extra ser/deser overhead
-  // This is primarily for compatability with the input format of python clickmodels library.
-  def read(f: Iterator[String]): Seq[SessionItem] = {
-    val sessions = f.flatMap { line =>
-      val pieces = line.split("\t")
-      val query: String = pieces(PIECE_QUERY)
-      val region = pieces(PIECE_REGION)
-      val urls = parseJsonStringArray(pieces(PIECE_URLS))
-      val clicks = parseJsonBooleanArray(pieces(PIECE_CLICKS))
-
-      makeSessionItem(query, region, urls, clicks)
-    }.toSeq
-    // Guarantee we return a materialized collection and not a lazy one
-    // which wont have properly updated our max query/url ids
-    sessions.last
-    sessions
-  }
-
   def toRelevances(urlRelevances: Array[Array[UrlRel]]): Seq[RelevanceResult] = {
     val queryToUrlIdToUrl = queryIdToUrlToIdMap.map { case (queryId, urlToId) =>
       (queryId, urlToId.map(_.swap))
@@ -137,7 +85,6 @@ class InputReader(minDocsPerQuery: Int, maxDocsPerQuery: Int, discardNoClicks: B
       }
     }
   }
-
 
   def config(defaultRel: Double, maxIterations: Int): Config = {
     val maxUrlIds: Array[Int] = (0 until nextQueryId).map { queryId =>
