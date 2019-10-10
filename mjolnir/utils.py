@@ -1,11 +1,11 @@
 from contextlib import contextmanager
+import io
 import os
 import random
 import re
 import shutil
 import subprocess
 import tempfile
-import urllib.parse
 
 
 def temp_dir():
@@ -52,12 +52,19 @@ def multi_with(f):
 
 
 @contextmanager
-def as_output_file(path, mode='w'):
+def as_output_file(path, mode='w', overwrite=False):
     if path[:7] == 'hdfs://':
         f = tempfile.NamedTemporaryFile(dir=temp_dir(), mode=mode)
         yield f
         f.flush()
-        subprocess.check_call(['hdfs', 'dfs', '-copyFromLocal', f.name, path])
+        # Make the directory if it doesn't already exist
+        subprocess.check_call(['hdfs', 'dfs', '-mkdir', '-p', os.path.dirname(path)])
+        # Copy our local data into it
+        put_cmd = ['hdfs', 'dfs', '-put']
+        if overwrite:
+            put_cmd.append('-f')
+        put_cmd += [f.name, path]
+        subprocess.check_call(put_cmd)
     else:
         if path[:len("file:/")] == "file:/":
             path = path[len("file:"):]
@@ -124,10 +131,11 @@ def hdfs_rmdir(path):
 @contextmanager
 def hdfs_open_read(path):
     if path[:7] == 'hdfs://':
-        parts = urllib.parse.urlparse(path)
-        path = os.path.join('/mnt/hdfs', parts.path[1:])
-    with open(path, 'r') as f:
-        yield f
+        content_bytes = subprocess.check_output(['hdfs', 'dfs', '-text', path])
+        yield io.StringIO(content_bytes.decode('utf8'))
+    else:
+        with open(path, 'r') as f:
+            yield f
 
 
 def explode_ltr_model_definition(definition):
