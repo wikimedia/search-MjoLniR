@@ -10,8 +10,8 @@ import mjolnir.kafka.client
 import mjolnir.spark
 import mjolnir.utils
 from pyspark.accumulators import AccumulatorParam
-from pyspark.ml.linalg import Vectors
-from pyspark.sql import functions as F
+from pyspark.ml.linalg import Vectors, VectorUDT
+from pyspark.sql import functions as F, types as T
 import random
 import requests
 
@@ -328,16 +328,18 @@ def collect_from_ltr_plugin_and_kafka(df, brokers, model, feature_names_accu, in
         for hit_page_id, features in extract_ltr_log_feature_values(response, feature_names_accu):
             yield [meta['wikiid'], meta['query'], hit_page_id, features]
 
-    return (
-        mjolnir.kafka.client.msearch(
-            df.groupBy('wikiid', 'query').agg(F.collect_set('hit_page_id').alias('hit_page_ids')),
-            client_config=brokers,
-            meta_keys=['wikiid', 'query'],
-            create_es_query=lambda row: log_query.make_msearch(row, indices),
-            handle_response=kafka_handle_response)
-        .toDF(['wikiid', 'query', 'hit_page_id', 'features'])
+    rdd = mjolnir.kafka.client.msearch(
+        df.groupBy('wikiid', 'query').agg(F.collect_set('hit_page_id').alias('hit_page_ids')),
+        client_config=brokers,
+        meta_keys=['wikiid', 'query'],
+        create_es_query=lambda row: log_query.make_msearch(row, indices),
+        handle_response=kafka_handle_response)
+
+    return df.sql_ctx.createDataFrame(rdd, T.StructType([
+        df.schema['wikiid'], df.schema['query'], df.schema['hit_page_id'],
+        T.StructField('features', VectorUDT(), nullable=False)
         # We could have gotten duplicate data from kafka. Clean them up.
-        .drop_duplicates(['wikiid', 'query', 'hit_page_id']))
+    ])).drop_duplicates(['wikiid', 'query', 'hit_page_id'])
 
 
 def collect(df, model, url_list=None, brokers=None, indices=None, session_factory=requests.Session):
