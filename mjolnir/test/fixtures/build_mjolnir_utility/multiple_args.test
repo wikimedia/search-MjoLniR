@@ -1,7 +1,0 @@
-mjolnir_utility_path: venv/bin/mjolnir-utilities.py
-mjolnir_utility: data_pipeline
-cmd_args:
-    foo:
-        - bar
-        - baz
-
