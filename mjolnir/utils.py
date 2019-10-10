@@ -1,4 +1,4 @@
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 import io
 import os
 import random
@@ -15,40 +15,6 @@ def temp_dir():
         dirs = os.environ['LOCAL_DIRS'].split(',')
         return random.choice(dirs)
     return None
-
-
-def multi_with(f):
-    @contextmanager
-    def manager(inputs, *args, **kwargs):
-        def make_child(data):
-            with f(data, *args, **kwargs) as inner:
-                yield inner
-
-        # children list keeps the children alive until the end of the function.
-        # python will exit the with statements above when cleaning up this list.
-        try:
-            children = []
-            output = []
-            for data in inputs:
-                child = make_child(data)
-                children.append(child)
-                output.append(child.send(None))
-            yield output
-        finally:
-            errors = []
-            for child in children:
-                try:
-                    child.send(None)
-                except StopIteration:
-                    pass
-                except Exception as e:
-                    errors.append(e)
-                else:
-                    errors.append(Exception("Expected StopIteration"))
-            if errors:
-                raise errors[0]
-
-    return manager
 
 
 @contextmanager
@@ -73,7 +39,7 @@ def as_output_file(path, mode='w', overwrite=False):
 
 
 @contextmanager
-def as_local_path(path, with_query=False):
+def as_local_path(path):
     if path[0] == '/':
         yield path
     elif path[:len("file:/")] == "file:/":
@@ -82,21 +48,19 @@ def as_local_path(path, with_query=False):
         with tempfile.NamedTemporaryFile(dir=temp_dir()) as local:
             os.unlink(local.name)
             subprocess.check_call(['hdfs', 'dfs', '-copyToLocal', path, local.name])
-            if with_query:
-                try:
-                    subprocess.check_call(['hdfs', 'dfs', '-copyToLocal', path + ".query", local.name + ".query"])
-                    yield local.name
-                finally:
-                    try:
-                        os.unlink(local.name + ".query")
-                    except OSError:
-                        pass
-            else:
-                yield local.name
+            yield local.name
 
 
-as_local_paths = multi_with(as_local_path)
-as_output_files = multi_with(as_output_file)
+@contextmanager
+def as_local_paths(paths):
+    with ExitStack() as stack:
+        yield [stack.enter_context(as_local_path(path)) for path in paths]
+
+
+@contextmanager
+def as_output_files(paths):
+    with ExitStack() as stack:
+        yield [stack.enter_context(as_output_file(path)) for path in paths]
 
 
 def hdfs_mkdir(path):
