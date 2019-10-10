@@ -1,1 +1,2 @@
 include LICENSE README.rst
+include mjolnir/py.typed
