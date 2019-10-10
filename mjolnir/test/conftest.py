@@ -75,8 +75,7 @@ def spark():
         .config('spark.jars.packages', ','.join([
             # SNAPSHOT to allow loading of binary dmatrix in distributed training
             'ml.dmlc:xgboost4j-spark:0.8-wmf-2-SNAPSHOT',
-            'sramirez:spark-infotheoretic-feature-selection:1.4.4',
-            'sramirez:spark-MDLP-discretization:1.4.1']))
+            'sramirez:spark-infotheoretic-feature-selection:1.4.4']))
         # By default spark will shuffle to 200 partitions, which is
         # way too many for our small test cases. This cuts execution
         # time of the tests in half.

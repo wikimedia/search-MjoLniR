@@ -3,9 +3,10 @@ from __future__ import absolute_import
 import numpy as np
 import mjolnir.spark
 from pyspark import SparkContext
-from pyspark.ml.feature import QuantileDiscretizer
+from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.linalg import Vectors, VectorUDT
-from pyspark.sql import functions as F
+from pyspark.ml.wrapper import JavaParams
+from pyspark.sql import DataFrame, functions as F
 import pyspark.sql.types
 
 
@@ -77,19 +78,36 @@ def explode_features(df, features=None):
     return df.select('*', *cols)
 
 
-def quantiles(df, input_col):
-    try:
-        qds = QuantileDiscretizer(
-            # 254 is used so the 255th can be inf
-            numBuckets=254, inputCol=input_col, outputCol='bucketed',
-            relativeError=1./2550, handleInvalid='error')
-        return qds.fit(df).getSplits()
-    except Exception as e:
-        print(e)
-        raise
+def _bucketize(df, input_cols):
+    def j_str_arr(arr):
+        gateway = SparkContext._gateway
+        j_str = gateway.jvm.java.lang.String
+        j_arr = gateway.new_array(j_str, len(arr))
+        for i, val in enumerate(arr):
+            j_arr[i] = val
+        return j_arr
+
+    output_cols = ['{}-bucketed'.format(x) for x in input_cols]
+    # Sadly the multi-col versions are only in scala, pyspark doesn't
+    # have them yet.
+    j_bucketizer = (
+        JavaParams._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer")
+        .setInputCols(j_str_arr(input_cols))
+        .setOutputCols(j_str_arr(output_cols))
+        .setNumBuckets(254)
+        .setRelativeError(1/2550)
+        .setHandleInvalid('error')
+        .fit(df._jdf))
+    j_df_bucketized = j_bucketizer.transform(df._jdf)
+    df_bucketized = DataFrame(j_df_bucketized, df.sql_ctx).drop(*input_cols)
+    # Now we need to assemble the bucketized values into vector
+    # form for the feature selector to work with.
+    assembler = VectorAssembler(
+            inputCols=output_cols, outputCol='features')
+    return assembler.transform(df_bucketized).drop(*output_cols)
 
 
-def select_features(sc, df, all_features, n_features, pool, n_partitions=None, algo='mrmr'):
+def select_features(sc, df, all_features, n_features, n_partitions=None, algo='mrmr'):
     """Select a set of features from a dataframe
 
     Parameters
@@ -104,7 +122,6 @@ def select_features(sc, df, all_features, n_features, pool, n_partitions=None, a
         stored in the 'features' column vector.
     n_features : int
         The number of features to select
-    pool : multiprocessing.dummy.Pool
     algo : str
         The algorithm to use in InfoThSelector
 
@@ -122,32 +139,12 @@ def select_features(sc, df, all_features, n_features, pool, n_partitions=None, a
         features_per_partition = 3
         n_partitions = int(len(all_features)/features_per_partition)
 
-    # InfoThSelector expects a double
-    df = df.select(F.col('label').cast('double').alias('label'), 'features', *all_features)
-    # TODO: QuantileDiscretizer in spark 2.2 can do multiple columns
-    # at once instead of mapping over the list of features.
-    df_quant = df.coalesce(10)
-    quants = pool.map(lambda f: quantiles(df_quant, f), all_features)
-    max_bin = max(len(x) for x in quants)
-    # Build up an array that indicates the split positions
-    # for the discretizer
-    j_quants = SparkContext._gateway.new_array(
-        sc._jvm.float, len(quants), max_bin)
-    for i, q in enumerate(quants):
-        for j, value in enumerate(q):
-            j_quants[i][j] = value
-        for j in range(max_bin - len(q)):
-            j_quants[i][j] = float('inf')
-
-    # Use this discretizer instead of bucketizer returned by
-    # QuantileDiscretizer because it does all features together as a vector
-    # which we need for InfoThSelector. Could potentially replace with
-    # QuantileDiscretizer multi-column and vector assembler in spark 2.2
-    discretizer = (
-        sc._jvm.org.apache.spark.ml.feature.DiscretizerModel("???", j_quants)
-        .setInputCol("features")
-        .setOutputCol("features"))
-    j_df_discretized = discretizer.transform(df._jdf)
+    # InfoThSelector expects a double. We expect our input to have
+    # each feature as a separate column.
+    df = df.select(F.col('label').cast('double').alias('label'), *all_features)
+    # Features must be separate columns for the bucketizing. Once bucketized
+    # the features vector is reassembled.
+    df_bucketized = _bucketize(df, all_features)
 
     selector = (
         sc._jvm.org.apache.spark.ml.feature.InfoThSelector()
@@ -159,6 +156,6 @@ def select_features(sc, df, all_features, n_features, pool, n_partitions=None, a
         .setNPartitions(n_partitions)
         .setNumTopFeatures(n_features)
         .setFeaturesCol("features"))
-    selector_model = selector.fit(j_df_discretized)
+    selector_model = selector.fit(df_bucketized._jdf)
     selected_features = list(selector_model.selectedFeatures())
     return [all_features[i] for i in selected_features]
