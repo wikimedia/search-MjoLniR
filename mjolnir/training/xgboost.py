@@ -1,77 +1,18 @@
-from __future__ import absolute_import
-import hyperopt
-import mjolnir.spark
-import mjolnir.training.hyperopt
-from mjolnir.training.tuning import make_cv_objective, ModelSelection
-import numpy as np
-import py4j
-import pyspark
-import pyspark.sql
-from pyspark.sql import functions as F
+from collections import defaultdict
+from functools import partial
 import tempfile
+from typing import cast, Any, Callable, Dict, List, Mapping, Optional
+
+import hyperopt
+import numpy as np
+from pyspark.sql import SparkSession
+import xgboost as xgb
+
+from mjolnir.training.tuning import make_cv_objective, ModelSelection
+from mjolnir.utils import as_local_path, as_local_paths, as_output_file
 
 
-def prep_training(df, num_partitions=None):
-    """Prepare a dataframe for training
-
-    This is no longer used for training. It can stlil be used to run predictions
-    or evaluations on a model. Training uses make_fold utility now.
-
-    Ranking models in XGBoost require rows for the same query to be provided
-    consequtively within a single partition. It additionally requires a
-    groupData parameter that indicates the number of consequtive items per-query
-    per-partition. The resulting dataframe must *not* be changed between here
-    and training/evaluation or there is a risk of invalidating the groupData.
-    Additionally when training the model xgboost4j-spark must be provided a
-    number of workers equal to the number of partitions used here, or it will
-    repartition the data and invalidate the groupData.
-
-    Repartition by unique queries to bring all rows for a single query within a
-    single partition, sort within partitions to make the rows for same query
-    consecutive, and then count the number of consequtive items.
-
-    Parameters
-    ----------
-    df : pyspark.sql.DataFrame
-        DataFrame to be trained/evaluated with xgboost
-    num_partitions : int
-        Number of partitions to create. This must be equal to the number of
-        executors that will be used to train a model. For model evaluation this
-        can be anything. If none then the number of partitions will match df.
-        (Default: None)
-
-    Returns
-    -------
-    pyspark.sql.DataFrame
-        Dataframe repartitioned and sorted into query groups. The dataframe is
-        additionally cached and must be unpersisted when no longer necessary
-    py4j.java_gateway.JavaObject
-        group information for xgboost groupData parameter. scala type
-        is Seq[Seq[Int]].
-    """
-    mjolnir.spark.assert_columns(df, ['label', 'features', 'wikiid', 'query'])
-
-    if num_partitions is None:
-        num_partitions = df.rdd.getNumPartitions()
-
-    df_grouped = (
-        # TODO: Should probably create queryId and normQueryId columns early in
-        # the pipeline so various tasks can accept a single column to work with.
-        df.select('label', 'features', F.concat('wikiid', 'query').alias('queryId'))
-        .repartition(num_partitions, 'queryId')
-        # xgboost ndcg isn't stable if labels of matching predictions are in
-        # different input orders so sort by label too. Sorting labels
-        # ascending is the less generous option, where the worst label comes first.
-        .sortWithinPartitions('wikiid', 'query', F.col('label').asc())
-        .cache())
-
-    j_groups = df._sc._jvm.org.wikimedia.search.mjolnir.PythonUtils.calcQueryGroups(
-        df_grouped._jdf, 'queryId')
-
-    return df_grouped, j_groups
-
-
-def _coerce_params(params):
+def _coerce_params(params: Mapping[str, Any]) -> Dict[str, Any]:
     """Force xgboost parameters into appropriate types
 
     The output from hyperopt is always floats, but some xgboost parameters
@@ -87,27 +28,56 @@ def _coerce_params(params):
     dict
         Input parameters coerced as necessary
     """
+    def identity(x):
+        return x
 
-    types = {
-        'max_depth': int,
-        'max_bin': int,
-        'num_class': int,
-        'silent': int,
-    }
-    retval = params.copy()
-    for (k, val_type) in types.items():
-        if k in params:
-            retval[k] = val_type(params[k])
-    return retval
+    def sloppy_int(x):
+        try:
+            return int(x)
+        except ValueError:
+            pass
+
+        val = float(x)
+        # This could fail for larger numbers due to fp precision, but not
+        # expecting integer values larger than two digits here.
+        if val.is_integer():
+            return int(val)
+        raise ValueError('Not parsable as integer: {}'.format(x))
+
+    types = cast(Dict[str, Callable[[Any], Any]], defaultdict(lambda: identity))
+    types.update({
+        'max_depth': sloppy_int,
+        'max_bin': sloppy_int,
+        'num_class': sloppy_int,
+        'silent': sloppy_int,
+    })
+    return {k: types[k](v) for k, v in params.items()}
 
 
-def train(fold, params, train_matrix=None):
+def train(
+    fold: Mapping[str, str],
+    params: Mapping[str, Any],
+    train_matrix: Optional[str] = None,
+    spark: Optional[SparkSession] = None
+) -> 'XGBoostModel':
     """Train a single xgboost ranking model.
 
-    fold: dict
-        map from split names to list of data partitions
-    params : dict
-        parameters to pass on to xgboost
+    Primary entry point for hyperparameter tuning normalizes
+    parameters and auto detects some values. Actual training is
+    passed on to XGBoostModel.trainWithFiles
+
+    Parameters
+    ----------
+    fold :
+        Map from split name to data path. All provided splits will be
+        evaluated on each boosting iteration.
+    params :
+        parameters to pass on to xgboost training
+    train_matrix :
+        Optional name of training matrix in fold. If not provided will
+        auto-detect to either 'all' or 'train'
+    spark:
+        If provided, train remotely over spark
 
     Returns
     -------
@@ -117,62 +87,133 @@ def train(fold, params, train_matrix=None):
     # hyperparameter tuning may have given us floats where we need
     # ints, so this gets all the types right for Java. Also makes
     # a copy of params so we don't modifying the incoming dict.
+    # TODO: Does python care about this?  Even if not, in the end it seems
+    # reasonable to not pass floats for integer values.
     params = _coerce_params(params)
-    # Histogram doesn't work with distributed training
-    params['tree_method'] = 'hist' if len(fold) == 1 else 'approx'
+
     # TODO: Maybe num_rounds should just be external? But it's easier
     # to do hyperparameter optimization with a consistent dict interface
-    kwargs = {
-        'num_rounds': 100,
-        'early_stopping_round': 0,
-    }
-    if 'num_rounds' in params:
-        kwargs['num_rounds'] = params['num_rounds']
+    kwargs = cast(Dict[str, Any], {
+        'num_boost_round': 100,
+    })
+
+    if 'num_boost_round' in params:
+        kwargs['num_boost_round'] = params['num_boost_round']
         del params['num_rounds']
-    if 'early_stopping_round' in params:
-        kwargs['early_stopping_round'] = params['early_stopping_round']
-        del params['early_stopping_round']
+    if 'early_stopping_rounds' in params:
+        kwargs['early_stopping_rounds'] = params['early_stopping_rounds']
+        del params['early_stopping_rounds']
 
     # Set some sane defaults for ranking tasks
     if 'objective' not in params:
         params['objective'] = 'rank:ndcg'
     if 'eval_metric' not in params:
         params['eval_metric'] = 'ndcg@10'
-
+    # Not really ranking specific, but generally fastest method
+    if 'tree_method' not in params:
+        params['tree_method'] = 'hist'
     # Convenience for some situations, but typically be explicit
     # about the name of the matrix to train against.
     if train_matrix is None:
         train_matrix = "all" if "all" in fold else "train"
 
-    return XGBoostModel.trainWithFiles(fold, train_matrix, params, **kwargs)
+    if spark:
+        return XGBoostModel.trainWithFilesRemote(spark, fold, train_matrix, params, **kwargs)
+    else:
+        return XGBoostModel.trainWithFiles(fold, train_matrix, params, **kwargs)
 
 
-class XGBoostSummary(object):
-    def __init__(self, j_xgb_summary):
-        self._j_xgb_summary = j_xgb_summary
-
-    def train(self):
-        return list(self._j_xgb_summary.trainObjectiveHistory())
-
-    def test(self):
-        if self._j_xgb_summary.testObjectiveHistory().isEmpty():
-            return None
-        else:
-            return list(self._j_xgb_summary.testObjectiveHistory().get())
+# Top level: matrix name
+# Second level: metric name
+# Inner list: stringified per-iteration metric value
+EvalsResult = Mapping[str, Mapping[str, List[str]]]
 
 
-class XGBoostModel(object):
-    def __init__(self, j_xgb_model):
-        self._j_xgb_model = j_xgb_model
-        try:
-            self.summary = XGBoostSummary(self._j_xgb_model.summary())
-        except py4j.protocol.Py4JJavaError:
-            self.summary = None
+class XGBoostBooster(object):
+    """Wrapper for xgb.Booster usage in mjolnir
+
+    Wraps the booster to distinguish what we have after training,
+    the XGBoostModel, from what we write to disk, which is only the
+    booster. Would be better if there was a clean way to wrap all
+    the data up an serialize together, while working with xgboost's
+    c++ methods that expect file paths.
+    """
+    def __init__(self, booster: xgb.Booster) -> None:
+        self.booster = booster
 
     @staticmethod
-    def trainWithFiles(fold, train_matrix, params, num_rounds=100,
-                       early_stopping_round=0):
-        """Wrapper around scala XGBoostModel.trainWithRDD
+    def loadBoosterFromHadoopFile(path: str) -> 'XGBoostBooster':
+        with as_local_path(path) as local_path:
+            return XGBoostBooster.loadBoosterFromLocalFile(local_path)
+
+    @staticmethod
+    def loadBoosterFromLocalFile(path: str) -> 'XGBoostBooster':
+        booster = xgb.Booster.load_model(path)
+        # TODO: Not having the training parameters or the evaluation metrics
+        # almost makes this a different thing...
+        return XGBoostBooster(booster)
+
+    def saveBoosterAsHadoopFile(self, path: str):
+        with as_output_file(path) as f:
+            self.saveBoosterAsLocalFile(f.name)
+
+    def saveBoosterAsLocalFile(self, path: str):
+        # TODO: This doesn't save any metrics, should it?
+        self.booster.save_model(path)
+
+
+class XGBoostModel(XGBoostBooster):
+    """xgboost booster along with train-time metrics
+
+    TODO: Take XGBoostBooster as init arg instead of xgb.Booster?
+    """
+
+    def __init__(
+        self,
+        booster: xgb.Booster,
+        evals_result: EvalsResult,
+        params: Mapping[str, Any]
+    ) -> None:
+        super().__init__(booster)
+        self.evals_result = evals_result
+        self.params = params
+
+    @staticmethod
+    def trainWithFilesRemote(
+        spark: SparkSession,
+        fold: Mapping[str, str],
+        train_matrix: str,
+        params: Mapping[str, Any],
+        **kwargs
+    ) -> 'XGBoostModel':
+        """Train model on a single remote spark executor.
+
+        Silly hack to train models inside the yarn cluster. To train multiple
+        models in parallel python threads will need to be used.  Wish pyspark
+        had collectAsync.
+        """
+        nthread = int(spark.conf.get('spark.task.cpus', '1'))
+        if 'nthread' not in params:
+            params = dict(params, nthread=nthread)
+        elif params['nthread'] != nthread:
+            raise Exception("Executors have [{}] cpus but training requested [{}]".format(
+                nthread, params['nthread']))
+
+        return (
+            spark.sparkContext
+            .parallelize([1], 1)
+            .map(lambda x: XGBoostModel.trainWithFiles(fold, train_matrix, params, **kwargs))
+            .collect()[0]
+        )
+
+    @staticmethod
+    def trainWithFiles(
+        fold: Mapping[str, str],
+        train_matrix: str,
+        params: Mapping[str, Any],
+        **kwargs
+    ) -> 'XGBoostModel':
+        """Wrapper around xgb.train
 
         This intentionally forwards to trainWithRDD, rather than
         trainWithDataFrame, as the underlying method currently prevents using
@@ -180,53 +221,26 @@ class XGBoostModel(object):
 
         Parameters
         ----------
-        fold: dict
-            map from string name to list of data files for the split
+        fold :
+            Map from split name to data path. All provided splits will be
+            evaluated on each boosting iteration.
         train_matrix: str
             name of split in fold to train against
         params : dict
             XGBoost training parameters
-        num_rounds : int
-            Maximum number of boosting rounds to perform
-        early_stopping_round : int, optional
-            Quit training after this many rounds with no improvement in
-            test set eval. 0 disables behaviour. (Default: 0)
 
         Returns
         -------
         mjolnir.training.xgboost.XGBoostModel
             trained xgboost ranking model
         """
-        sc = pyspark.SparkContext.getOrCreate()
-        # Type is Seq[Map[String, String]]
-        j_fold = sc._jvm.PythonUtils.toSeq([sc._jvm.PythonUtils.toScalaMap(x) for x in fold])
-        # Type is Map[String, Any]
-        j_params = sc._jvm.scala.collection.immutable.HashMap()
-        for k, v in params.items():
-            j_params = j_params.updated(k, v)
-
-        j_xgb_model = sc._jvm.org.wikimedia.search.mjolnir.MlrXGBoost.trainWithFiles(
-            sc._jsc, j_fold, train_matrix, j_params, num_rounds,
-            early_stopping_round)
-        return XGBoostModel(j_xgb_model)
-
-    def transform(self, df_test):
-        """Generate predictions and attach to returned df_test
-
-        Parameters
-        ----------
-        df_test : pyspark.sql.DataFrame
-            A dataframe containing feature vectors to run predictions
-            against. The features must use the same column name as used
-            when training.
-
-        Returns
-        -------
-        pyspark.sql.DataFrame
-            The original dataframe with an additional 'prediction' column
-        """
-        j_df = self._j_xgb_model.transform(df_test._jdf)
-        return pyspark.sql.DataFrame(j_df, df_test.sql_ctx)
+        with as_local_paths(fold.values()) as local_paths:
+            matrices = {name: xgb.DMatrix(path) for name, path in zip(fold.keys(), local_paths)}
+            dtrain = matrices[train_matrix]
+            evallist = [(dmat, name) for name, dmat in matrices.items()]
+            metrics = cast(Mapping, {})
+            booster = xgb.train(params, dtrain, evals=evallist, evals_result=metrics, **kwargs)
+            return XGBoostModel(booster, metrics, params)
 
     def dump(self, features=None, with_stats=False, format="json"):
         """Dumps the xgboost model
@@ -256,78 +270,34 @@ class XGBoostModel(object):
             fmap_f.flush()
             fmap_path = fmap_f.name
         else:
-            fmap_path = None
-        # returns an Array[String] from scala, where each element of the array
-        # is a json string representing a single tree.
-        j_dump = self._j_xgb_model.booster().getModelDump(fmap_path, with_stats, format)
-        return '[' + ','.join(list(j_dump)) + ']'
+            fmap_path = ''
 
-    def eval(self, df_test, j_groups=None, feature_col='features', label_col='label'):
-        """Evaluate the model against a dataframe
-
-        Evaluates the model using the eval_metric that was provided when
-        training the model.
-
-        Parameters
-        ----------
-        df_test : pyspark.sql.DataFrame
-            A dataframe containing feature vectors and labels to evaluate
-            prediction accuracy against.
-        j_groups : py4j.java_gateway.JavaObject, optional
-            A Seq[Seq[Int]] indicating the groups (queries) within the
-            dataframe partitions. If not provided df_test will be repartitioned
-            and sorted so this can be calculated. (Default: None)
-        feature_col : string, optional
-            The dataframe column holding feature vectors. (Default: features)
-        label_col : string, optional
-            The dataframe column holding labels. (Default: label)
-
-        Returns
-        -------
-        float
-            Metric representing the prediction accuracy of the model.
-        """
-        if j_groups is None:
-            num_partitions = df_test.rdd.getNumPartitions()
-            df_grouped, j_groups = prep_training(df_test, num_partitions)
-        else:
-            assert df_test.rdd.getNumPartitions() == j_groups.length()
-            df_grouped = df_test
-
-        j_rdd = df_test._sc._jvm.org.wikimedia.search.mjolnir.PythonUtils.toLabeledPoints(
-            df_grouped._jdf, feature_col, label_col, True)
-        score = self._j_xgb_model.eval(j_rdd, 'test', None, 0, False, j_groups)
-        return float(score.split('=')[1].strip())
-
-    def saveModelAsHadoopFile(self, sc, path):
-        j_sc = sc._jvm.org.apache.spark.api.java.JavaSparkContext.toSparkContext(sc._jsc)
-        self._j_xgb_model.saveModelAsHadoopFile(path, j_sc)
-
-    def saveModelAsLocalFile(self, path):
-        self._j_xgb_model.booster().saveModel(path)
-
-    @staticmethod
-    def loadModelFromHadoopFile(sc, path):
-        j_sc = sc._jvm.org.apache.spark.api.java.JavaSparkContext.toSparkContext(sc._jsc)
-        j_xgb_model = sc._jvm.ml.dmlc.xgboost4j.scala.spark.XGBoost.loadModelFromHadoopFile(
-            path, j_sc)
-        return XGBoostModel(j_xgb_model)
-
-    @staticmethod
-    def loadModelFromLocalFile(sc, path):
-        j_xgb_booster = sc._jvm.ml.dmlc.xgboost4j.scala.XGBoost.loadModel(path)
-        j_xgb_model = sc._jvm.ml.dmlc.xgboost4j.scala.spark.XGBoostRegressionModel(j_xgb_booster)
-        return XGBoostModel(j_xgb_model)
+        trees = self.booster.get_dump(fmap_path, with_stats, dump_format='json')
+        # For whatever reason we get a json line per tree. Turn that into an array
+        # so we have a single valid json string.
+        return '[' + ','.join(trees) + ']'
 
 
-def cv_transformer(model, params):
+def cv_transformer(model: XGBoostModel, params: Mapping[str, Any]):
+    """Report model metrics in format expected by model selection"""
+    metric = params['eval_metric']
     return {
-        "train": model.summary.train(),
-        "test": model.summary.test(),
+        'train': model.evals_result['train'][metric][-1],
+        'test': model.evals_result['test'][metric][-1],
+        'metrics': model.evals_result,
     }
 
 
-def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final_num_trees=500, iterations=150):
+def tune(
+    folds: List[Mapping[str, str]],
+    stats: Dict,
+    train_matrix: str,
+    num_cv_jobs: int = 5,
+    initial_num_trees: int = 100,
+    final_num_trees: int = 500,
+    iterations: int = 150,
+    spark: Optional[SparkSession] = None
+):
     """Find appropriate hyperparameters for training df
 
     This is far from perfect, hyperparameter tuning is a bit of a black art
@@ -464,6 +434,8 @@ def tune(folds, stats, train_matrix, num_cv_jobs=5, initial_num_trees=100, final
     }
 
     tuner = ModelSelection(space, tune_spaces)
-    train_func = make_cv_objective(train, folds, num_cv_jobs, cv_transformer, train_matrix=train_matrix)
+    train_func = make_cv_objective(
+        partial(train, spark=spark), folds, num_cv_jobs,
+        cv_transformer, train_matrix=train_matrix)
     trials_pool = tuner.build_pool(folds, num_cv_jobs)
     return tuner(train_func, trials_pool)

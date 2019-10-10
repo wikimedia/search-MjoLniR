@@ -4,25 +4,6 @@ from pyspark.ml.linalg import Vectors
 import pytest
 
 
-@pytest.fixture()
-def df_prep_training(spark_context):
-    rdd1 = spark_context.parallelize([
-        ('foowiki', 'foo', 4, Vectors.dense([1., 2.])),
-        ('foowiki', 'foo', 2, Vectors.dense([2., 1.])),
-        ('barwiki', 'bar', 4, Vectors.dense([0., 1.])),
-    ], 1)
-    rdd2 = spark_context.parallelize([
-        ('foowiki', 'bar', 1, Vectors.dense([2., 1.])),
-        ('barwiki', 'baz', 2, Vectors.dense([2., 0.])),
-    ], 1)
-    # union together two single partition rdd's to guarnatee
-    # shape and content of output partitions
-    return (
-        spark_context
-        .union([rdd1, rdd2])
-        .toDF(['wikiid', 'query', 'label', 'features']))
-
-
 def _assert_seq_of_seq(expected, j_seqs):
     "Assert Seq[Seq[_]] matches expected"
     assert len(expected) == j_seqs.length()
@@ -30,30 +11,6 @@ def _assert_seq_of_seq(expected, j_seqs):
         j_seq = j_seqs.apply(i)
         group = [j_seq.apply(j) for j in range(j_seq.length())]
         assert expect == group
-
-
-def test_prep_training_no_params(df_prep_training):
-    #  Double check, should always be true
-    assert 2 == df_prep_training.rdd.getNumPartitions()
-    df_grouped, j_groups = mjolnir.training.xgboost.prep_training(df_prep_training)
-
-    # Makes some very bold assumptions about what spark did behind the scene
-    # when repartitioning...at least spark is very deterministic.
-    # with no params number of partitions should be unchanged
-    # TODO: This doesn't seem right, shouldn't it be [2,1], [1,1]?
-    expected = [[1, 2], [1, 1]]
-    assert len(expected) == df_grouped.rdd.getNumPartitions()
-    _assert_seq_of_seq(expected, j_groups)
-
-
-def test_prep_training_w_num_workers(df_prep_training):
-    num_workers = 1
-    df_grouped, j_groups = mjolnir.training.xgboost.prep_training(
-        df_prep_training, num_workers)
-    expected = [[1, 1, 1, 2]]
-    assert num_workers == df_grouped.rdd.getNumPartitions()
-    assert len(expected) == num_workers
-    _assert_seq_of_seq(expected, j_groups)
 
 
 @pytest.fixture()
@@ -99,14 +56,9 @@ def df_train(spark_context):
 
 def test_train_minimum_params(df_train, folds_a):
     params = {'num_rounds': 1}
-    # TODO: Anything > 1 worker can easily get stuck, as a system
-    # with 2 cpus will only spawn a single executor.
     model = mjolnir.training.xgboost.train(folds_a[0], params, 'train')
 
-    # What else can we practically assert?
-    df_transformed = model.transform(df_train)
-    assert 'prediction' in df_transformed.columns
-    assert 0.59 == pytest.approx(model.eval(df_train), abs=0.01)
-
+    assert isinstance(model, mjolnir.training.xgboost.XGBoostModel)
     # make sure train didn't clobber the incoming params
+    assert len(params) == 1
     assert params['num_rounds'] == 1

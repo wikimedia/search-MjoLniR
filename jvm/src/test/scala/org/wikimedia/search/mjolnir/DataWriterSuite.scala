@@ -34,31 +34,26 @@ class DataWriterSuite extends SharedSparkContext {
 
   test("Write out various standard fold configs as text files") {
     forAll(Table(
-      ("num_workers", "fold_col", "expectedFolds", "expectedSplits"),
-      (1, None, 1, Set("all")),
-      (3, None, 1, Set("all")),
-      (1, Some("fold"), numFolds, Set("train", "test")),
-      (3, Some("fold"), numFolds, Set("train", "test"))
-    )) { (numWorkers, foldCol, expectedFolds, expectedSplits) =>
+      ("fold_col", "expectedFolds", "expectedSplits"),
+      (None, 1, Set("all")),
+      (Some("fold"), numFolds, Set("train", "test"))
+    )) { (foldCol, numFolds, expectedSplits) =>
       val testDir = Files.createTempDirectory("mjolnir-test")
       try {
         val df = makeData()
-        val pattern = s"$testDir/%s-fold-%s-partition-%d"
+        val pattern = s"$testDir/%s-fold-%s"
         val writer = new DataWriter(spark.sparkContext, sparse = false)
-        val folds = writer.write(df, numWorkers, pattern, foldCol)
+        val folds = writer.write(df, pattern, foldCol, numFolds)
 
-        assert(folds.length == expectedFolds)
+        assert(folds.length == numFolds)
         folds.foreach { fold =>
-          assert(fold.length == numWorkers)
-          fold.foreach { partition =>
-            // Items in partition but not expected
-            assert(partition.keySet.diff(expectedSplits).isEmpty)
-            // Items expected but not in partition
-            assert(expectedSplits.diff(partition.keySet).isEmpty)
-            partition.values.foreach { path =>
-              // Paths should actually exist
-              assert(Files.exists(Paths.get(path.substring("file:".length))))
-            }
+          // Items in partition but not expected
+          assert(fold.keySet.diff(expectedSplits).isEmpty)
+          // Items expected but not in partition
+          assert(expectedSplits.diff(fold.keySet).isEmpty)
+          fold.values.foreach { path =>
+            // Paths should actually exist
+            assert(Files.exists(Paths.get(path.substring("file:".length))))
           }
         }
       } finally {

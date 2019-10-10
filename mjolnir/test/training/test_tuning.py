@@ -35,14 +35,14 @@ def test_split(spark):
 def run_model_selection(tune_stages, f=None, num_cv_jobs=1, **kwargs):
     stats = {'called': 0}
     initial_space = {'foo': 10, 'bar': 20, 'baz': 0}
-    folds = [[1, 2, 3], [4, 5, 6]]
+    folds = [3, 6]
     if not f:
         def f(fold, params, **kwargs):
             stats['called'] += 1
             factor = 1.0 / (6 * params['foo'])
             return {
-                'test': [v * factor * 0.9 for v in fold],
-                'train': [v * factor for v in fold],
+                'test': fold * factor * 0.9,
+                'train': fold * factor,
             }
 
     tuner = mjolnir.training.tuning.ModelSelection(initial_space, tune_stages)
@@ -97,26 +97,21 @@ def test_ModelSelection_kwargs_pass_thru():
 
 
 @pytest.mark.parametrize(
-    "num_folds, num_workers, num_cv_jobs, expect_pool", [
-        (1,           1,           1,       False),
-        (1,           1,           2,       True),
+    "num_folds, num_cv_jobs, expect_pool", [
+        (1,           1,       False),
+        (1,           2,       True),
 
-        (3,           1,           1,       False),
-        (3,           1,           5,       False),
-        (3,           1,           6,       True),
+        (3,           1,       False),
+        (3,           5,       True),
+        (3,           6,       True),
 
-        (3,           3,           1,       False),
-        (3,           3,          10,       False),
-        (3,           3,          17,       False),
-        (3,           3,          18,       True),
-
-        (5,           1,           5,       False),
-        (5,           1,           9,       False),
-        (5,           1,          11,       True),
+        (5,           5,       False),
+        (5,           9,       True),
+        (5,          11,       True),
     ])
-def test_ModelSelection_build_pool(num_folds, num_workers, num_cv_jobs, expect_pool):
+def test_ModelSelection_build_pool(num_folds, num_cv_jobs, expect_pool):
     tuner = mjolnir.training.tuning.ModelSelection(None, None)
-    folds = [[1] * num_workers for i in range(num_folds)]
+    folds = [{} for i in range(num_folds)]
     pool = tuner.build_pool(folds, num_cv_jobs)
     assert (pool is not None) == expect_pool
 

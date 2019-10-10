@@ -10,8 +10,8 @@ def test_maximize(folds_b):
         assert 'max_depth' in params
         assert params['num_rounds'] == 50
         return [{
-            'train': [0.80],
-            'test': [0.79],
+            'train': 0.80,
+            'test': 0.79,
         }]
 
     space = {

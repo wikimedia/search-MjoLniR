@@ -116,15 +116,20 @@ def maximize(f, space, max_evals=50, algo=hyperopt.tpe.suggest,
         # For now the only metric is NDCG, and hyperopt is a minimizer
         # so return the negative NDCG. Also makes the bold assumption
         # we had at least two pieces of the fold named 'test' and 'train'
-        loss = [-s['test'][-1] for s in scores]
-        true_loss = [s['train'][-1] - s['test'][-1] for s in scores]
+        try:
+            loss = [-s['test'] for s in scores]
+            true_loss = [s['train'] - s['test'] for s in scores]
+        except TypeError:
+            raise Exception('Bad scores: {}'.format(scores))
+
         return {
             'status': hyperopt.STATUS_OK,
-            'loss': sum(loss) / float(len(loss)),
+            'loss': sum(loss) / len(loss),
             'loss_variance': np.var(loss),
-            'true_loss': sum(true_loss) / float(len(true_loss)),
+            'true_loss': sum(true_loss) / len(true_loss),
             'true_loss_variance': np.var(true_loss),
             'scores': scores,
+            'params': params,
         }
 
     if trials_pool is None:
@@ -135,7 +140,7 @@ def maximize(f, space, max_evals=50, algo=hyperopt.tpe.suggest,
     best = hyperopt.fmin(objective, space, algo=algo,
                          max_evals=max_evals, trials=trials)
     # hyperopt only returns the non-constant parameters in best. It seems
-    # more convenient to return all of them.
+    # more convenient to return all of them.)
     best_merged = space.copy()
     best_merged.update(best)
 

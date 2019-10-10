@@ -11,11 +11,7 @@ requirements = [
     'elasticsearch>=5.0.0,<6.0.0',
     'jsonschema',
     'prometheus_client',
-    # python xgboost is only used for building
-    # binary datasets. Primary usage is from jvm.
-    # The underlying xgboost version needs to stay
-    # consistent or the files won't load.
-    'xgboost<0.80',
+    'xgboost==0.90',
     # hyperopt requires networkx < 2.0, but doesn't say so
     'networkx<2.0',
     # pyspark requirements

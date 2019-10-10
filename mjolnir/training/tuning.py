@@ -3,14 +3,16 @@ Support for choosing model parameters.
 
 Includes dataset splitting, cross validation and model selection
 """
-from __future__ import absolute_import
 from collections import defaultdict, OrderedDict
-import mjolnir.spark
-import py4j.protocol
-from pyspark.sql import functions as F
 import math
 from multiprocessing.dummy import Pool
+
+import py4j.protocol
+from pyspark.sql import functions as F
 import numpy as np
+
+import mjolnir.spark
+import mjolnir.training.hyperopt
 
 
 def split(df, splits, output_column='fold'):
@@ -178,8 +180,9 @@ class ModelSelection(object):
 
     def build_pool(self, folds, num_cv_jobs):
         num_folds = len(folds)
-        num_workers = len(folds[0])
-        trials_pool_size = int(math.floor(num_cv_jobs / (num_workers * num_folds)))
+        # ceil ensures a pool of num_cv_jobs size can stay
+        # full when running trials in parallel.
+        trials_pool_size = int(math.ceil(num_cv_jobs / num_folds))
         if trials_pool_size > 1:
             return Pool(trials_pool_size)
         else:

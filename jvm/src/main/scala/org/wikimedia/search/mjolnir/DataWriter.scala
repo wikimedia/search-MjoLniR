@@ -1,23 +1,68 @@
 package org.wikimedia.search.mjolnir
 
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 import java.nio.charset.StandardCharsets
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path => HDFSPath}
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, Row}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
+import scala.util.control.NonFatal
+
+
+/**
+  * Makes hadoop configuration serializable as a broadcast variable
+  */
+private class SerializableConfiguration(@transient var value: Configuration) extends Serializable {
+  private def writeObject(out: ObjectOutputStream): Unit = tryOrIOException {
+    out.defaultWriteObject()
+    value.write(out)
+  }
+
+  private def readObject(in: ObjectInputStream): Unit = tryOrIOException {
+    value = new Configuration(false)
+    value.readFields(in)
+  }
+
+  private def tryOrIOException[T](block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: IOException => throw e
+      case NonFatal(e) => throw new IOException(e)
+    }
+  }
+}
+
+/**
+ * counts the number of sequentially unique values it has seen.
+ */
+private class UniqueValueCounter[T]() {
+  private var prev: T = _
+  private var seen = 0
+
+  def apply(value: T): Int = {
+    if (value != prev) {
+      prev = value
+      seen += 1
+    }
+    seen
+  }
+}
 
 /**
   * Write out a mjolnir dataframe from data_pipeline to hdfs as
-  * txt files readable directly by xgboost/lightgbm. While not
-  * explicitly called out in the return values there is a matching
-  * path + ".query" file for each output file containing sequential
-  * query counts needed by xgboost and lightgbm.
+  * txt files readable directly by xgboost and other libsvm based
+  * parsers. Emitted files include the qid: extension used by
+  * xgboost for ranking datasets. Emitted features are 1 indexed,
+  * as some (?) parsers consider the label to be at 0.
   *
   * @param broadcastConfiguration Broadcasted hadoop configuration to access HDFS from executors.
   * @param sparse When true features with a value of zero are not emitted
@@ -30,117 +75,69 @@ class DataWriter(
   // Accepting JavaSparkContext for py4j compatability
   def this(sc: JavaSparkContext, sparse: Boolean) = this(sc.broadcast(new SerializableConfiguration(sc.hadoopConfiguration)), sparse)
 
-  private def asHDFSPath(path: String): HDFSPath = if (path.charAt(0) == '/') {
-    new HDFSPath(s"file://$path")
-  } else {
-    new HDFSPath(path)
-  }
+  private def asHDFSPath(path: String): HDFSPath =
+    if (path.charAt(0) == '/') {
+      new HDFSPath(s"file://$path")
+    } else {
+      new HDFSPath(path)
+    }
 
   // rdd contents for passing between formatPartition and writeOneFold
-  private type OutputRow = (Int, Array[Byte], Array[Byte])
+  private type OutputRow = (Int, Array[Byte])
 
-  // Writes out a single partition of training data. One partition
-  // may contain gigabytes of data so this should do as little work
-  // as possible per-row.
-  private def writeOneFold(
-    pathFormatter: (String, Int) => HDFSPath,
-    config: Array[String]
-  )(partitionId: Int, rows: Iterator[OutputRow]): Iterator[Map[String, String]] = {
-    // .toSet.toVector gives us a unique list, but feels like hax
-    val paths = config.toSet.toVector.map { name: String =>
-      name -> pathFormatter(name, partitionId)
+  @transient lazy private val maybeSparsify =
+    if (sparse) {
+      features: Array[(Double, Int)] => features.filter(_._1 != 0D)
+    } else {
+      features: Array[(Double, Int)] => features
     }
 
-    val writers = paths.map { case (name: String, path: HDFSPath) =>
-      val fs = path.getFileSystem(broadcastConfiguration.value.value)
-      val a = fs.create(path)
-      val b = fs.create(new HDFSPath(path + ".query"))
-      name -> (a, b)
-    }.toMap
-
-    try {
-      for ((fold, line, queryLine) <- rows) {
-        val out = writers(config(fold))
-        out._1.write(line)
-        out._2.write(queryLine)
-      }
-    } finally {
-      writers.values.foreach({ out =>
-        out._1.close()
-        out._2.close()
-      })
+  private def makeLine(label: Int, qid: Int, features: Vector): String = {
+    val prefix = s"$label qid:$qid "
+    // Some (?) parsers consider the label to be index 0, so + 1 the feature index
+    // to make them 1-indexed.
+    val stringifiedFeatures = maybeSparsify(features.toArray.zipWithIndex).map {
+      case (feat, index) => s"${index + 1}:$feat"
     }
-
-    Iterator(paths.map { case (k, v) => k -> v.toString }.toMap)
-  }
-
-  @transient lazy private val maybeSparsify = if (sparse) {
-    { features: Array[(Double, Int)] => features.filter(_._1 != 0D) }
-  } else {
-    { features: Array[(Double, Int)] => features }
-  }
-
-  private def makeLine(features: Vector, label: Int): String =
-    maybeSparsify(features.toArray.zipWithIndex).map {
-      case (feat, index) => s"${index + 1}:$feat";
-    }.mkString(s"$label ", " ", "\n")
-
-  // Counts sequential queries and emits boundaries
-  private def queryCounter(): (String, Option[String]) => String = {
-    var count = 0;
-    { (query: String, nextQuery: Option[String]) =>
-      count += 1
-      if (nextQuery.exists(_.equals(query))) {
-        // next matches, keep the count going
-        ""
-      } else {
-        // next query is different. zero out
-        val out = s"$count\n"
-        count = 0
-        out
-      }
-    }
+    stringifiedFeatures.mkString(prefix, " ", "\n")
   }
 
   @transient lazy private val utf8 = StandardCharsets.UTF_8
 
+  private def foldFromRow(index: Int)(row: Row): Int = row.getLong(index).toInt
+
   private def formatPartition(schema: StructType, foldCol: Option[String])(rows: Iterator[Row]): Iterator[OutputRow] = {
-    val chooseFold = foldCol.map { name =>
-      val index = schema.fieldIndex(name);
-    { row: Row => row.getLong(index).toInt }
-    }.getOrElse({ row: Row => 0 })
+    val chooseFold = foldCol
+      .map(schema.fieldIndex)
+      .map(foldFromRow)
+      .getOrElse({ row: Row => 0 })
 
     val labelIndex = schema.fieldIndex("label")
     val featuresIndex = schema.fieldIndex("features")
     val queryIndex = schema.fieldIndex("query")
-    val makeQueryLine = queryCounter()
-    val it = rows.buffered
-    for (row <- it) yield {
-      val fold = chooseFold(row)
-      val nextQuery = if (it.hasNext) {
-        Some(it.head.getString(queryIndex))
-      } else {
-        None
-      }
+    val qid = new UniqueValueCounter[String]()
 
-      val line = makeLine(row.getAs[Vector](featuresIndex), row.getInt(labelIndex))
-      val queryLine = makeQueryLine(row.getString(queryIndex), nextQuery)
-      (fold, line.getBytes(utf8), queryLine.getBytes(utf8))
+    for (row <- rows) yield {
+      val fold = chooseFold(row)
+      val line = makeLine(
+        row.getInt(labelIndex),
+        qid(row.getString(queryIndex)),
+        row.getAs[Vector](featuresIndex))
+      (fold, line.getBytes(utf8))
     }
   }
 
   // take nullable string and output java map for py4j compatability
-  def write(df: DataFrame, numWorkers: Int, pathFormat: String, foldCol: String): Array[Array[java.util.Map[String, String]]] = {
+  def write(df: DataFrame, pathFormat: String, foldCol: String, numFolds: Int): Array[java.util.Map[String, String]] = {
     //import collection.JavaConverters._
     import collection.JavaConverters.mapAsJavaMapConverter
-    write(df, numWorkers, pathFormat, Option(foldCol)).map(_.map(_.asJava))
+    write(df, pathFormat, Option(foldCol), numFolds).map(_.asJava)
   }
 
   /**
     * @param df         Output from data_pipeline. Must have be repartitioned on query and sorted by query
     *                   within partitions. This should have a large number of partitions or later coalesce
     *                   will be imbalanced.
-    * @param numWorkers The number of partitions each data file will be emitted as
     * @param pathFormat Format for hdfs paths. Params are %s: name, %s: fold, %d: partition
     * @param foldCol    Long column to source which fold a row belongs to
     * @return List of folds each represented by a list of partitions each containing a map
@@ -148,53 +145,88 @@ class DataWriter(
     */
   def write(
     df: DataFrame,
-    numWorkers: Int,
     pathFormat: String,
-    foldCol: Option[String]
-  ): Array[Array[Map[String, String]]] = {
-    val rdd = df.rdd.mapPartitions(formatPartition(df.schema, foldCol))
-    if (rdd.getNumPartitions < numWorkers) {
-      throw new java.io.IOException("Cannot have fewer partitions in input than output")
+    foldCol: Option[String],
+    numFolds: Int
+  ): Array[Map[String, String]] = {
+    // Our qid:n numbers must be monotonic, essentially requiring them to
+    // be computed on a single instance.
+    val rdd = df.rdd.repartition(1).mapPartitions(formatPartition(df.schema, foldCol))
+
+    def pathFormatter(name: String, foldId: String): HDFSPath = {
+      asHDFSPath(pathFormat.format(name, foldId))
     }
-    val numFolds = foldCol.map { name => df.schema(name).metadata.getLong("num_folds").toInt }.getOrElse(1)
+
+    // Future.sequence requires an execution context
+    import scala.concurrent.ExecutionContext.Implicits.global
+
+    // Each fold task will write one copy of the complete dataset. Take
+    // head of each fold since we know each fold has a single partition
+    val folds = (0 until numFolds).map(writeOneFold(
+      rdd, foldCol, _, numFolds, pathFormatter).map(_.head))
+
+    Await.result(Future.sequence(folds), Duration.Inf).toArray
+  }
+
+  private def writeOneFold(
+    rdd: RDD[OutputRow],
+    foldCol: Option[String],
+    fold: Int,
+    numFolds: Int,
+    pathFormatter: (String, String) => HDFSPath
+  ): Future[Seq[Map[String, String]]] = {
+    // Array mapping from zero indexed fold id to the named split to write that fold to
+    val foldIdToNamedSplit = foldCol.map { name =>
+      // If fold column provided assign that to test, everything else as train
+      (0 until numFolds).map { x =>
+        if (x == fold) "test" else "train"
+      }.toArray
+      // Otherwise everything in an "all" bucket. formatPartition ensures
+      // that all rows report fold of 0L when foldCol is not provided.
+    }.getOrElse(Array("all"))
+
+    // Accepts a name and partition id, returns path to write out to
+    def foldPathFormatter(name: String): HDFSPath = foldCol
+      .map(_ => pathFormatter(name, fold.toString))
+      .getOrElse(pathFormatter(name, "x"))
+
+    // Per write method this has a single partition containing all data
+    rdd.mapPartitions(writeOnePartition(
+          foldPathFormatter, foldIdToNamedSplit))
+      .collectAsync()
+      .asInstanceOf[Future[Seq[Map[String, String]]]]
+  }
+
+  // Writes out a single partition of training data. One partition
+  // may contain gigabytes of data so this should do as little work
+  // as possible per-row.
+  private def writeOnePartition(
+    pathFormatter: String => HDFSPath,
+    foldIdToNamedSplit: Array[String]
+  )(
+    rows: Iterator[OutputRow]
+  ): Iterator[Map[String, String]] = {
+    val (paths, namedWriters) = {
+      val unique = foldIdToNamedSplit.toSet.toVector
+      val paths = unique.map(pathFormatter)
+      val files = paths.map(path => {
+        val fs = path.getFileSystem(broadcastConfiguration.value.value)
+        fs.create(path)
+      })
+      (unique.zip(paths.map(_.toString)).toMap, unique.zip(files).toMap)
+    }
+
+    val writers = foldIdToNamedSplit.map(namedWriters.apply)
 
     try {
-      // Materialize rdd so the parallel tasks coming up share the result.otherwise spark can just
-      // coalesce all the work above into the minimal number of output workers and repeat it for
-      // each partition it writes out.
-      // TODO: depends on if we have enough nodes to cache the data. On a busy cluster maybe not...
-      rdd.cache()
-      rdd.count()
-
-      val folds = (0 until numFolds).map { fold =>
-        // TODO: It might be nice to just accept Seq[Map[Int, String]] that lists folds
-        // each map is a config parameter. Pushes naming up the call chain.
-        val config = foldCol.map { name =>
-          // If fold column provided assign that to test, everything else as train
-          (0 until numFolds).map { x =>
-            if (x == fold) "test" else "train"
-          }.toArray
-          // Otherwise everything in an "all" bucket. formatPartition ensures
-          // that all rows report fold of 0L when foldCol is not provided.
-        }.getOrElse(Array("all"))
-
-        // Accepts a name and partition id, returns path to write out to
-        val pathFormatter: (String, Int) => HDFSPath = foldCol.map { _ =>
-          val foldId = fold.toString;
-        { (name: String, partition: Int) => asHDFSPath(pathFormat.format(name, foldId, partition)) }
-          // If all in one bucket the indicate fold in path with 'x'
-        }.getOrElse({ (name, partition) => asHDFSPath(pathFormat.format(name, "x", partition)) })
-
-        rdd.coalesce(numWorkers)
-          .mapPartitionsWithIndex(writeOneFold(pathFormatter, config))
-          .collectAsync()
-          .asInstanceOf[Future[Seq[Map[String, String]]]]
+      for ((fold, line) <- rows) {
+        writers(fold).write(line)
       }
-      // Future.sequence requires an execution context
-      import scala.concurrent.ExecutionContext.Implicits.global
-      Await.result(Future.sequence(folds), Duration.Inf).toArray.map(_.toArray)
     } finally {
-      rdd.unpersist()
+      namedWriters.values.foreach(_.close)
     }
+
+    Iterator(paths)
   }
+
 }
