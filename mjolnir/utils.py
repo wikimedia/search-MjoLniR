@@ -17,20 +17,32 @@ def temp_dir():
     return None
 
 
+def _hdfs_dfs(*args):
+    try:
+        # In wmf prod executors seem to run under the `yarn` user, likely
+        # until kerberos deploy is finalized. If a spark user was provided
+        # tell hadoop to use that. If SPARK_USER doesn't exist, no big deal.
+        env = dict(os.environ, HADOOP_USER_NAME=os.environ['SPARK_USER'])
+    except KeyError:
+        # equivalent to env = os.environ
+        env = None
+    return subprocess.check_call(['hdfs', 'dfs'] + list(args), env=env)
+
+
 @contextmanager
 def as_output_file(path, mode='w', overwrite=False):
     if path[:7] == 'hdfs://':
         f = tempfile.NamedTemporaryFile(dir=temp_dir(), mode=mode)
         yield f
         f.flush()
-        # Make the directory if it doesn't already exist
-        subprocess.check_call(['hdfs', 'dfs', '-mkdir', '-p', os.path.dirname(path)])
+        # Make the directory if it doesn't already exist.
+        _hdfs_dfs('-mkdir', '-p', os.path.dirname(path))
         # Copy our local data into it
-        put_cmd = ['hdfs', 'dfs', '-put']
+        put_cmd = ['-put']
         if overwrite:
             put_cmd.append('-f')
         put_cmd += [f.name, path]
-        subprocess.check_call(put_cmd)
+        _hdfs_dfs(*put_cmd)
     else:
         if path[:len("file:/")] == "file:/":
             path = path[len("file:"):]
@@ -47,7 +59,7 @@ def as_local_path(path):
     else:
         with tempfile.NamedTemporaryFile(dir=temp_dir()) as local:
             os.unlink(local.name)
-            subprocess.check_call(['hdfs', 'dfs', '-copyToLocal', path, local.name])
+            _hdfs_dfs('-copyToLocal', path, local.name)
             yield local.name
 
 
@@ -67,7 +79,7 @@ def hdfs_mkdir(path):
     # Will error if it already exists
     # TODO: Normalize error type?
     if path[:7] == 'hdfs://':
-        subprocess.check_call(['hdfs', 'dfs', '-mkdir', path])
+        _hdfs_dfs('-mkdir', path)
     else:
         os.mkdir(path)
 
@@ -82,12 +94,12 @@ def hdfs_unlink(*paths):
                 path = path[len("file:"):]
             os.unlink(path)
     if remote:
-        subprocess.check_call(['hdfs', 'dfs', '-rm'] + remote)
+        _hdfs_dfs('-rm', *remote)
 
 
 def hdfs_rmdir(path):
     if path[:7] == 'hdfs://':
-        subprocess.check_call(['hdfs', 'dfs', '-rm', '-r', '-f', path])
+        _hdfs_dfs('-rm', '-r', '-f', path)
     else:
         shutil.rmtree(path)
 
