@@ -7,7 +7,7 @@ requirements = [
     'requests',
     'kafka-python',
     'pyyaml',
-    'hyperopt>=0.1.1',
+    'hyperopt<0.2.0',
     'elasticsearch>=5.0.0,<6.0.0',
     'jsonschema',
     'prometheus_client',
