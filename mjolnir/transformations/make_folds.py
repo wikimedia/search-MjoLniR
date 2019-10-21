@@ -146,14 +146,14 @@ def convert_mllib_to_svmrank_and_xgboost(
 
 @mt.typed_transformer(mt.FeatureVectors, mt.TrainingFiles, __name__)
 def transformer(
-    df_label: DataFrame, wiki: str, training_output_path: str, num_folds: int
+    df_label: DataFrame, wiki: str, output_path: str, num_folds: int
 ) -> mt.Transformer:
     mt.check_schema(df_label, mt.LabeledQueryPage)
 
     fold_col = 'fold'
     # Format for individual training files. First %s is split name, second
     # is the fold id (a 0 indexed number, or `x` for un-folded)
-    path_format = os.path.join(training_output_path, wiki + '.%s.f%s')
+    path_format = os.path.join(output_path, wiki + '.%s.f%s')
 
     # This pool should be sized to run all possible tasks, currently two
     # (folded and unfolded). We shouldn't be limiting any concurrency here.
