@@ -13,7 +13,7 @@ import os
 import re
 import shutil
 from tempfile import NamedTemporaryFile
-from typing import cast, Callable, Generator, Generic, Iterable, Iterator, \
+from typing import cast, Callable, Generic, Iterable, Iterator, \
                    List, Mapping, Optional, Tuple, TypeVar, Union
 
 from elasticsearch import Elasticsearch
@@ -23,6 +23,7 @@ import jsonschema
 import kafka
 import prometheus_client
 import requests
+from requests.models import Response
 
 import mjolnir.kafka
 
@@ -117,7 +118,7 @@ def sanitize_index_name(name: str) -> str:
     return SANITIZE_PATTERN.sub('_', name.lower())
 
 
-def load_and_validate(poll_response, config=CONFIG) -> Generator[Message, None, None]:
+def load_and_validate(poll_response, config=CONFIG) -> Iterator[Message]:
     """Parse raw kafka records into valid Message instances"""
     for records in poll_response.values():
         for record in records:
@@ -148,7 +149,7 @@ def load_and_validate(poll_response, config=CONFIG) -> Generator[Message, None, 
             yield Message(value['swift_container'], value['swift_object_prefix'], value['swift_prefix_uri'], action)
 
 
-def swift_fetch_prefix_uri(prefix_uri: str) -> Generator[str, None, None]:
+def swift_fetch_prefix_uri(prefix_uri: str) -> Iterator[str]:
     """Fetch swift listing and report available objects
 
     Parameters
@@ -168,17 +169,15 @@ def swift_fetch_prefix_uri(prefix_uri: str) -> Generator[str, None, None]:
     if res.status_code < 200 or res.status_code > 299:
         raise Exception('Failed to fetch swift listing, status_code {}: {}'.format(res.status_code, res.text))
 
-    for path in res.text.split('\n'):
-        if path == '' or os.path.basename(path)[0] == '_':
-            # _ prefixed files are hidden files wrt hadoop, they either have metadata
-            # or are empty markers based on the filename.
+    for path in res.iter_lines():
+        if path == '':
             continue
         yield os.path.join(container_uri, path)
 
 
 def swift_download_from_prefix(
     message: Message, abort_on_failure: bool
-) -> Generator[Tuple[str, Iterator[str]], None, None]:
+) -> Iterator[Tuple[str, Response]]:
     """Download files from swift and yield them as they become available
 
     Downloads remote files to disk, rather than streaming directly, to support compressed
@@ -198,7 +197,6 @@ def swift_download_from_prefix(
         Lines from the object stream
     """
     for file_uri in swift_fetch_prefix_uri(message.prefix_uri):
-        suffix = os.path.splitext(file_uri)[1]
         with requests.get(file_uri, stream=True) as res:
             if res.status_code < 200 or res.status_code > 299:
                 if abort_on_failure:
@@ -210,16 +208,19 @@ def swift_download_from_prefix(
                     log.warning("Failed fetching from swift, status code %d: %s", res.status_code, file_uri)
                     continue
 
-            if suffix == '.gz':
-                with NamedTemporaryFile(suffix=suffix) as f_temp:
-                    shutil.copyfileobj(res.raw, f_temp)
-                    f_temp.flush()
-                    with gzip.open(f_temp.name, 'rt') as f_out:
-                        yield file_uri, f_out
-            else:
-                # Raw emits bytes, decode into str
-                lines = (line.decode('utf8') for line in res.raw)
-                yield file_uri, lines
+            yield file_uri, res
+
+
+def _decode_response_as_text_lines(file_uri: str, res: Response) -> Iterator[str]:
+    suffix = os.path.splitext(file_uri)[1]
+    if suffix == '.gz':
+        with NamedTemporaryFile(suffix=suffix) as f_temp:
+            shutil.copyfileobj(res.raw, f_temp)
+            f_temp.flush()
+            with gzip.open(f_temp.name, 'rt') as f_out:
+                yield from f_out
+    else:
+        yield from res.iter_lines()
 
 
 def pair(it: Iterable[T]) -> Iterable[Tuple[T, T]]:
@@ -345,9 +346,13 @@ class UploadAction:
     @Metric.PROCESS_MESSAGE.time()
     def run(self) -> None:
         self.pre_check()
-        for uri, lines in swift_download_from_prefix(self.message, self.abort_on_failure):
+        for uri, response in swift_download_from_prefix(self.message, self.abort_on_failure):
             try:
-                self.on_file_available(uri, lines)
+                # The response was opened with stream=True, so we need to
+                # ensure we close the responses to return the connections to
+                # the pool.
+                with response:
+                    self.on_file_available(uri, response)
             except ImportFailedException:
                 if self.abort_on_failure:
                     raise
@@ -357,7 +362,7 @@ class UploadAction:
     def pre_check(self) -> None:
         pass
 
-    def on_file_available(self, uri: str, lines: Iterator[str]) -> None:
+    def on_file_available(self, uri: str, response: Response) -> None:
         raise NotImplementedError()
 
     def on_download_complete(self) -> None:
@@ -380,8 +385,11 @@ class ImportExistingIndices(UploadAction):
     # invalid files are published might be nice.
     abort_on_failure = False
 
-    def on_file_available(self, uri: str, lines: Iterator[str]) -> None:
-        lines = Peekable(lines)
+    def on_file_available(self, uri: str, response: Response) -> None:
+        # Metadata we aren't interested in
+        if os.path.basename(uri)[0] == '_':
+            return
+        lines = Peekable(_decode_response_as_text_lines(uri, response))
         try:
             header = json.loads(lines.peek())
             action, meta = header.popitem()
@@ -450,7 +458,11 @@ class ImportAndPromote(UploadAction):
                     .format(self.index_name))
         log.info('Importing to index {}'.format(self.index_name))
 
-    def on_file_available(self, uri: str, lines: Iterator[str]) -> None:
+    def on_file_available(self, uri: str, response: Response) -> None:
+        # Metadata we aren't interested in
+        if os.path.basename(uri)[0] == '_':
+            return
+        lines = _decode_response_as_text_lines(uri, response)
         """Import a file in elasticsearch bulk import format."""
         log.info('Importing from uri %s', uri)
         good, missing, errors = bulk_import(
