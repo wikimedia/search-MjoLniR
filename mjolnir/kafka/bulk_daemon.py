@@ -651,9 +651,12 @@ def run(brokers: str, client_for_index: ElasticSupplier, topics: List[str], grou
         # one at a time.
         max_poll_records=1,
         # Our jobs take quite awhile to run, increase from default of 5 min
-        # to 15 min to account for the long running imports. Expect all messages
-        # to process in < 10 min each.
-        max_poll_interval_ms=900000,
+        # to 60 min to account for the long running imports. Expect most messages
+        # to process in < 10 min each. Expect glent messages to take up to 45min
+        # to process. This is a complete hack at this point, we shouldn't be
+        # using hour long poll interval timeouts. This means if a node disapears
+        # it will take an hour to notice.
+        max_poll_interval_ms=1000 * 60 * 60,
     )
 
     log.info('Subscribing to: %s', ', '.join(topics))
