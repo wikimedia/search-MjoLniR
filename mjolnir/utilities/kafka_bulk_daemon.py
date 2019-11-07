@@ -6,7 +6,7 @@ import argparse
 import logging
 import re
 import time
-from typing import cast, Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Set, Tuple, TypeVar
+from typing import cast, Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Set, Tuple, TypeVar, Union
 
 from elasticsearch import Elasticsearch
 from mjolnir.kafka import bulk_daemon
@@ -37,6 +37,12 @@ def arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def make_elasticsearch(hosts: Union[str, List[str]]) -> Elasticsearch:
+    # Daemon is currently configured to use up to 12 threads, ensure the pools
+    # are big enough.
+    return Elasticsearch(hosts, maxsize=15)
+
+
 def make_es_clusters(bootstrap_hosts: str) -> List[Elasticsearch]:
     """Return all clusters reachable through bootstrap hosts
 
@@ -50,7 +56,7 @@ def make_es_clusters(bootstrap_hosts: str) -> List[Elasticsearch]:
     List[Elasticsearch]
 
     """
-    clusters = [Elasticsearch(host) for host in bootstrap_hosts.split(',')]
+    clusters = [make_elasticsearch(host) for host in bootstrap_hosts.split(',')]
     seen = cast(Set[str], set())
     for cluster in clusters:
         info = cluster.info()
@@ -91,7 +97,7 @@ def get_hosts_from_crosscluster_conf(conf: Mapping) -> Mapping[str, Elasticsearc
 
     for cluster_name, cluster_conf in cross_clusters.items():
         hosts = [to_http_url(host) for host in cluster_conf['seeds']]
-        elastichosts[cluster_name] = Elasticsearch(hosts)
+        elastichosts[cluster_name] = make_elasticsearch(hosts)
 
     return elastichosts
 
