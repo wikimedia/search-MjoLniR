@@ -2,7 +2,7 @@
 Daemon to collect elasticsearch bulk indexing requests from kafka
 and push them into elasticsearch.
 """
-import argparse
+from argparse import ArgumentParser
 import logging
 import re
 import time
@@ -17,8 +17,7 @@ MemoizeEntry = NamedTuple('MemoizeEntry', [('value', Any), ('valid_until', float
 T = TypeVar('T')
 
 
-def arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+def configure(parser: ArgumentParser) -> Callable:
     parser.add_argument(
         '-b', '--brokers', dest='brokers', required=True, type=str,
         help='Kafka brokers to bootstrap from as a comma separated list of <host>:<port>')
@@ -34,7 +33,7 @@ def arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--prometheus-port', dest='prometheus_port', default=9170, type=int, required=False,
         help='Port to export prometheus metrics over.')
-    return parser
+    return main
 
 
 def make_elasticsearch(hosts: Union[str, List[str]]) -> Elasticsearch:
@@ -149,9 +148,3 @@ def main(brokers: str, es_clusters: str, topics: List[str], group_id: str, prome
 
     prometheus_client.start_http_server(prometheus_port)
     bulk_daemon.run(brokers, client_for_index, topics, group_id)
-
-
-if __name__ == "__main__":
-    logging.basicConfig()
-    kwargs = dict(vars(arg_parser().parse_args()))
-    main(**kwargs)

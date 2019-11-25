@@ -1,5 +1,5 @@
 from elasticsearch import Elasticsearch
-from mjolnir.utilities import kafka_bulk_daemon
+from mjolnir.cli import kafka_bulk_daemon
 
 
 def test_to_http_url():

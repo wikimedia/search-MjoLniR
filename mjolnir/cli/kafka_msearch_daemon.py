@@ -4,14 +4,13 @@ run them against relforge, and send the results back over
 kafka.
 """
 
-from __future__ import absolute_import
-import argparse
-import logging
+from argparse import ArgumentParser
+from typing import Callable
+
 import mjolnir.kafka.msearch_daemon
 
 
-def arg_parser():
-    parser = argparse.ArgumentParser(description=__doc__)
+def configure(parser: ArgumentParser) -> Callable:
     parser.add_argument(
         '-b', '--brokers', dest='brokers', required=True, type=lambda x: x.split(','),
         help='Kafka brokers to bootstrap from as a comma separated list of <host>:<port>')
@@ -38,14 +37,8 @@ def arg_parser():
     parser.add_argument(
         '--max-concurrent-searches', dest='max_concurrent_searches', type=int, default=1,
         help='Maximum number of queries in a single msearch request that will run in parallel')
-    return parser
+    return main
 
 
 def main(**kwargs):
     mjolnir.kafka.msearch_daemon.Daemon(**kwargs).run()
-
-
-if __name__ == '__main__':
-    logging.basicConfig()
-    kwargs = dict(vars(arg_parser().parse_args()))
-    main(**kwargs)
