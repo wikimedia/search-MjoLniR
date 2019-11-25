@@ -1,0 +1,16 @@
+usage: pytest [-h] --date DATE --training-files-path TRAINING_FILES_PATH
+              --output-table OUTPUT_TABLE --output-path OUTPUT_PATH
+              --initial-num-trees INITIAL_NUM_TREES --final-num-trees
+              FINAL_NUM_TREES --iterations ITERATIONS
+              [--num-cv-jobs NUM_CV_JOBS]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --date DATE
+  --training-files-path TRAINING_FILES_PATH
+  --output-table OUTPUT_TABLE
+  --output-path OUTPUT_PATH
+  --initial-num-trees INITIAL_NUM_TREES
+  --final-num-trees FINAL_NUM_TREES
+  --iterations ITERATIONS
+  --num-cv-jobs NUM_CV_JOBS

@@ -1,0 +1,17 @@
+usage: pytest [-h] --date DATE --brokers BROKERS --topic-request TOPIC_REQUEST
+              --topic-response TOPIC_RESPONSE --clicks-table CLICKS_TABLE
+              --output-table OUTPUT_TABLE --output-path OUTPUT_PATH
+              [--top-n TOP_N]
+              [--min-sessions-per-query MIN_SESSIONS_PER_QUERY]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --date DATE
+  --brokers BROKERS
+  --topic-request TOPIC_REQUEST
+  --topic-response TOPIC_RESPONSE
+  --clicks-table CLICKS_TABLE
+  --output-table OUTPUT_TABLE
+  --output-path OUTPUT_PATH
+  --top-n TOP_N
+  --min-sessions-per-query MIN_SESSIONS_PER_QUERY

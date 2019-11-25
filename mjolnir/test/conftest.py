@@ -23,6 +23,29 @@ def fixtures_dir():
     return os.path.join(cur_dir, 'fixtures')
 
 
+def on_disk_fixture(path):
+    def compare(other):
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                expect = f.read()
+            assert expect == other
+        elif os.environ.get('REBUILD_FIXTURES') == 'yes':
+            with open(path, 'w') as f:
+                f.write(other)
+            pytest.skip("Rebuilt fixture")
+        else:
+            raise Exception('No fixture [{}] and REBUILD_FIXTURES != yes'.format(path))
+    return compare
+
+
+@pytest.fixture
+def fixture_factory(fixtures_dir):
+    def factory(group, fixture_id):
+        path = os.path.join(fixtures_dir, group, fixture_id + '.expected')
+        return on_disk_fixture(path)
+    return factory
+
+
 @pytest.fixture
 def folds_a(fixtures_dir):
     fixtures_dir = os.path.join(fixtures_dir, 'datasets')

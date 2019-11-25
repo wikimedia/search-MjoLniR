@@ -1,0 +1,26 @@
+usage: pytest [-h] -b BROKERS [-m MAX_REQUEST_SIZE] [-w N_WORKERS]
+              [--prometheus-port PROMETHEUS_PORT] [--input-topic TOPIC_WORK]
+              [--output-topic TOPIC_RESULT] [--group-id GROUP_ID]
+              [--max-concurrent-searches MAX_CONCURRENT_SEARCHES]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -b BROKERS, --brokers BROKERS
+                        Kafka brokers to bootstrap from as a comma separated
+                        list of <host>:<port>
+  -m MAX_REQUEST_SIZE, --max-request-size MAX_REQUEST_SIZE
+                        Max size of requsets sent to the kafka brokerDefaults
+                        to 40MB.
+  -w N_WORKERS, --num-workers N_WORKERS
+                        Number of workers to issue elasticsearch queries in
+                        parallel. Defaults to 1.
+  --prometheus-port PROMETHEUS_PORT
+                        Port to export prometheus metrics over.
+  --input-topic TOPIC_WORK
+                        Topic to read msearch requests from
+  --output-topic TOPIC_RESULT
+                        Topic to write msearch responses to
+  --group-id GROUP_ID   Kafka consumer group to join
+  --max-concurrent-searches MAX_CONCURRENT_SEARCHES
+                        Maximum number of queries in a single msearch request
+                        that will run in parallel

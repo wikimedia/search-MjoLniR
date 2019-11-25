@@ -1,0 +1,18 @@
+usage: pytest [-h] -b BROKERS -c ES_CLUSTERS -t TOPICS [TOPICS ...]
+              [-g GROUP_ID] [--prometheus-port PROMETHEUS_PORT]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -b BROKERS, --brokers BROKERS
+                        Kafka brokers to bootstrap from as a comma separated
+                        list of <host>:<port>
+  -c ES_CLUSTERS, --es-clusters ES_CLUSTERS
+                        Elasticsearch servers to bootstrap from as a comma
+                        separated list of <host>:<port>
+  -t TOPICS [TOPICS ...], --topic TOPICS [TOPICS ...]
+                        Kafka topic(s) to read indexing requests from.
+                        Multiple topics may be provided.
+  -g GROUP_ID, --group-id GROUP_ID
+                        Kafka consumer group to join
+  --prometheus-port PROMETHEUS_PORT
+                        Port to export prometheus metrics over.

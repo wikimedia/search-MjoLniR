@@ -1,0 +1,19 @@
+usage: pytest [-h] --date DATE --labels-table LABELS_TABLE
+              [--labeling-algorithm LABELING_ALGORITHM]
+              --feature-vectors-table FEATURE_VECTORS_TABLE --feature-set
+              FEATURE_SET --output-table OUTPUT_TABLE --output-path
+              OUTPUT_PATH --output-feature-set OUTPUT_FEATURE_SET
+              --num-features NUM_FEATURES [--wikis WIKIS [WIKIS ...]]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --date DATE
+  --labels-table LABELS_TABLE
+  --labeling-algorithm LABELING_ALGORITHM
+  --feature-vectors-table FEATURE_VECTORS_TABLE
+  --feature-set FEATURE_SET
+  --output-table OUTPUT_TABLE
+  --output-path OUTPUT_PATH
+  --output-feature-set OUTPUT_FEATURE_SET
+  --num-features NUM_FEATURES
+  --wikis WIKIS [WIKIS ...]

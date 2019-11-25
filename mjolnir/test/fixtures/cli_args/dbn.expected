@@ -1,0 +1,12 @@
+usage: pytest [-h] --date DATE --clicks-table CLICKS_TABLE --clustering-table
+              CLUSTERING_TABLE --clustering-algorithm CLUSTERING_ALGORITHM
+              --output-table OUTPUT_TABLE --output-path OUTPUT_PATH
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --date DATE
+  --clicks-table CLICKS_TABLE
+  --clustering-table CLUSTERING_TABLE
+  --clustering-algorithm CLUSTERING_ALGORITHM
+  --output-table OUTPUT_TABLE
+  --output-path OUTPUT_PATH

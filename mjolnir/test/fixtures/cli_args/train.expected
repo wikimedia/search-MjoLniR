@@ -1,0 +1,11 @@
+usage: pytest [-h] --date DATE --training-files-path TRAINING_FILES_PATH
+              --model-parameters-table MODEL_PARAMETERS_TABLE --output-path
+              OUTPUT_PATH --remote-feature-set REMOTE_FEATURE_SET
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --date DATE
+  --training-files-path TRAINING_FILES_PATH
+  --model-parameters-table MODEL_PARAMETERS_TABLE
+  --output-path OUTPUT_PATH
+  --remote-feature-set REMOTE_FEATURE_SET

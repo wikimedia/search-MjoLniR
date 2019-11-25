@@ -1,0 +1,11 @@
+usage: pytest [-h] --date DATE --input-table INPUT_TABLE --output-table
+              OUTPUT_TABLE --output-path OUTPUT_PATH
+              [--max-q-by-day MAX_Q_BY_DAY]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --date DATE
+  --input-table INPUT_TABLE
+  --output-table OUTPUT_TABLE
+  --output-path OUTPUT_PATH
+  --max-q-by-day MAX_Q_BY_DAY
