@@ -198,8 +198,9 @@ def swift_fetch_prefix_uri(prefix_uri: str) -> Iterator[str]:
     res = requests.get(prefix_uri)
     if res.status_code < 200 or res.status_code > 299:
         raise Exception('Failed to fetch swift listing, status_code {}: {}'.format(res.status_code, res.text))
-
-    for path in res.iter_lines():
+    if res.encoding is None:
+        res.encoding = 'utf-8'
+    for path in res.iter_lines(decode_unicode=True):
         if path == '':
             continue
         yield os.path.join(container_uri, path)
