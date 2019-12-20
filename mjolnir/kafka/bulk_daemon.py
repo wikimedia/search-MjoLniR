@@ -37,7 +37,7 @@ ElasticSupplier = Callable[[str], Elasticsearch]
 CONFIG = {
     'search_mjolnir_model': lambda client_for_index, message: ImportLtrModel(  # type: ignore
         client_for_index, message,
-    ),
+    ).run(),
     # key is the name of the swift container files were uploaded to
     'search_popularity_score': lambda client_for_index, message: ImportExistingIndices(  # type: ignore
         client_for_index, message,
@@ -253,7 +253,7 @@ def _decode_response_as_text_lines(file_uri: str, res: Response) -> Iterator[str
             with gzip.open(f_temp.name, 'rt') as f_out:
                 yield from f_out
     else:
-        yield from res.iter_lines()
+        yield from res.iter_lines(decode_unicode=True)
 
 
 def pair(it: Iterable[T]) -> Iterable[Tuple[T, T]]:
