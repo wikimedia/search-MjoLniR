@@ -253,6 +253,8 @@ def _decode_response_as_text_lines(file_uri: str, res: Response) -> Iterator[str
             with gzip.open(f_temp.name, 'rt') as f_out:
                 yield from f_out
     else:
+        if res.encoding is None:
+            res.encoding = 'utf-8'
         yield from res.iter_lines(decode_unicode=True)
 
 
