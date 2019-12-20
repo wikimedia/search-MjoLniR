@@ -624,7 +624,7 @@ class ImportLtrModel(UploadAction):
         upload = metadata['upload']
         validation = None
         if 'validation_params' in upload:
-            validation = ValidationRequest(upload['wiki'], upload['validation_params'])
+            validation = ValidationRequest(upload['wikiid'], upload['validation_params'])
 
         LtrModelUploader(
             self.client_for_index(upload['wikiid']),
