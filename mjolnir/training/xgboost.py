@@ -264,7 +264,11 @@ class XGBoostModel(XGBoostBooster):
         # Annoyingly the xgboost api doesn't take the feature map as a string, but
         # instead as a filename. Write the feature map out to a file if necessary.
         if features:
-            feat_map = "\n".join(["%d %s q" % (i, fname) for i, fname in enumerate(features)])
+            # When we write the svmrank formatted files the features are indexed
+            # starting at 1. We need to throw a fake index 0 in here or it's all
+            # wrong.
+            feat_map = "0 PLACEHOLDER_FEAT q\n" + \
+                "\n".join(["%d %s q" % (i, fname) for i, fname in enumerate(features, 1)])
             fmap_f = tempfile.NamedTemporaryFile(mode='w')
             fmap_f.write(feat_map)
             fmap_f.flush()
