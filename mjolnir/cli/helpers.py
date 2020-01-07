@@ -13,10 +13,15 @@ import uuid
 
 try:
     from pyspark.sql import DataFrame, SparkSession
-except ImportError:
-    import findspark
-    findspark.init()
-    from pyspark.sql import DataFrame, SparkSession
+except ImportError as ex:
+    try:
+        import findspark
+    except ImportError:
+        # If findspark isn't available re-raise the original error
+        raise ex
+    else:
+        findspark.init()
+        from pyspark.sql import DataFrame, SparkSession
 
 from mjolnir.utils import as_output_file, hdfs_open_read, hdfs_rmdir
 import mjolnir.transform as mt
