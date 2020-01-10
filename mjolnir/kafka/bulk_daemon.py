@@ -12,7 +12,7 @@ import logging
 import os
 import re
 from typing import cast, Any, Callable, Dict, Generic, Iterable, Iterator, \
-                   List, Mapping, Optional, Tuple, TypeVar, Union
+                   List, Mapping, Optional, Sequence, Tuple, TypeVar, Union
 
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import parallel_bulk
@@ -588,7 +588,7 @@ class ImportLtrModel(UploadAction):
         self.downloaded_files[basename] = '\n'.join(
             _decode_response_as_text_lines(uri, response))
 
-    def validate_input(self) -> Tuple[Mapping, Mapping[str, Any], List[str]]:
+    def validate_input(self) -> Tuple[Sequence[Mapping], Mapping[str, Any], List[str]]:
         model = None
         metadata = None
         errors = []

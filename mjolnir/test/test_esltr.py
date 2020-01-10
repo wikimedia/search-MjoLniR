@@ -2,7 +2,9 @@ from collections import defaultdict
 from typing import Mapping
 
 from elasticsearch import Elasticsearch
-from mjolnir.esltr import minimize_features, LtrClient, StoredFeature, StoredFeatureSet, StoredModel
+from mjolnir.esltr import (
+    minimize_features, minimize_xgboost_model,
+    LtrClient, StoredFeature, StoredFeatureSet, StoredModel)
 import pytest
 
 
@@ -80,6 +82,28 @@ def test_minimize_features_happy_path(selected, expect):
 
     minimal = minimize_features(features, selected)
     assert [x.name for x in minimal] == expect
+
+
+def test_minimize_xgboost_model():
+    _split = dict(nodeid=0, split=0, split_condition=0, yes=0, no=0, missing=0, depth=0, children=[])
+    _leaf = dict(nodeid=0, leaf=0)
+
+    def split(**kwargs):
+        return dict(_split, **kwargs)
+
+    def leaf(**kwargs):
+        return dict(_leaf, **kwargs)
+
+    model = [
+        split(
+            children=[leaf(nodeid=2, extra='pytest'), leaf(nodeid=3)],
+            pytest='extra')
+    ]
+    expected = [
+        split(children=[leaf(nodeid=2), leaf(nodeid=3)])
+    ]
+    minimized = minimize_xgboost_model(model)
+    assert minimized == expected
 
 
 # Copied from elasticsearch-py test_elasticsearch/test_cases.py

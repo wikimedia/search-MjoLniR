@@ -371,7 +371,7 @@ class StoredModel:
     """A stored ranking model"""
     def __init__(
         self, name: str, feature_set: StoredFeatureSet,
-        type: str, definition: Union[str, Mapping]
+        type: str, definition: Union[str, Mapping, Sequence[Mapping]]
     ) -> None:
         self.name = name
         self.feature_set = feature_set
@@ -472,6 +472,25 @@ def minimize_features(
     return [feat_map[feature_name] for feature_name in selected_features.keys()]
 
 
+def minimize_xgboost_model(trees: Sequence[Mapping]) -> Sequence[Mapping]:
+    """Strip xgboost extra stats from model
+
+    xgboost can dump additional statistics with the model, but these trip up
+    the ltr plugin parser. Strip the models down to only what is necessary.
+    """
+    def visit(node):
+        if 'leaf' in node:
+            keep = ['nodeid', 'leaf']
+        else:
+            keep = ['nodeid', 'split', 'split_condition', 'yes', 'no', 'missing', 'depth']
+        out = {key: node[key] for key in keep}
+        if 'children' in node:
+            out['children'] = [visit(child) for child in node['children']]
+        return out
+
+    return [visit(tree) for tree in trees]
+
+
 class LtrModelUploader:
     # TODO: This constructor is massive, and this class is basically two functions and
     # some configuration. This should be representable in a better way.
@@ -480,7 +499,7 @@ class LtrModelUploader:
         elastic: Elasticsearch,
         model_name: str,
         model_type: str,
-        model: Mapping,
+        model: Sequence[Mapping],
         feature_source_definition: str,
         features: Sequence[str],
         validation: Optional[ValidationRequest]
@@ -529,9 +548,10 @@ class LtrModelUploader:
             raise Exception('A model named [{}] already exists on cluster [{}]'.format(self.model_name, self.elastic))
 
         feature_set = self._select_feature_set()
-        model = StoredModel(self.model_name, feature_set, self.model_type, self.model)
-        response = model.create(self.ltr, self.validation)
+        model = minimize_xgboost_model(self.model)
+        stored_model = StoredModel(self.model_name, feature_set, self.model_type, model)
+        response = stored_model.create(self.ltr, self.validation)
         # TODO: Not sure how we could get 2xx without created, but lets check anyways
         if response.get('result') != 'created':
             raise Exception(response)
-        return model
+        return stored_model
