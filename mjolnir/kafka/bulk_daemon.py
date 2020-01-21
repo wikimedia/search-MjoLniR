@@ -23,7 +23,7 @@ import prometheus_client
 import requests
 from requests.models import Response
 
-from mjolnir.esltr import LtrModelUploader, ValidationRequest
+from mjolnir.esltr import ModelExistsException, LtrModelUploader, ValidationRequest
 import mjolnir.kafka
 
 log = logging.getLogger(__name__)
@@ -623,15 +623,18 @@ class ImportLtrModel(UploadAction):
         if 'validation_params' in upload:
             validation = ValidationRequest(upload['wikiid'], upload['validation_params'])
 
-        LtrModelUploader(
-            self.client_for_index(upload['wikiid']),
-            upload['model_name'],
-            upload['model_type'],
-            model,
-            upload['feature_definition'],
-            upload['features'],
-            validation
-        ).upload()
+        try:
+            LtrModelUploader(
+                self.client_for_index(upload['wikiid']),
+                upload['model_name'],
+                upload['model_type'],
+                model,
+                upload['feature_definition'],
+                upload['features'],
+                validation
+            ).upload()
+        except ModelExistsException:
+            raise ImportFailedException('Cannot process message, model already exists')
 
 
 def run(brokers: str, client_for_index: ElasticSupplier, topics: List[str], group_id: str) -> None:

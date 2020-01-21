@@ -21,6 +21,10 @@ from mjolnir.utils import explode_ltr_model_definition
 _T = TypeVar('_T')
 
 
+class ModelExistsException(Exception):
+    pass
+
+
 class FeatureStoreClient(NamespacedClient):
     """CRUD operations for feature store indices"""
     @query_params()
@@ -545,7 +549,8 @@ class LtrModelUploader:
             raise Exception('Missing feature store [{}] on cluster [{}]'.format(self.feature_store_name, self.elastic))
 
         if self.ltr.model.exists(self.model_name, self.feature_store_name):
-            raise Exception('A model named [{}] already exists on cluster [{}]'.format(self.model_name, self.elastic))
+            raise ModelExistsException(
+                'A model named [{}] already exists on cluster [{}]'.format(self.model_name, self.elastic))
 
         feature_set = self._select_feature_set()
         model = minimize_xgboost_model(self.model)
