@@ -3,7 +3,9 @@
 from argparse import ArgumentParser
 import logging
 import logging.config
+import signal
 import sys
+import traceback
 
 from mjolnir.config import load_config
 import mjolnir.cli
@@ -33,6 +35,16 @@ def configure_logging(log_level=None, logging_config=None, **kwargs):
         logging.getLogger().setLevel(log_level)
 
 
+def log_all_threads_stack_trace(signal_num, active_frame):
+    # active_frame is also reported by _current_frames(), and identified by
+    # having this function at the end of it's stack trace. As such we ignore
+    # the active_frame arg
+    for thread_id, frame in sys._current_frames().items():
+        log.warning(
+            'Stack for thread %d\n%s', thread_id,
+            '\n'.join(traceback.format_stack(frame)))
+
+
 def main(argv=None) -> int:
     parser = ArgumentParser()
     parser.add_argument(
@@ -42,6 +54,7 @@ def main(argv=None) -> int:
         '--logging-conf', dest='logging_config',
         help='Path to logging configuration.')
 
+    # Create a sub parser for each invokable command
     subparsers = parser.add_subparsers(dest='command')
     functions = {}
     for name, factory in mjolnir.cli.CLI_COMMANDS.items():
@@ -58,6 +71,9 @@ def main(argv=None) -> int:
     del kwargs['command']
     del kwargs['log_level']
     del kwargs['logging_config']
+    # Install a signal handler to help figure out whats going on
+    # when a daemon gets stuck.
+    signal.signal(signal.SIGUSR1, log_all_threads_stack_trace)
 
     command(**kwargs)
     return 0

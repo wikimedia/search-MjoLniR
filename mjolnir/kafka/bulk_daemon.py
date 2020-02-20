@@ -253,6 +253,7 @@ def _decode_response_as_text_lines(file_uri: str, res: Response) -> Iterator[str
             res.encoding = 'utf-8'
         # This will decode utf8 to str AND strip trailing \n
         yield from res.iter_lines(decode_unicode=True)
+    log.info('Finished download of %s', file_uri)
 
 
 def pair(it: Iterable[T]) -> Iterable[Tuple[T, T]]:
