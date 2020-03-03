@@ -11,6 +11,8 @@ import json
 import logging
 import os
 import re
+import shutil
+from tempfile import NamedTemporaryFile
 from typing import cast, Any, Callable, Dict, Generic, Iterable, Iterator, \
                    List, Mapping, Optional, Sequence, Tuple, TypeVar, Union
 
@@ -237,21 +239,22 @@ def swift_download_from_prefix(
 
 
 def _decode_response_as_text_lines(file_uri: str, res: Response) -> Iterator[str]:
-    """Stream requests response into utf8 lines
+    """Decode requests response into utf8 lines
 
-    Transparently handles decompressing gzip'd content.
+    Downloads remote files to disk, rather than streaming directly, to support compressed
+    files. The python gzip module doesn't support streaming directly and implementing
+    with zlib seemed more error prone than writing to disk.
     """
     suffix = os.path.splitext(file_uri)[1]
-    if suffix.lower() == '.gz':
-        # For unknown reasons GzipFile doesn't accept `rt`, requiring
-        # to decode ourselves. We also need to strip trailing \n to match
-        # iter_lines from requests.
-        for line in gzip.GzipFile(mode='r', fileobj=res.raw):
-            yield line.decode('utf8').rstrip('\n')
+    if suffix == '.gz':
+        with NamedTemporaryFile(suffix=suffix) as f_temp:
+            shutil.copyfileobj(res.raw, f_temp)
+            f_temp.flush()
+            with gzip.open(f_temp.name, 'rt') as f_out:
+                yield from f_out
     else:
         if res.encoding is None:
             res.encoding = 'utf-8'
-        # This will decode utf8 to str AND strip trailing \n
         yield from res.iter_lines(decode_unicode=True)
     log.info('Finished download of %s', file_uri)
 
