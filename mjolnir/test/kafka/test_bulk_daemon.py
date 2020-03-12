@@ -48,14 +48,14 @@ def test_pair():
 
 
 def test_bulk_import(mocker):
-    mocker.patch.object(bulk_daemon, 'streaming_bulk').return_value = [
+    mocker.patch.object(bulk_daemon, 'parallel_bulk').return_value = [
         (True, {'index': {'result': 'ok'}}),
         # Missing document
         (False, {'index': {'status': 404}}),
         # Failed document (ex: bad script)
         (False, {'index': {'status': 400}}),
     ]
-    # Not much left to test after mocking streaming_bulk.
+    # Not much left to test after mocking parallel_bulk.
     good, missing, errors = bulk_daemon.bulk_import()
     assert good == 1
     assert missing == 1
