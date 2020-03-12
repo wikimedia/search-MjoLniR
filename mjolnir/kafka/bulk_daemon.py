@@ -49,6 +49,9 @@ CONFIG = {
         # we are sending are small, they are typically updates
         # to much larger docs that will require time to index.
         thread_count=10,
+        # If queue_size < thread_count parallel_bulk can deadlock.
+        # https://github.com/elastic/elasticsearch-py/issues/816
+        queue_size=10,
         chunk_size=100,
         # Increased to 1 min from default of 10s. No reason we
         # shouldn't wait.  Latency can be checked via logs
