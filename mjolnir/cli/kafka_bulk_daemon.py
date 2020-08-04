@@ -40,10 +40,10 @@ def configure(parser: ArgumentParser) -> Callable:
 def make_elasticsearch(hosts: Union[str, List[str]]) -> Elasticsearch:
     # Elasticsearch uses urllib3 which doesn't take external CA_CERT configuration.
     # Pass on the requests configuration
-    ca_cert = os.environ.get('REQUESTS_CA_BUNDLE')
+    ca_certs = os.environ.get('REQUESTS_CA_BUNDLE')
     # Daemon is currently configured to use up to 12 threads, ensure the pools
     # are big enough.
-    return Elasticsearch(hosts, maxsize=15, ca_cert=ca_cert)
+    return Elasticsearch(hosts, maxsize=15, ca_certs=ca_certs)
 
 
 def make_es_clusters(bootstrap_hosts: str) -> List[Elasticsearch]:

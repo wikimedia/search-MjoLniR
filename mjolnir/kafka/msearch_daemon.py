@@ -139,9 +139,9 @@ class Daemon(object):
         # commited offsets are siginficantly ahead of the work actually being
         # performed.
         self.work_queue = cast(TypedQueue[Optional[Mapping]], queue.Queue(n_workers))
-        # Elastic uses urllib3, which doesn't take external ca_cert config. Pass on
+        # Elastic uses urllib3, which doesn't take external ca_certs config. Pass on
         # the config for requests when provided.
-        elastic = Elasticsearch(endpoint, ca_cert=os.environ.get('REQUESTS_CA_BUNDLE'))
+        elastic = Elasticsearch(endpoint, ca_certs=os.environ.get('REQUESTS_CA_BUNDLE'))
         # Toggle our kafka subscription on/off based on qps of a canary index
         self.load_monitor = MetricMonitor.es_query_total(
                 elastic, 'enwiki_content', 'full_text',
