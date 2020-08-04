@@ -5,6 +5,7 @@ and push them into elasticsearch.
 from argparse import ArgumentParser
 import logging
 import re
+import os
 import time
 from typing import cast, Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Set, Tuple, TypeVar, Union
 
@@ -37,9 +38,12 @@ def configure(parser: ArgumentParser) -> Callable:
 
 
 def make_elasticsearch(hosts: Union[str, List[str]]) -> Elasticsearch:
+    # Elasticsearch uses urllib3 which doesn't take external CA_CERT configuration.
+    # Pass on the requests configuration
+    ca_cert = os.environ.get('REQUESTS_CA_BUNDLE')
     # Daemon is currently configured to use up to 12 threads, ensure the pools
     # are big enough.
-    return Elasticsearch(hosts, maxsize=15)
+    return Elasticsearch(hosts, maxsize=15, ca_cert=ca_cert)
 
 
 def make_es_clusters(bootstrap_hosts: str) -> List[Elasticsearch]:

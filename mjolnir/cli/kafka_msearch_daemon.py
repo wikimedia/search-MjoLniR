@@ -37,6 +37,9 @@ def configure(parser: ArgumentParser) -> Callable:
     parser.add_argument(
         '--max-concurrent-searches', dest='max_concurrent_searches', type=int, default=1,
         help='Maximum number of queries in a single msearch request that will run in parallel')
+    parser.add_argument(
+        '--elastic-endpoint', dest='endpoint', type=str, default='http://localhost:9200',
+        help='Elasticsearch endpoint to perform requests against')
     return main
 
 

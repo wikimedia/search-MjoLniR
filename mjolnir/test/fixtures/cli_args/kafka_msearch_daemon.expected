@@ -2,6 +2,7 @@ usage: pytest [-h] -b BROKERS [-m MAX_REQUEST_SIZE] [-w N_WORKERS]
               [--prometheus-port PROMETHEUS_PORT] [--input-topic TOPIC_WORK]
               [--output-topic TOPIC_RESULT] [--group-id GROUP_ID]
               [--max-concurrent-searches MAX_CONCURRENT_SEARCHES]
+              [--elastic-endpoint ENDPOINT]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -24,3 +25,5 @@ optional arguments:
   --max-concurrent-searches MAX_CONCURRENT_SEARCHES
                         Maximum number of queries in a single msearch request
                         that will run in parallel
+  --elastic-endpoint ENDPOINT
+                        Elasticsearch endpoint to perform requests against

@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 import json
 import logging
 import multiprocessing.dummy
+import os
 import queue
 import threading
 import time
@@ -69,12 +70,20 @@ def iter_queue(queue: TypedQueue[Optional[T]]) -> Generator[T, None, None]:
 
 
 class Daemon(object):
-    def __init__(self, brokers: List[str], n_workers: int = 5, topic_work: str = mjolnir.kafka.TOPIC_REQUEST,
-                 topic_result: str = mjolnir.kafka.TOPIC_RESULT,
-                 topic_complete: str = mjolnir.kafka.TOPIC_COMPLETE,
-                 max_request_size: int = 4*1024*1024,
-                 query_total_threshold: int = 100, prometheus_port: int = 9161,
-                 group_id: str = 'mjolnir_msearch', max_concurrent_searches: int = 1) -> None:
+    def __init__(
+        self,
+        brokers: List[str],
+        n_workers: int = 5,
+        topic_work: str = mjolnir.kafka.TOPIC_REQUEST,
+        topic_result: str = mjolnir.kafka.TOPIC_RESULT,
+        topic_complete: str = mjolnir.kafka.TOPIC_COMPLETE,
+        max_request_size: int = 4*1024*1024,
+        query_total_threshold: int = 100,
+        prometheus_port: int = 9161,
+        group_id: str = 'mjolnir_msearch',
+        max_concurrent_searches: int = 1,
+        endpoint: str = 'http://localhost:9200',
+    ) -> None:
         """Initialize the msearch daemon
 
         Parameters
@@ -103,6 +112,8 @@ class Daemon(object):
             The maximum number of search requests within a single msearch to run in parallel. The
             total concurrent queries possible to issue across a deployment will be:
                     max_concurrent_searches * n_workers * n_kafka_partitions * n_elastic_shards
+        endpoint : str
+            Elasticsearch endpoint to perform requests against.
         """
         self.brokers = brokers
         self.n_workers = n_workers
@@ -128,10 +139,14 @@ class Daemon(object):
         # commited offsets are siginficantly ahead of the work actually being
         # performed.
         self.work_queue = cast(TypedQueue[Optional[Mapping]], queue.Queue(n_workers))
+        # Elastic uses urllib3, which doesn't take external ca_cert config. Pass on
+        # the config for requests when provided.
+        elastic = Elasticsearch(endpoint, ca_cert=os.environ.get('REQUESTS_CA_BUNDLE'))
         # Toggle our kafka subscription on/off based on qps of a canary index
         self.load_monitor = MetricMonitor.es_query_total(
-                Elasticsearch(), 'enwiki_content', 'full_text',
+                elastic, 'enwiki_content', 'full_text',
                 threshold=query_total_threshold)
+        self.endpoint = endpoint
 
     def run(self) -> None:
         prometheus_client.start_http_server(self.prometheus_port)
@@ -259,7 +274,7 @@ class Daemon(object):
         for record in work:
             try:
                 response = mjolnir.cirrus.make_request(
-                    'msearch', session, ['http://localhost:9200'], record['request'], reuse_url=True,
+                    'msearch', session, [self.endpoint], record['request'], reuse_url=True,
                     query_string={'max_concurrent_searches': self.max_concurrent_searches})
                 future = self.producer.send(self.topic_result, json.dumps({
                     'run_id': record['run_id'],
