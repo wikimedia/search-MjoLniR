@@ -64,6 +64,7 @@ CONFIG = {
         alias_rollback='glent_rollback',
         # The clusters are pretty beefy, increase from
         # default of 4.
+        queue_size=12,
         thread_count=12
     ).run(),
 }
@@ -513,6 +514,8 @@ class ImportAndPromote(UploadAction):
             log.critical('Failed import for index %s with %d success and %d failures',
                          self.index_name, self.good_imports, self.errored_imports)
         else:
+            log.info('Download completed, preparing promotion')
+
             def get_alias(name):
                 try:
                     return self.elastic.indices.get_alias(name=name).keys()
