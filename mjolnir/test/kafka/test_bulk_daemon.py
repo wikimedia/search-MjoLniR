@@ -1,7 +1,10 @@
 from collections import namedtuple
+from io import BytesIO
+import gzip
 import json
 
 import pytest
+import requests
 from unittest.mock import Mock
 
 from mjolnir.kafka import bulk_daemon
@@ -156,3 +159,36 @@ def test_promotion(expect_actions, expect_delete, aliases):
     assert state['alias'] is True
     if not expect_delete:
         assert state['delete'] is False
+
+
+def text_response(url, str_content):
+    res = requests.Response()
+    res.status_code = 200
+    res.encoding = 'utf8'
+    res.raw = BytesIO(str_content.encode('utf8'))
+    res.url = url
+    return res
+
+
+def gzip_response(url, str_content):
+    gzip_bytes = BytesIO()
+    with gzip.GzipFile(fileobj=gzip_bytes, mode='w') as f:
+        f.write(str_content.encode('utf8'))
+    gzip_bytes.seek(0)
+
+    res = requests.Response()
+    res.url = url + '.gz'
+    res.status_code = 200
+    res.encoding = None
+    res.raw = gzip_bytes
+    return res
+
+
+@pytest.mark.parametrize('encode', [text_response, gzip_response])
+def test_decode_text_response_as_text_lines(encode):
+    lines = ['a', 'b', 'c']
+    response = encode('http://a.b/c.txt', '\n'.join(lines))
+
+    # TODO: Why do we pass response.url separately?
+    decoded = list(bulk_daemon._decode_response_as_text_lines(response.url, response))
+    assert lines == decoded
