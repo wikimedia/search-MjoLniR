@@ -35,7 +35,7 @@
                     <verbose>false</verbose>
                     <failOnViolation>true</failOnViolation>
                     <sourceDirectory>src/main/scala</sourceDirectory>
-                    <configLocation>scalastyle-config.xml</configLocation>
+                    <configLocation>${project.basedir}/scalastyle-config.xml</configLocation>
                     <outputEncoding>UTF-8</outputEncoding>
                 </configuration>
                 <executions>
